@@ -1,3 +1,35 @@
+; Test helpers library
 (library
- (name test)
- (libraries driver))
+ (name test_helpers)
+ (libraries parsing common)
+ (modules helpers))
+
+; Lexer tests
+(library
+ (name test_lexer)
+ (libraries parsing common test_helpers)
+ (modules test_lexer)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Parser expression tests
+(library
+ (name test_parser_expr)
+ (libraries parsing common test_helpers)
+ (modules test_parser_expr)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Parser precedence tests
+(library
+ (name test_parser_precedence)
+ (libraries parsing common test_helpers)
+ (modules test_parser_precedence)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Property-based tests
+(test
+ (name test_props)
+ (libraries parsing common qcheck qcheck-alcotest alcotest)
+ (modules test_props))

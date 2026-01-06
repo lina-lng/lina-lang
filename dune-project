@@ -24,7 +24,9 @@
   (cmdliner (>= 1.2))
   (alcotest (and :with-test (>= 1.7)))
   (ppx_expect (and :with-test (>= 0.16)))
-  (ppx_inline_test (and :with-test (>= 0.16)))))
+  (ppx_inline_test (and :with-test (>= 0.16)))
+  (qcheck (and :with-test (>= 0.21)))
+  (qcheck-alcotest (and :with-test (>= 0.21)))))
 
 (formatting
  (enabled_for ocaml))

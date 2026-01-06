@@ -18,6 +18,8 @@ depends: [
   "alcotest" {with-test & >= "1.7"}
   "ppx_expect" {with-test & >= "0.16"}
   "ppx_inline_test" {with-test & >= "0.16"}
+  "qcheck" {with-test & >= "0.21"}
+  "qcheck-alcotest" {with-test & >= "0.21"}
   "odoc" {with-doc}
 ]
 build: [

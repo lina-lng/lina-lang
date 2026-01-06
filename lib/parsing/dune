@@ -6,4 +6,4 @@
 
 (menhir
  (modules parser)
- (flags --table))
+ (flags --table --inspection --cmly))

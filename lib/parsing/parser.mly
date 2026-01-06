@@ -37,9 +37,20 @@ let make_binding pattern expression loc =
 %left PLUS MINUS
 %left STAR SLASH
 %nonassoc unary_minus
+%nonassoc APP
 
 %start <Syntax_tree.structure> structure
 %start <Syntax_tree.expression> expression_eof
+
+(* Error recovery: reduce these symbols before reporting errors *)
+%on_error_reduce expression
+%on_error_reduce simple_expression
+%on_error_reduce application_expression
+%on_error_reduce atomic_expression
+%on_error_reduce pattern
+%on_error_reduce simple_pattern
+%on_error_reduce type_expression
+%on_error_reduce let_binding
 
 %%
 
@@ -163,7 +174,7 @@ simple_expression:
 
 application_expression:
   | e = atomic_expression { e }
-  | func = application_expression; arg = atomic_expression
+  | func = application_expression; arg = atomic_expression %prec APP
     {
       match func.value with
       | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [arg])) $loc
