@@ -1,0 +1,5 @@
+(library
+ (name lambda)
+ (public_name lina.lambda)
+ (libraries common typing)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

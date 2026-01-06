@@ -1,0 +1,9 @@
+(library
+ (name parsing)
+ (public_name lina.parsing)
+ (libraries common menhirLib sedlex)
+ (preprocess (pps sedlex.ppx ppx_deriving.show ppx_deriving.eq)))
+
+(menhir
+ (modules parser)
+ (flags --table))

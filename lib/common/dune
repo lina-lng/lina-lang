@@ -1,0 +1,4 @@
+(library
+ (name common)
+ (public_name lina.common)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq ppx_deriving.ord)))

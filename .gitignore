@@ -1,0 +1,37 @@
+# OCaml/Dune build artifacts
+_build/
+_opam/
+*.install
+*.merlin
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# opam local switch
+_opam/
+
+# Byte-compiled files
+*.byte
+*.native
+*.cmo
+*.cmi
+*.cma
+*.cmx
+*.cmxa
+*.cmxs
+*.o
+*.a
+
+# Generated files
+*.auto.ml
+*.auto.mli
+
+examples
