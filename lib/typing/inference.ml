@@ -457,6 +457,8 @@ let rec infer_expression env (expr : expression) =
         typed_arm_location = match_arm.arm_location;
       }
     ) match_arms in
+    (* Check exhaustiveness and redundancy *)
+    Pattern_check.check_match env loc scrutinee_type typed_match_arms;
     {
       expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
       expression_type = result_type;

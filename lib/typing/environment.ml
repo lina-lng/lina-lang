@@ -33,6 +33,14 @@ let add_constructor name info env =
 let find_constructor name env =
   StringMap.find_opt name env.constructors
 
+let find_type_constructors type_name env =
+  match find_type type_name env with
+  | None -> None
+  | Some decl ->
+    match decl.declaration_kind with
+    | DeclarationAbstract -> None
+    | DeclarationVariant constructors -> Some constructors
+
 let binary_int_op_type =
   trivial_scheme (TypeArrow (type_int, TypeArrow (type_int, type_int)))
 

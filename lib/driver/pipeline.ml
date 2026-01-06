@@ -35,6 +35,13 @@ let compile_string options _filename source =
 
     let lua_ast = Lua.Codegen.generate lambda in
     let lua_code = Lua.Printer.print_chunk lua_ast in
+
+    (* Print any warnings that were emitted *)
+    let warnings = Compiler_error.get_warnings () in
+    List.iter (fun w ->
+      Printf.eprintf "%s\n" (Compiler_error.report_warning_to_string w)
+    ) warnings;
+
     Ok lua_code
   with
   | Compiler_error.Error err ->

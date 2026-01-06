@@ -67,6 +67,106 @@ let translate_constant = function
   | Parsing.Syntax_tree.ConstantBoolean b -> ConstantBool b
   | Parsing.Syntax_tree.ConstantUnit -> ConstantUnit
 
+(* --- Decision tree translation to Lambda IR --- *)
+
+(* Translate occurrence to Lambda access expression *)
+let occurrence_to_lambda (scrutinee : lambda) (occ : Pattern_match.occurrence) : lambda =
+  List.fold_left (fun expr step ->
+    match step with
+    | Pattern_match.OccTupleField idx -> LambdaGetField (idx, expr)
+    | Pattern_match.OccConstructorArg -> LambdaGetRecordField ("_0", expr)
+    | Pattern_match.OccRecordField name -> LambdaGetRecordField (name, expr)
+  ) scrutinee occ
+
+(* Generate let bindings for decision tree leaf *)
+let generate_dt_bindings (scrutinee : lambda) (bindings : (Identifier.t * Pattern_match.occurrence) list) (body : lambda) : lambda =
+  List.fold_right (fun (id, occ) acc ->
+    let value = occurrence_to_lambda scrutinee occ in
+    LambdaLet (id, value, acc)
+  ) bindings body
+
+(* Translate decision tree to Lambda IR *)
+let rec translate_decision_tree (scrutinee : lambda) (tree : Pattern_match.decision_tree) (translate_expr : Typing.Typed_tree.typed_expression -> lambda) : lambda =
+  match tree with
+  | Pattern_match.DTFail ->
+    LambdaApply (
+      LambdaVariable (Identifier.create "error"),
+      [LambdaConstant (ConstantString "Match failure")]
+    )
+
+  | Pattern_match.DTLeaf { leaf_bindings; leaf_action } ->
+    let action_lambda = translate_expr leaf_action in
+    generate_dt_bindings scrutinee leaf_bindings action_lambda
+
+  | Pattern_match.DTGuard { guard_bindings; guard_condition; guard_then; guard_else } ->
+    let guard_lambda = translate_expr guard_condition in
+    let guard_with_bindings = generate_dt_bindings scrutinee guard_bindings guard_lambda in
+    let then_branch = translate_decision_tree scrutinee guard_then translate_expr in
+    let else_branch = translate_decision_tree scrutinee guard_else translate_expr in
+    LambdaIfThenElse (guard_with_bindings, then_branch, else_branch)
+
+  | Pattern_match.DTSwitch { switch_occurrence; switch_cases; switch_default } ->
+    translate_dt_switch scrutinee switch_occurrence switch_cases switch_default translate_expr
+
+and translate_dt_switch scrutinee occ cases default translate_expr =
+  let target = occurrence_to_lambda scrutinee occ in
+
+  (* Separate constructor cases from constant cases *)
+  let const_cases, ctor_cases, other_cases =
+    List.fold_left (fun (consts, ctors, others) (head, tree) ->
+      match head with
+      | Pattern_match.HCConstant c -> ((c, tree) :: consts, ctors, others)
+      | Pattern_match.HCConstructor name -> (consts, (name, tree) :: ctors, others)
+      | _ -> (consts, ctors, (head, tree) :: others)
+    ) ([], [], []) cases
+  in
+
+  (* Generate code based on case types *)
+  if ctor_cases <> [] && const_cases = [] then
+    translate_dt_constructor_switch scrutinee target ctor_cases default translate_expr
+  else if const_cases <> [] then
+    translate_dt_constant_switch scrutinee target const_cases default translate_expr
+  else
+    match other_cases, default with
+    | [(_, tree)], _ -> translate_decision_tree scrutinee tree translate_expr
+    | [], Some d -> translate_decision_tree scrutinee d translate_expr
+    | [], None -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
+    | _ -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
+
+and translate_dt_constructor_switch scrutinee target cases default translate_expr =
+  let tag_access = LambdaGetRecordField ("_tag", target) in
+  let rec build_chain = function
+    | [] ->
+      begin match default with
+      | Some d -> translate_decision_tree scrutinee d translate_expr
+      | None -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
+      end
+    | (name, tree) :: rest ->
+      let test = LambdaPrimitive (PrimitiveIntEqual, [tag_access; LambdaConstant (ConstantString name)]) in
+      let then_branch = translate_decision_tree scrutinee tree translate_expr in
+      let else_branch = build_chain rest in
+      LambdaIfThenElse (test, then_branch, else_branch)
+  in
+  build_chain cases
+
+and translate_dt_constant_switch scrutinee target cases default translate_expr =
+  let rec build_chain = function
+    | [] ->
+      begin match default with
+      | Some d -> translate_decision_tree scrutinee d translate_expr
+      | None -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
+      end
+    | (const, tree) :: rest ->
+      let lambda_const = translate_constant const in
+      let test = LambdaPrimitive (PrimitiveIntEqual, [target; LambdaConstant lambda_const]) in
+      let then_branch = translate_decision_tree scrutinee tree translate_expr in
+      let else_branch = build_chain rest in
+      LambdaIfThenElse (test, then_branch, else_branch)
+  in
+  build_chain cases
+
+(* --- Pattern binding helpers (for non-match patterns) --- *)
+
 let rec translate_pattern_binding pattern value body =
   let open Typing.Typed_tree in
   match pattern.pattern_desc with
@@ -216,56 +316,14 @@ let rec translate_expression (expr : Typing.Typed_tree.typed_expression) : lambd
   | TypedExpressionMatch (scrutinee_expression, match_arms) ->
     let translated_scrutinee = translate_expression scrutinee_expression in
     let scrutinee_id = Identifier.create "_scrutinee" in
-    let failure_case = LambdaApply (LambdaVariable (Identifier.create "error"),
-                                    [LambdaConstant (ConstantString "Match failure")]) in
-    let translated_arms = List.fold_right (fun (arm : typed_match_arm) rest ->
-      let pattern_test = translate_pattern_test arm.typed_arm_pattern (LambdaVariable scrutinee_id) in
-      let arm_body = translate_expression arm.typed_arm_expression in
-      let body_with_pattern_bindings = translate_pattern_binding arm.typed_arm_pattern (LambdaVariable scrutinee_id) arm_body in
-      let guarded_body = match arm.typed_arm_guard with
-        | None -> body_with_pattern_bindings
-        | Some guard_expression ->
-          let arm_body_with_guard = translate_expression arm.typed_arm_expression in
-          let full_body_with_bindings = translate_pattern_binding arm.typed_arm_pattern (LambdaVariable scrutinee_id) arm_body_with_guard in
-          let guard_check = translate_expression guard_expression in
-          let guard_with_bindings = translate_pattern_binding arm.typed_arm_pattern (LambdaVariable scrutinee_id) guard_check in
-          LambdaIfThenElse (guard_with_bindings, full_body_with_bindings, rest)
-      in
-      LambdaIfThenElse (pattern_test, guarded_body, rest)
-    ) match_arms failure_case in
-    LambdaLet (scrutinee_id, translated_scrutinee, translated_arms)
-
-and translate_pattern_test pattern value =
-  let open Typing.Typed_tree in
-  match pattern.pattern_desc with
-  | TypedPatternVariable _ | TypedPatternWildcard -> LambdaConstant (ConstantBool true)
-  | TypedPatternConstant const ->
-    let const_value = LambdaConstant (translate_constant const) in
-    LambdaPrimitive (PrimitiveIntEqual, [value; const_value])
-  | TypedPatternTuple sub_patterns ->
-    let tests = List.mapi (fun index sub_pattern ->
-      translate_pattern_test sub_pattern (LambdaGetField (index, value))
-    ) sub_patterns in
-    List.fold_left (fun accumulator test ->
-      LambdaIfThenElse (accumulator, test, LambdaConstant (ConstantBool false))
-    ) (LambdaConstant (ConstantBool true)) tests
-  | TypedPatternConstructor (constructor_name, argument_pattern) ->
-    let tag_test = LambdaPrimitive (PrimitiveIntEqual,
-      [LambdaGetRecordField ("_tag", value); LambdaConstant (ConstantString constructor_name)]) in
-    begin match argument_pattern with
-    | None -> tag_test
-    | Some inner_pattern ->
-      let arg_test = translate_pattern_test inner_pattern (LambdaGetRecordField ("_0", value)) in
-      LambdaIfThenElse (tag_test, arg_test, LambdaConstant (ConstantBool false))
-    end
-  | TypedPatternRecord (field_patterns, _is_open) ->
-    let tests = List.map (fun (field_pattern : typed_record_pattern_field) ->
-      translate_pattern_test field_pattern.typed_pattern_field_pattern
-        (LambdaGetRecordField (field_pattern.typed_pattern_field_name, value))
-    ) field_patterns in
-    List.fold_left (fun accumulator test ->
-      LambdaIfThenElse (accumulator, test, LambdaConstant (ConstantBool false))
-    ) (LambdaConstant (ConstantBool true)) tests
+    (* Use the pattern match compiler with Maranget's decision tree algorithm *)
+    let decision_tree = Pattern_match.compile_match match_arms in
+    let match_body = translate_decision_tree
+      (LambdaVariable scrutinee_id)
+      decision_tree
+      translate_expression
+    in
+    LambdaLet (scrutinee_id, translated_scrutinee, match_body)
 
 let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : lambda list =
   let open Typing.Typed_tree in

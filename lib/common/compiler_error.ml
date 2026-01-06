@@ -57,3 +57,46 @@ let report fmt error =
 
 let report_to_string error =
   Format.asprintf "%a" report error
+
+(* Warning infrastructure *)
+
+type warning =
+  | NonExhaustiveMatch of string  (* witness description *)
+  | RedundantPattern
+
+type warning_info = {
+  warning : warning;
+  warning_location : Location.t;
+}
+
+let warnings : warning_info list ref = ref []
+
+let emit_warning warning warning_location =
+  warnings := { warning; warning_location } :: !warnings
+
+let get_warnings () =
+  let ws = List.rev !warnings in
+  warnings := [];
+  ws
+
+let clear_warnings () = warnings := []
+
+let warning_to_string = function
+  | NonExhaustiveMatch witness ->
+    Printf.sprintf "Non-exhaustive pattern matching, missing case: %s" witness
+  | RedundantPattern ->
+    "Redundant pattern: this case will never be matched"
+
+let report_warning fmt { warning; warning_location = loc } =
+  if Location.is_none loc then
+    Format.fprintf fmt "@[<v>Warning: %s@]" (warning_to_string warning)
+  else
+    Format.fprintf fmt "@[<v>File \"%s\", line %d, characters %d-%d:@,Warning: %s@]"
+      loc.start_pos.filename
+      loc.start_pos.line
+      loc.start_pos.column
+      loc.end_pos.column
+      (warning_to_string warning)
+
+let report_warning_to_string w =
+  Format.asprintf "%a" report_warning w

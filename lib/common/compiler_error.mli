@@ -24,3 +24,20 @@ val internal_error : string -> 'a
 
 val report : Format.formatter -> t -> unit
 val report_to_string : t -> string
+
+(** Warning types *)
+type warning =
+  | NonExhaustiveMatch of string
+  | RedundantPattern
+
+type warning_info = {
+  warning : warning;
+  warning_location : Location.t;
+}
+
+val emit_warning : warning -> Location.t -> unit
+val get_warnings : unit -> warning_info list
+val clear_warnings : unit -> unit
+val warning_to_string : warning -> string
+val report_warning : Format.formatter -> warning_info -> unit
+val report_warning_to_string : warning_info -> string
