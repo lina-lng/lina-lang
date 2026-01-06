@@ -14,7 +14,7 @@ type head_constructor =
   | HCWildcard
   | HCConstant of Parsing.Syntax_tree.constant
   | HCTuple of int
-  | HCConstructor of string
+  | HCConstructor of string * int  (** name, tag_index *)
   | HCRecord of string list
 
 (** Leaf information in decision tree *)

@@ -159,6 +159,8 @@ let instantiate scheme =
 
 type constructor_info = {
   constructor_name : string;
+  constructor_tag_index : int;  (* 0-based index within the type *)
+  constructor_type_name : string;  (* Name of the parent type, e.g., "option" *)
   constructor_argument_type : type_expression option;
   constructor_result_type : type_expression;
   constructor_type_parameters : type_variable list;

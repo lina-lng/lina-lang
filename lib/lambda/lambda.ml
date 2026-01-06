@@ -23,6 +23,13 @@ type constant =
   | ConstantBool of bool
   | ConstantUnit
 
+type constructor_tag = {
+  tag_name : string;
+  tag_index : int;
+  tag_type_name : string;
+  tag_is_nullary : bool;
+}
+
 type lambda =
   | LambdaVariable of Identifier.t
   | LambdaConstant of constant
@@ -36,7 +43,7 @@ type lambda =
   | LambdaMakeBlock of int * lambda list
   | LambdaGetField of int * lambda
   | LambdaSwitch of lambda * switch_case list * lambda option
-  | LambdaConstructor of string * lambda option
+  | LambdaConstructor of constructor_tag * lambda option
   | LambdaMakeRecord of (string * lambda) list
   | LambdaGetRecordField of string * lambda
   | LambdaRecordUpdate of lambda * (string * lambda) list
@@ -116,7 +123,7 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
     List.fold_left (fun (consts, ctors, others) (head, tree) ->
       match head with
       | Pattern_match.HCConstant c -> ((c, tree) :: consts, ctors, others)
-      | Pattern_match.HCConstructor name -> (consts, (name, tree) :: ctors, others)
+      | Pattern_match.HCConstructor (name, tag_index) -> (consts, ((name, tag_index), tree) :: ctors, others)
       | _ -> (consts, ctors, (head, tree) :: others)
     ) ([], [], []) cases
   in
@@ -134,20 +141,34 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
     | _ -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
 
 and translate_dt_constructor_switch scrutinee target cases default translate_expr =
-  let tag_access = LambdaGetRecordField ("_tag", target) in
-  let rec build_chain = function
-    | [] ->
-      begin match default with
-      | Some d -> translate_decision_tree scrutinee d translate_expr
-      | None -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
-      end
-    | (name, tree) :: rest ->
-      let test = LambdaPrimitive (PrimitiveIntEqual, [tag_access; LambdaConstant (ConstantString name)]) in
-      let then_branch = translate_decision_tree scrutinee tree translate_expr in
-      let else_branch = build_chain rest in
-      LambdaIfThenElse (test, then_branch, else_branch)
-  in
-  build_chain cases
+  let num_cases = List.length cases in
+  (* Use LambdaSwitch for 4+ cases (enables dispatch table in codegen) *)
+  if num_cases >= 4 then
+    let switch_cases = List.map (fun ((_name, tag_index), tree) ->
+      { switch_tag = tag_index;
+        switch_body = translate_decision_tree scrutinee tree translate_expr }
+    ) cases in
+    let switch_default = match default with
+      | Some d -> Some (translate_decision_tree scrutinee d translate_expr)
+      | None -> None
+    in
+    LambdaSwitch (target, switch_cases, switch_default)
+  else
+    (* Use if-chain for fewer cases *)
+    let tag_access = LambdaGetRecordField ("_tag", target) in
+    let rec build_chain = function
+      | [] ->
+        begin match default with
+        | Some d -> translate_decision_tree scrutinee d translate_expr
+        | None -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
+        end
+      | ((_name, tag_index), tree) :: rest ->
+        let test = LambdaPrimitive (PrimitiveIntEqual, [tag_access; LambdaConstant (ConstantInt tag_index)]) in
+        let then_branch = translate_decision_tree scrutinee tree translate_expr in
+        let else_branch = build_chain rest in
+        LambdaIfThenElse (test, then_branch, else_branch)
+    in
+    build_chain cases
 
 and translate_dt_constant_switch scrutinee target cases default translate_expr =
   let rec build_chain = function
@@ -224,9 +245,15 @@ let rec translate_expression (expr : Typing.Typed_tree.typed_expression) : lambd
     let translated = List.map translate_expression exprs in
     LambdaMakeBlock (0, translated)
 
-  | TypedExpressionConstructor (name, arg_expr) ->
+  | TypedExpressionConstructor (ctor_info, arg_expr) ->
     let translated_arg = Option.map translate_expression arg_expr in
-    LambdaConstructor (name, translated_arg)
+    let tag = {
+      tag_name = ctor_info.Typing.Types.constructor_name;
+      tag_index = ctor_info.Typing.Types.constructor_tag_index;
+      tag_type_name = ctor_info.Typing.Types.constructor_type_name;
+      tag_is_nullary = Option.is_none ctor_info.Typing.Types.constructor_argument_type;
+    } in
+    LambdaConstructor (tag, translated_arg)
 
   | TypedExpressionApply (func_expr, arg_exprs) ->
     let func = translate_expression func_expr in

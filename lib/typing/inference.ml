@@ -117,7 +117,7 @@ let rec infer_pattern env (pattern : pattern) =
             (Printf.sprintf "Constructor %s requires an argument" name)
       in
       let typed_pattern = {
-        pattern_desc = TypedPatternConstructor (name, typed_arg);
+        pattern_desc = TypedPatternConstructor (constructor_info, typed_arg);
         pattern_type = result_ty;
         pattern_location = loc;
       } in
@@ -267,7 +267,7 @@ let rec infer_expression env (expr : expression) =
             (Printf.sprintf "Constructor %s requires an argument" name)
       in
       {
-        expression_desc = TypedExpressionConstructor (name, typed_arg);
+        expression_desc = TypedExpressionConstructor (constructor_info, typed_arg);
         expression_type = result_ty;
         expression_location = loc;
       }
@@ -549,10 +549,12 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
     | TypeAbstract -> DeclarationAbstract
     | TypeVariant constructors ->
       let constructor_infos =
-        List.map (fun (ctor : constructor_declaration) ->
+        List.mapi (fun tag_index (ctor : constructor_declaration) ->
           let arg_type = Option.map (fun _ -> new_type_variable ()) ctor.constructor_argument in
           {
             constructor_name = ctor.constructor_name.Location.value;
+            constructor_tag_index = tag_index;
+            constructor_type_name = type_decl.type_name.Location.value;
             constructor_argument_type = arg_type;
             constructor_result_type = result_type;
             constructor_type_parameters = type_params;

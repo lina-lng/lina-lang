@@ -23,6 +23,13 @@ type constant =
   | ConstantBool of bool
   | ConstantUnit
 
+type constructor_tag = {
+  tag_name : string;
+  tag_index : int;
+  tag_type_name : string;
+  tag_is_nullary : bool;
+}
+
 type lambda =
   | LambdaVariable of Identifier.t
   | LambdaConstant of constant
@@ -36,7 +43,7 @@ type lambda =
   | LambdaMakeBlock of int * lambda list
   | LambdaGetField of int * lambda
   | LambdaSwitch of lambda * switch_case list * lambda option
-  | LambdaConstructor of string * lambda option
+  | LambdaConstructor of constructor_tag * lambda option
   | LambdaMakeRecord of (string * lambda) list
   | LambdaGetRecordField of string * lambda
   | LambdaRecordUpdate of lambda * (string * lambda) list

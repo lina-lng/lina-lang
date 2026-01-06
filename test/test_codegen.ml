@@ -106,10 +106,10 @@ let is_some opt = match opt with | None -> false | Some _ -> true");
   [%expect{|
     local function is_some_36(opt_35)
       local _scrutinee_37 = opt_35
-      if _scrutinee_37._tag == "Some" then
+      if _scrutinee_37._tag == 1 then
         return true
       else
-        if _scrutinee_37._tag == "None" then
+        if _scrutinee_37._tag == 0 then
           return false
         else
           return error_38("Match failure")
@@ -124,12 +124,12 @@ let get_or_default opt default = match opt with | None -> default | Some x -> x"
   [%expect{|
     local function get_or_default_42(opt_39, default_40)
       local _scrutinee_43 = opt_39
-      if _scrutinee_43._tag == "Some" then
+      if _scrutinee_43._tag == 1 then
         local x_41 = _scrutinee_43._0
         local x_41 = _scrutinee_43._0
         return x_41
       else
-        if _scrutinee_43._tag == "None" then
+        if _scrutinee_43._tag == 0 then
           return default_40
         else
           return error_44("Match failure")
@@ -143,8 +143,9 @@ let%expect_test "constructor expression generates tagged table" =
 let none = None
 let some_val = Some 42");
   [%expect{|
-    local none_45 = {_tag = "None"}
-    local some_val_46 = {_tag = "Some", _0 = 42}
+    local _Ctor_option_0 = {_tag = 0}
+    local none_45 = _Ctor_option_0
+    local some_val_46 = {_tag = 1, _0 = 42}
     |}]
 
 let%expect_test "row polymorphic function" =
@@ -210,7 +211,7 @@ let f opt = match opt with
   [%expect{|
     local function f_66(opt_63)
       local _scrutinee_67 = opt_63
-      if _scrutinee_67._tag == "Some" then
+      if _scrutinee_67._tag == 1 then
         local x_64 = _scrutinee_67._0
         local x_64 = _scrutinee_67._0
         local _scrutinee_68 = x_64
@@ -221,7 +222,7 @@ let f opt = match opt with
           return n_65 + 1
         end
       else
-        if _scrutinee_67._tag == "None" then
+        if _scrutinee_67._tag == 0 then
           return 0
         else
           return error_69("Match failure")
@@ -340,12 +341,12 @@ let f x = match x with | None -> 0 | Some n -> n");
   [%expect{|
     local function f_93(x_91)
       local _scrutinee_94 = x_91
-      if _scrutinee_94._tag == "Some" then
+      if _scrutinee_94._tag == 1 then
         local n_92 = _scrutinee_94._0
         local n_92 = _scrutinee_94._0
         return n_92
       else
-        if _scrutinee_94._tag == "None" then
+        if _scrutinee_94._tag == 0 then
           return 0
         else
           return error_95("Match failure")
@@ -360,7 +361,7 @@ let f x = match x with | Some n -> n");
   [%expect{|
     local function f_98(x_96)
       local _scrutinee_99 = x_96
-      if _scrutinee_99._tag == "Some" then
+      if _scrutinee_99._tag == 1 then
         local n_97 = _scrutinee_99._0
         local n_97 = _scrutinee_99._0
         return n_97
@@ -378,7 +379,7 @@ let f x = match x with | None -> 0");
   [%expect{|
     local function f_102(x_101)
       local _scrutinee_103 = x_101
-      if _scrutinee_103._tag == "None" then
+      if _scrutinee_103._tag == 0 then
         return 0
       else
         return error_104("Match failure")
@@ -426,7 +427,7 @@ let f x = match x with | Some n -> n | _ -> 0");
   [%expect{|
     local function f_115(x_113)
       local _scrutinee_116 = x_113
-      if _scrutinee_116._tag == "Some" then
+      if _scrutinee_116._tag == 1 then
         local n_114 = _scrutinee_116._0
         local n_114 = _scrutinee_116._0
         return n_114
@@ -444,7 +445,7 @@ let f x = match x with | _ -> 0 | None -> 1");
   [%expect{|
     local function f_118(x_117)
       local _scrutinee_119 = x_117
-      if _scrutinee_119._tag == "None" then
+      if _scrutinee_119._tag == 0 then
         return 0
       else
         return 0
@@ -460,12 +461,12 @@ let f x = match x with | None -> 0 | Some n -> n | None -> 2");
   [%expect{|
     local function f_122(x_120)
       local _scrutinee_123 = x_120
-      if _scrutinee_123._tag == "Some" then
+      if _scrutinee_123._tag == 1 then
         local n_121 = _scrutinee_123._0
         local n_121 = _scrutinee_123._0
         return n_121
       else
-        if _scrutinee_123._tag == "None" then
+        if _scrutinee_123._tag == 0 then
           return 0
         else
           return error_124("Match failure")
@@ -498,13 +499,13 @@ let to_num c = match c with | Red -> 0 | Green -> 1 | Blue -> 2");
   [%expect{|
     local function to_num_130(c_129)
       local _scrutinee_131 = c_129
-      if _scrutinee_131._tag == "Blue" then
+      if _scrutinee_131._tag == 2 then
         return 2
       else
-        if _scrutinee_131._tag == "Green" then
+        if _scrutinee_131._tag == 1 then
           return 1
         else
-          if _scrutinee_131._tag == "Red" then
+          if _scrutinee_131._tag == 0 then
             return 0
           else
             return error_132("Match failure")
@@ -537,7 +538,7 @@ let sum p = match p with | Pair (a, b) -> a + b");
   [%expect{|
     local function sum_142(p_139)
       local _scrutinee_143 = p_139
-      if _scrutinee_143._tag == "Pair" then
+      if _scrutinee_143._tag == 0 then
         local b_141 = _scrutinee_143._0[2]
         local a_140 = _scrutinee_143._0[1]
         local a_140 = _scrutinee_143._0[1]
@@ -587,7 +588,7 @@ let f x = match x with | Some n when n > 0 -> n | _ -> 0");
   [%expect{|
     local function f_156(x_154)
       local _scrutinee_157 = x_154
-      if _scrutinee_157._tag == "Some" then
+      if _scrutinee_157._tag == 1 then
         if (function()
       local n_155 = _scrutinee_157._0
       local n_155 = _scrutinee_157._0
@@ -611,10 +612,10 @@ let f x = match x with | Some n when n > 0 -> n | None -> 0");
   [%expect{|
     local function f_160(x_158)
       local _scrutinee_161 = x_158
-      if _scrutinee_161._tag == "None" then
+      if _scrutinee_161._tag == 0 then
         return 0
       else
-        if _scrutinee_161._tag == "Some" then
+        if _scrutinee_161._tag == 1 then
           if (function()
       local n_159 = _scrutinee_161._0
       local n_159 = _scrutinee_161._0
@@ -643,7 +644,7 @@ let head l = match l with | Nil -> 0 | Cons (h, t) -> h");
   [%expect{|
     local function head_167(l_164)
       local _scrutinee_168 = l_164
-      if _scrutinee_168._tag == "Cons" then
+      if _scrutinee_168._tag == 1 then
         local t_166 = _scrutinee_168._0[2]
         local h_165 = _scrutinee_168._0[1]
         local h_165 = _scrutinee_168._0[1]
@@ -652,7 +653,7 @@ let head l = match l with | Nil -> 0 | Cons (h, t) -> h");
         local t_166 = _scrutinee_168._0[2]
         return h_165
       else
-        if _scrutinee_168._tag == "Nil" then
+        if _scrutinee_168._tag == 0 then
           return 0
         else
           return error_169("Match failure")
@@ -669,10 +670,10 @@ let is_left e = match e with | Left _ -> true | Right _ -> false");
   [%expect{|
     local function is_left_171(e_170)
       local _scrutinee_172 = e_170
-      if _scrutinee_172._tag == "Right" then
+      if _scrutinee_172._tag == 1 then
         return false
       else
-        if _scrutinee_172._tag == "Left" then
+        if _scrutinee_172._tag == 0 then
           return true
         else
           return error_173("Match failure")
@@ -817,12 +818,12 @@ let extract t = match t with | (Some (a, b), c) -> a + b + c | (None, d) -> d");
   [%expect{|
     local function extract_211(t_206)
       local _scrutinee_212 = t_206
-      if _scrutinee_212[1]._tag == "None" then
+      if _scrutinee_212[1]._tag == 0 then
         local d_210 = _scrutinee_212[2]
         local d_210 = _scrutinee_212[2]
         return d_210
       else
-        if _scrutinee_212[1]._tag == "Some" then
+        if _scrutinee_212[1]._tag == 1 then
           local c_209 = _scrutinee_212[2]
           local b_208 = _scrutinee_212[1]._0[2]
           local a_207 = _scrutinee_212[1]._0[1]
@@ -850,14 +851,14 @@ let unwrap w = match w with | Wrap (Some x, n) -> x + n | Wrap (None, n) -> n");
   [%expect{|
     local function unwrap_218(w_214)
       local _scrutinee_219 = w_214
-      if _scrutinee_219._tag == "Wrap" then
-        if _scrutinee_219._0[1]._tag == "None" then
+      if _scrutinee_219._tag == 0 then
+        if _scrutinee_219._0[1]._tag == 0 then
           local n_217 = _scrutinee_219._0[2]
           local n_217 = _scrutinee_219._0[2]
           local n_217 = _scrutinee_219._0[2]
           return n_217
         else
-          if _scrutinee_219._0[1]._tag == "Some" then
+          if _scrutinee_219._0[1]._tag == 1 then
             local n_216 = _scrutinee_219._0[2]
             local x_215 = _scrutinee_219._0[1]._0
             local x_215 = _scrutinee_219._0[1]._0
@@ -886,22 +887,21 @@ let to_num d = match d with | North -> 0 | South -> 1 | East -> 2 | West -> 3");
   [%expect{|
     local function to_num_223(d_222)
       local _scrutinee_224 = d_222
-      if _scrutinee_224._tag == "West" then
-        return 3
+      local _switch = _scrutinee_224
+      local _dispatch = {[3] = function()
+      return 3
+    end, [2] = function()
+      return 2
+    end, [1] = function()
+      return 1
+    end, [0] = function()
+      return 0
+    end}
+      local _handler = _dispatch[_switch._tag]
+      if _handler then
+        return _handler()
       else
-        if _scrutinee_224._tag == "East" then
-          return 2
-        else
-          if _scrutinee_224._tag == "South" then
-            return 1
-          else
-            if _scrutinee_224._tag == "North" then
-              return 0
-            else
-              return error_225("Match failure")
-            end
-          end
-        end
+        return error("Match failure")
       end
     end
     |}]
@@ -910,18 +910,18 @@ let%expect_test "four constructor variant - missing one" =
   print_endline (compile "type dir = North | South | East | West
 let to_num d = match d with | North -> 0 | South -> 1 | East -> 2");
   [%expect{|
-    local function to_num_227(d_226)
-      local _scrutinee_228 = d_226
-      if _scrutinee_228._tag == "East" then
+    local function to_num_226(d_225)
+      local _scrutinee_227 = d_225
+      if _scrutinee_227._tag == 2 then
         return 2
       else
-        if _scrutinee_228._tag == "South" then
+        if _scrutinee_227._tag == 1 then
           return 1
         else
-          if _scrutinee_228._tag == "North" then
+          if _scrutinee_227._tag == 0 then
             return 0
           else
-            return error_229("Match failure")
+            return error_228("Match failure")
           end
         end
       end
@@ -934,9 +934,9 @@ let%expect_test "five constructor variant with wildcard" =
   print_endline (compile "type day = Mon | Tue | Wed | Thu | Fri
 let is_monday d = match d with | Mon -> true | _ -> false");
   [%expect{|
-    local function is_monday_231(d_230)
-      local _scrutinee_232 = d_230
-      if _scrutinee_232._tag == "Mon" then
+    local function is_monday_230(d_229)
+      local _scrutinee_231 = d_229
+      if _scrutinee_231._tag == 0 then
         return true
       else
         return false
@@ -948,18 +948,18 @@ let%expect_test "variant with mix of nullary and unary constructors" =
   print_endline (compile "type expr = Zero | One | Add of (expr * expr)
 let is_value e = match e with | Zero -> true | One -> true | Add _ -> false");
   [%expect{|
-    local function is_value_234(e_233)
-      local _scrutinee_235 = e_233
-      if _scrutinee_235._tag == "Add" then
+    local function is_value_233(e_232)
+      local _scrutinee_234 = e_232
+      if _scrutinee_234._tag == 2 then
         return false
       else
-        if _scrutinee_235._tag == "One" then
+        if _scrutinee_234._tag == 1 then
           return true
         else
-          if _scrutinee_235._tag == "Zero" then
+          if _scrutinee_234._tag == 0 then
             return true
           else
-            return error_236("Match failure")
+            return error_235("Match failure")
           end
         end
       end
@@ -972,17 +972,17 @@ let%expect_test "same variable name in different arms" =
   print_endline (compile "type 'a option = None | Some of 'a
 let f x = match x with | None -> 0 | Some x -> x");
   [%expect{|
-    local function f_239(x_237)
-      local _scrutinee_240 = x_237
-      if _scrutinee_240._tag == "Some" then
-        local x_238 = _scrutinee_240._0
-        local x_238 = _scrutinee_240._0
-        return x_238
+    local function f_238(x_236)
+      local _scrutinee_239 = x_236
+      if _scrutinee_239._tag == 1 then
+        local x_237 = _scrutinee_239._0
+        local x_237 = _scrutinee_239._0
+        return x_237
       else
-        if _scrutinee_240._tag == "None" then
+        if _scrutinee_239._tag == 0 then
           return 0
         else
-          return error_241("Match failure")
+          return error_240("Match failure")
         end
       end
     end
@@ -992,14 +992,14 @@ let%expect_test "binding entire constructor argument" =
   print_endline (compile "type pair = Pair of (int * int)
 let get_pair p = match p with | Pair x -> x");
   [%expect{|
-    local function get_pair_244(p_242)
-      local _scrutinee_245 = p_242
-      if _scrutinee_245._tag == "Pair" then
-        local x_243 = _scrutinee_245._0
-        local x_243 = _scrutinee_245._0
-        return x_243
+    local function get_pair_243(p_241)
+      local _scrutinee_244 = p_241
+      if _scrutinee_244._tag == 0 then
+        local x_242 = _scrutinee_244._0
+        local x_242 = _scrutinee_244._0
+        return x_242
       else
-        return error_246("Match failure")
+        return error_245("Match failure")
       end
     end
     |}]
@@ -1008,24 +1008,24 @@ let%expect_test "multiple bindings from nested pattern" =
   print_endline (compile "type 'a option = None | Some of 'a
 let f x = match x with | Some (a, b, c) -> a + b + c | None -> 0");
   [%expect{|
-    local function f_251(x_247)
-      local _scrutinee_252 = x_247
-      if _scrutinee_252._tag == "None" then
+    local function f_250(x_246)
+      local _scrutinee_251 = x_246
+      if _scrutinee_251._tag == 0 then
         return 0
       else
-        if _scrutinee_252._tag == "Some" then
-          local c_250 = _scrutinee_252._0[3]
-          local b_249 = _scrutinee_252._0[2]
-          local a_248 = _scrutinee_252._0[1]
-          local a_248 = _scrutinee_252._0[1]
-          local b_249 = _scrutinee_252._0[2]
-          local c_250 = _scrutinee_252._0[3]
-          local a_248 = _scrutinee_252._0[1]
-          local b_249 = _scrutinee_252._0[2]
-          local c_250 = _scrutinee_252._0[3]
-          return a_248 + b_249 + c_250
+        if _scrutinee_251._tag == 1 then
+          local c_249 = _scrutinee_251._0[3]
+          local b_248 = _scrutinee_251._0[2]
+          local a_247 = _scrutinee_251._0[1]
+          local a_247 = _scrutinee_251._0[1]
+          local b_248 = _scrutinee_251._0[2]
+          local c_249 = _scrutinee_251._0[3]
+          local a_247 = _scrutinee_251._0[1]
+          local b_248 = _scrutinee_251._0[2]
+          local c_249 = _scrutinee_251._0[3]
+          return a_247 + b_248 + c_249
         else
-          return error_253("Match failure")
+          return error_252("Match failure")
         end
       end
     end
@@ -1038,26 +1038,26 @@ let f x = match x with | Some (a, b, c) -> a + b + c | None -> 0");
 let%expect_test "guard accessing multiple bound variables" =
   print_endline (compile "let check p = match p with | (a, b) when a > b -> a | (a, b) -> b");
   [%expect{|
-    local function check_259(p_254)
-      local _scrutinee_260 = p_254
+    local function check_258(p_253)
+      local _scrutinee_259 = p_253
       if (function()
-      local b_256 = _scrutinee_260[2]
-      local a_255 = _scrutinee_260[1]
-      local a_255 = _scrutinee_260[1]
-      local b_256 = _scrutinee_260[2]
-      return a_255 > b_256
+      local b_255 = _scrutinee_259[2]
+      local a_254 = _scrutinee_259[1]
+      local a_254 = _scrutinee_259[1]
+      local b_255 = _scrutinee_259[2]
+      return a_254 > b_255
     end)() then
-        local b_256 = _scrutinee_260[2]
-        local a_255 = _scrutinee_260[1]
-        local a_255 = _scrutinee_260[1]
-        local b_256 = _scrutinee_260[2]
-        return a_255
+        local b_255 = _scrutinee_259[2]
+        local a_254 = _scrutinee_259[1]
+        local a_254 = _scrutinee_259[1]
+        local b_255 = _scrutinee_259[2]
+        return a_254
       else
-        local b_258 = _scrutinee_260[2]
-        local a_257 = _scrutinee_260[1]
-        local a_257 = _scrutinee_260[1]
-        local b_258 = _scrutinee_260[2]
-        return b_258
+        local b_257 = _scrutinee_259[2]
+        local a_256 = _scrutinee_259[1]
+        local a_256 = _scrutinee_259[1]
+        local b_257 = _scrutinee_259[2]
+        return b_257
       end
     end
     File "<string>", line 1, characters 54-65:
@@ -1067,14 +1067,14 @@ let%expect_test "guard accessing multiple bound variables" =
 let%expect_test "guard with boolean operators" =
   print_endline (compile "let range n = match n with | x when x > 0 -> (if x < 10 then 1 else 2) | _ -> 0");
   [%expect{|
-    local function range_263(n_261)
-      local _scrutinee_264 = n_261
+    local function range_262(n_260)
+      local _scrutinee_263 = n_260
       if (function()
-      local x_262 = _scrutinee_264
-      return x_262 > 0
+      local x_261 = _scrutinee_263
+      return x_261 > 0
     end)() then
-        local x_262 = _scrutinee_264
-        if x_262 < 10 then
+        local x_261 = _scrutinee_263
+        if x_261 < 10 then
           return 1
         else
           return 2
@@ -1091,25 +1091,25 @@ let%expect_test "guard on constructor with argument" =
   print_endline (compile "type 'a option = None | Some of 'a
 let positive opt = match opt with | Some n when n > 0 -> true | Some _ -> false | None -> false");
   [%expect{|
-    local function positive_267(opt_265)
-      local _scrutinee_268 = opt_265
-      if _scrutinee_268._tag == "None" then
+    local function positive_266(opt_264)
+      local _scrutinee_267 = opt_264
+      if _scrutinee_267._tag == 0 then
         return false
       else
-        if _scrutinee_268._tag == "Some" then
+        if _scrutinee_267._tag == 1 then
           if (function()
-      local n_266 = _scrutinee_268._0
-      local n_266 = _scrutinee_268._0
-      return n_266 > 0
+      local n_265 = _scrutinee_267._0
+      local n_265 = _scrutinee_267._0
+      return n_265 > 0
     end)() then
-            local n_266 = _scrutinee_268._0
-            local n_266 = _scrutinee_268._0
+            local n_265 = _scrutinee_267._0
+            local n_265 = _scrutinee_267._0
             return true
           else
             return false
           end
         else
-          return error_269("Match failure")
+          return error_268("Match failure")
         end
       end
     end
@@ -1122,27 +1122,27 @@ let%expect_test "multiple guards same pattern" =
   | x when x > 50 -> 1
   | _ -> 0");
   [%expect{|
-    local function classify_274(n_270)
-      local _scrutinee_275 = n_270
+    local function classify_273(n_269)
+      local _scrutinee_274 = n_269
       if (function()
-      local x_271 = _scrutinee_275
-      return x_271 < 0
+      local x_270 = _scrutinee_274
+      return x_270 < 0
     end)() then
-        local x_271 = _scrutinee_275
+        local x_270 = _scrutinee_274
         return 0 - 1
       else
         if (function()
-      local x_272 = _scrutinee_275
-      return x_272 > 100
+      local x_271 = _scrutinee_274
+      return x_271 > 100
     end)() then
-          local x_272 = _scrutinee_275
+          local x_271 = _scrutinee_274
           return 2
         else
           if (function()
-      local x_273 = _scrutinee_275
-      return x_273 > 50
+      local x_272 = _scrutinee_274
+      return x_272 > 50
     end)() then
-            local x_273 = _scrutinee_275
+            local x_272 = _scrutinee_274
             return 1
           else
             return 0
@@ -1164,19 +1164,19 @@ let%expect_test "recursive function with pattern matching" =
   print_endline (compile "type 'a list = Nil | Cons of ('a * 'a list)
 let rec length l = match l with | Nil -> 0 | Cons (_, t) -> 1 + length t");
   [%expect{|
-    local length_276
-    length_276 = function(l_277)
-      local _scrutinee_279 = l_277
-      if _scrutinee_279._tag == "Cons" then
-        local t_278 = _scrutinee_279._0[2]
-        local t_278 = _scrutinee_279._0[2]
-        local t_278 = _scrutinee_279._0[2]
-        return 1 + length_276(t_278)
+    local length_275
+    length_275 = function(l_276)
+      local _scrutinee_278 = l_276
+      if _scrutinee_278._tag == 1 then
+        local t_277 = _scrutinee_278._0[2]
+        local t_277 = _scrutinee_278._0[2]
+        local t_277 = _scrutinee_278._0[2]
+        return 1 + length_275(t_277)
       else
-        if _scrutinee_279._tag == "Nil" then
+        if _scrutinee_278._tag == 0 then
           return 0
         else
-          return error_280("Match failure")
+          return error_279("Match failure")
         end
       end
     end
@@ -1188,22 +1188,22 @@ let%expect_test "recursive function with multiple pattern arms" =
   print_endline (compile "type 'a list = Nil | Cons of ('a * 'a list)
 let rec sum l = match l with | Nil -> 0 | Cons (h, t) -> h + sum t");
   [%expect{|
-    local sum_281
-    sum_281 = function(l_282)
-      local _scrutinee_285 = l_282
-      if _scrutinee_285._tag == "Cons" then
-        local t_284 = _scrutinee_285._0[2]
-        local h_283 = _scrutinee_285._0[1]
-        local h_283 = _scrutinee_285._0[1]
-        local t_284 = _scrutinee_285._0[2]
-        local h_283 = _scrutinee_285._0[1]
-        local t_284 = _scrutinee_285._0[2]
-        return h_283 + sum_281(t_284)
+    local sum_280
+    sum_280 = function(l_281)
+      local _scrutinee_284 = l_281
+      if _scrutinee_284._tag == 1 then
+        local t_283 = _scrutinee_284._0[2]
+        local h_282 = _scrutinee_284._0[1]
+        local h_282 = _scrutinee_284._0[1]
+        local t_283 = _scrutinee_284._0[2]
+        local h_282 = _scrutinee_284._0[1]
+        local t_283 = _scrutinee_284._0[2]
+        return h_282 + sum_280(t_283)
       else
-        if _scrutinee_285._tag == "Nil" then
+        if _scrutinee_284._tag == 0 then
           return 0
         else
-          return error_286("Match failure")
+          return error_285("Match failure")
         end
       end
     end
@@ -1215,22 +1215,22 @@ let%expect_test "tail recursive with accumulator" =
   print_endline (compile "type 'a list = Nil | Cons of ('a * 'a list)
 let rec sum_acc acc l = match l with | Nil -> acc | Cons (h, t) -> sum_acc (acc + h) t");
   [%expect{|
-    local sum_acc_287
-    sum_acc_287 = function(acc_288, l_289)
-      local _scrutinee_292 = l_289
-      if _scrutinee_292._tag == "Cons" then
-        local t_291 = _scrutinee_292._0[2]
-        local h_290 = _scrutinee_292._0[1]
-        local h_290 = _scrutinee_292._0[1]
-        local t_291 = _scrutinee_292._0[2]
-        local h_290 = _scrutinee_292._0[1]
-        local t_291 = _scrutinee_292._0[2]
-        return sum_acc_287(acc_288 + h_290, t_291)
+    local sum_acc_286
+    sum_acc_286 = function(acc_287, l_288)
+      local _scrutinee_291 = l_288
+      if _scrutinee_291._tag == 1 then
+        local t_290 = _scrutinee_291._0[2]
+        local h_289 = _scrutinee_291._0[1]
+        local h_289 = _scrutinee_291._0[1]
+        local t_290 = _scrutinee_291._0[2]
+        local h_289 = _scrutinee_291._0[1]
+        local t_290 = _scrutinee_291._0[2]
+        return sum_acc_286(acc_287 + h_289, t_290)
       else
-        if _scrutinee_292._tag == "Nil" then
-          return acc_288
+        if _scrutinee_291._tag == 0 then
+          return acc_287
         else
-          return error_293("Match failure")
+          return error_292("Match failure")
         end
       end
     end
@@ -1242,23 +1242,23 @@ let%expect_test "mutual recursion with pattern matching" =
   print_endline (compile "let rec even n = match n with | 0 -> true | n -> odd (n - 1)
 and odd n = match n with | 0 -> false | n -> even (n - 1)");
   [%expect{|
-    local even_294, odd_295
-    even_294 = function(n_296)
-      local _scrutinee_300 = n_296
-      if _scrutinee_300 == 0 then
+    local even_293, odd_294
+    even_293 = function(n_295)
+      local _scrutinee_299 = n_295
+      if _scrutinee_299 == 0 then
         return true
       else
-        local n_297 = _scrutinee_300
-        return odd_295(n_297 - 1)
+        local n_296 = _scrutinee_299
+        return odd_294(n_296 - 1)
       end
     end
-    odd_295 = function(n_298)
-      local _scrutinee_301 = n_298
-      if _scrutinee_301 == 0 then
+    odd_294 = function(n_297)
+      local _scrutinee_300 = n_297
+      if _scrutinee_300 == 0 then
         return false
       else
-        local n_299 = _scrutinee_301
-        return even_294(n_299 - 1)
+        local n_298 = _scrutinee_300
+        return even_293(n_298 - 1)
       end
     end
     |}]
@@ -1268,10 +1268,10 @@ and odd n = match n with | 0 -> false | n -> even (n - 1)");
 let%expect_test "single arm match - exhaustive via wildcard" =
   print_endline (compile "let id x = match x with | y -> y");
   [%expect{|
-    local function id_304(x_302)
-      local _scrutinee_305 = x_302
-      local y_303 = _scrutinee_305
-      return y_303
+    local function id_303(x_301)
+      local _scrutinee_304 = x_301
+      local y_302 = _scrutinee_304
+      return y_302
     end
     |}]
 
@@ -1279,14 +1279,14 @@ let%expect_test "single arm match with constructor - non-exhaustive" =
   print_endline (compile "type 'a option = None | Some of 'a
 let unwrap x = match x with | Some y -> y");
   [%expect{|
-    local function unwrap_308(x_306)
-      local _scrutinee_309 = x_306
-      if _scrutinee_309._tag == "Some" then
-        local y_307 = _scrutinee_309._0
-        local y_307 = _scrutinee_309._0
-        return y_307
+    local function unwrap_307(x_305)
+      local _scrutinee_308 = x_305
+      if _scrutinee_308._tag == 1 then
+        local y_306 = _scrutinee_308._0
+        local y_306 = _scrutinee_308._0
+        return y_306
       else
-        return error_310("Match failure")
+        return error_309("Match failure")
       end
     end
     File "<string>", line 2, characters 15-41:
@@ -1296,11 +1296,11 @@ let unwrap x = match x with | Some y -> y");
 let%expect_test "all wildcards match" =
   print_endline (compile "let first3 t = match t with | (x, _, _) -> x | _ -> 0");
   [%expect{|
-    local function first3_313(t_311)
-      local _scrutinee_314 = t_311
-      local x_312 = _scrutinee_314[1]
-      local x_312 = _scrutinee_314[1]
-      return x_312
+    local function first3_312(t_310)
+      local _scrutinee_313 = t_310
+      local x_311 = _scrutinee_313[1]
+      local x_311 = _scrutinee_313[1]
+      return x_311
     end
     File "<string>", line 1, characters 47-53:
     Warning: Redundant pattern: this case will never be matched
@@ -1309,16 +1309,16 @@ let%expect_test "all wildcards match" =
 let%expect_test "overlapping constant and variable patterns" =
   print_endline (compile "let f x = match x with | 0 -> 100 | 1 -> 200 | n -> n");
   [%expect{|
-    local function f_317(x_315)
-      local _scrutinee_318 = x_315
-      if _scrutinee_318 == 1 then
+    local function f_316(x_314)
+      local _scrutinee_317 = x_314
+      if _scrutinee_317 == 1 then
         return 200
       else
-        if _scrutinee_318 == 0 then
+        if _scrutinee_317 == 0 then
           return 100
         else
-          local n_316 = _scrutinee_318
-          return n_316
+          local n_315 = _scrutinee_317
+          return n_315
         end
       end
     end
@@ -1327,8 +1327,8 @@ let%expect_test "overlapping constant and variable patterns" =
 let%expect_test "multiple identical wildcards" =
   print_endline (compile "let f x = match x with | _ -> 1 | _ -> 2 | _ -> 3");
   [%expect{|
-    local function f_320(x_319)
-      local _scrutinee_321 = x_319
+    local function f_319(x_318)
+      local _scrutinee_320 = x_318
       return 1
     end
     File "<string>", line 1, characters 34-40:
@@ -1372,10 +1372,10 @@ let%expect_test "type error: wrong constructor argument type" =
   print_endline (compile "type intopt = None | Some of int
 let f x = match x with | Some true -> 1 | _ -> 0");
   [%expect{|
-    local function f_334(x_333)
-      local _scrutinee_335 = x_333
-      if _scrutinee_335._tag == "Some" then
-        if _scrutinee_335._0 == true then
+    local function f_333(x_332)
+      local _scrutinee_334 = x_332
+      if _scrutinee_334._tag == 1 then
+        if _scrutinee_334._0 == true then
           return 1
         else
           return 0
@@ -1408,18 +1408,18 @@ let%expect_test "nested record in constructor" =
   print_endline (compile "type 'a option = None | Some of 'a
 let get_x opt = match opt with | Some { x } -> x | None -> 0");
   [%expect{|
-    local function get_x_338(opt_336)
-      local _scrutinee_339 = opt_336
-      if _scrutinee_339._tag == "None" then
+    local function get_x_337(opt_335)
+      local _scrutinee_338 = opt_335
+      if _scrutinee_338._tag == 0 then
         return 0
       else
-        if _scrutinee_339._tag == "Some" then
-          local x_337 = _scrutinee_339._0.x
-          local x_337 = _scrutinee_339._0.x
-          local x_337 = _scrutinee_339._0.x
-          return x_337
+        if _scrutinee_338._tag == 1 then
+          local x_336 = _scrutinee_338._0.x
+          local x_336 = _scrutinee_338._0.x
+          local x_336 = _scrutinee_338._0.x
+          return x_336
         else
-          return error_340("Match failure")
+          return error_339("Match failure")
         end
       end
     end
@@ -1430,11 +1430,11 @@ let get_x opt = match opt with | Some { x } -> x | None -> 0");
 let%expect_test "record pattern with renamed binding" =
   print_endline (compile "let get_val r = match r with | { x = value } -> value");
   [%expect{|
-    local function get_val_343(r_341)
-      local _scrutinee_344 = r_341
-      local value_342 = _scrutinee_344.x
-      local value_342 = _scrutinee_344.x
-      return value_342
+    local function get_val_342(r_340)
+      local _scrutinee_343 = r_340
+      local value_341 = _scrutinee_343.x
+      local value_341 = _scrutinee_343.x
+      return value_341
     end
     File "<string>", line 1, characters 16-53:
     Warning: Non-exhaustive pattern matching, missing case: _
@@ -1445,13 +1445,13 @@ let%expect_test "record pattern with renamed binding" =
 let%expect_test "pattern match in function argument position" =
   print_endline (compile "let apply_pair f p = match p with | (a, b) -> f a b");
   [%expect{|
-    local function apply_pair_349(f_345, p_346)
-      local _scrutinee_350 = p_346
-      local b_348 = _scrutinee_350[2]
-      local a_347 = _scrutinee_350[1]
-      local a_347 = _scrutinee_350[1]
-      local b_348 = _scrutinee_350[2]
-      return f_345(a_347, b_348)
+    local function apply_pair_348(f_344, p_345)
+      local _scrutinee_349 = p_345
+      local b_347 = _scrutinee_349[2]
+      local a_346 = _scrutinee_349[1]
+      local a_346 = _scrutinee_349[1]
+      local b_347 = _scrutinee_349[2]
+      return f_344(a_346, b_347)
     end
     |}]
 
@@ -1471,17 +1471,18 @@ let%expect_test "pattern match inside if-then-else" =
   print_endline (compile "type 'a option = None | Some of 'a
 let safe_div a b = if b == 0 then None else Some (match (a, b) with | (x, y) -> x / y)");
   [%expect{|
-    local function safe_div_359(a_355, b_356)
-      if b_356 == 0 then
-        return {_tag = "None"}
+    local _Ctor_option_0 = {_tag = 0}
+    local function safe_div_358(a_354, b_355)
+      if b_355 == 0 then
+        return _Ctor_option_0
       else
-        return {_tag = "Some", _0 = (function()
-      local _scrutinee_360 = {a_355, b_356}
-      local y_358 = _scrutinee_360[2]
-      local x_357 = _scrutinee_360[1]
-      local x_357 = _scrutinee_360[1]
-      local y_358 = _scrutinee_360[2]
-      return x_357 / y_358
+        return {_tag = 1, _0 = (function()
+      local _scrutinee_359 = {a_354, b_355}
+      local y_357 = _scrutinee_359[2]
+      local x_356 = _scrutinee_359[1]
+      local x_356 = _scrutinee_359[1]
+      local y_357 = _scrutinee_359[2]
+      return x_356 / y_357
     end)()}
       end
     end
@@ -1492,20 +1493,20 @@ let%expect_test "pattern match with function result as scrutinee" =
 let id x = x
 let f opt = match id opt with | Some n -> n | None -> 0");
   [%expect{|
-    local function id_362(x_361)
-      return x_361
+    local function id_361(x_360)
+      return x_360
     end
-    local function f_365(opt_363)
-      local _scrutinee_366 = id_362(opt_363)
-      if _scrutinee_366._tag == "None" then
+    local function f_364(opt_362)
+      local _scrutinee_365 = id_361(opt_362)
+      if _scrutinee_365._tag == 0 then
         return 0
       else
-        if _scrutinee_366._tag == "Some" then
-          local n_364 = _scrutinee_366._0
-          local n_364 = _scrutinee_366._0
-          return n_364
+        if _scrutinee_365._tag == 1 then
+          local n_363 = _scrutinee_365._0
+          local n_363 = _scrutinee_365._0
+          return n_363
         else
-          return error_367("Match failure")
+          return error_366("Match failure")
         end
       end
     end
@@ -1515,24 +1516,24 @@ let%expect_test "complex real-world example - tree traversal" =
   print_endline (compile "type tree = Leaf of int | Node of (tree * tree)
 let rec sum t = match t with | Leaf n -> n | Node (l, r) -> sum l + sum r");
   [%expect{|
-    local sum_368
-    sum_368 = function(t_369)
-      local _scrutinee_373 = t_369
-      if _scrutinee_373._tag == "Node" then
-        local r_372 = _scrutinee_373._0[2]
-        local l_371 = _scrutinee_373._0[1]
-        local l_371 = _scrutinee_373._0[1]
-        local r_372 = _scrutinee_373._0[2]
-        local l_371 = _scrutinee_373._0[1]
-        local r_372 = _scrutinee_373._0[2]
-        return sum_368(l_371) + sum_368(r_372)
+    local sum_367
+    sum_367 = function(t_368)
+      local _scrutinee_372 = t_368
+      if _scrutinee_372._tag == 1 then
+        local r_371 = _scrutinee_372._0[2]
+        local l_370 = _scrutinee_372._0[1]
+        local l_370 = _scrutinee_372._0[1]
+        local r_371 = _scrutinee_372._0[2]
+        local l_370 = _scrutinee_372._0[1]
+        local r_371 = _scrutinee_372._0[2]
+        return sum_367(l_370) + sum_367(r_371)
       else
-        if _scrutinee_373._tag == "Leaf" then
-          local n_370 = _scrutinee_373._0
-          local n_370 = _scrutinee_373._0
-          return n_370
+        if _scrutinee_372._tag == 0 then
+          local n_369 = _scrutinee_372._0
+          local n_369 = _scrutinee_372._0
+          return n_369
         else
-          return error_374("Match failure")
+          return error_373("Match failure")
         end
       end
     end
@@ -1547,37 +1548,603 @@ let rec eval e = match e with
   | Add (a, b) -> eval a + eval b
   | Mul (a, b) -> eval a * eval b");
   [%expect{|
-    local eval_375
-    eval_375 = function(e_376)
-      local _scrutinee_382 = e_376
-      if _scrutinee_382._tag == "Mul" then
-        local b_381 = _scrutinee_382._0[2]
-        local a_380 = _scrutinee_382._0[1]
-        local a_380 = _scrutinee_382._0[1]
-        local b_381 = _scrutinee_382._0[2]
-        local a_380 = _scrutinee_382._0[1]
-        local b_381 = _scrutinee_382._0[2]
-        return eval_375(a_380) * eval_375(b_381)
+    local eval_374
+    eval_374 = function(e_375)
+      local _scrutinee_381 = e_375
+      if _scrutinee_381._tag == 2 then
+        local b_380 = _scrutinee_381._0[2]
+        local a_379 = _scrutinee_381._0[1]
+        local a_379 = _scrutinee_381._0[1]
+        local b_380 = _scrutinee_381._0[2]
+        local a_379 = _scrutinee_381._0[1]
+        local b_380 = _scrutinee_381._0[2]
+        return eval_374(a_379) * eval_374(b_380)
       else
-        if _scrutinee_382._tag == "Add" then
-          local b_379 = _scrutinee_382._0[2]
-          local a_378 = _scrutinee_382._0[1]
-          local a_378 = _scrutinee_382._0[1]
-          local b_379 = _scrutinee_382._0[2]
-          local a_378 = _scrutinee_382._0[1]
-          local b_379 = _scrutinee_382._0[2]
-          return eval_375(a_378) + eval_375(b_379)
+        if _scrutinee_381._tag == 1 then
+          local b_378 = _scrutinee_381._0[2]
+          local a_377 = _scrutinee_381._0[1]
+          local a_377 = _scrutinee_381._0[1]
+          local b_378 = _scrutinee_381._0[2]
+          local a_377 = _scrutinee_381._0[1]
+          local b_378 = _scrutinee_381._0[2]
+          return eval_374(a_377) + eval_374(b_378)
         else
-          if _scrutinee_382._tag == "Num" then
-            local n_377 = _scrutinee_382._0
-            local n_377 = _scrutinee_382._0
-            return n_377
+          if _scrutinee_381._tag == 0 then
+            local n_376 = _scrutinee_381._0
+            local n_376 = _scrutinee_381._0
+            return n_376
           else
-            return error_383("Match failure")
+            return error_382("Match failure")
           end
         end
       end
     end
     File "<string>", line 2, characters 17-33:
     Warning: Non-exhaustive pattern matching, missing case: Add (Num _)
+    |}]
+
+(* ============================================================
+   COMPREHENSIVE TESTS FOR LUA CODEGEN IMPROVEMENTS
+   ============================================================ *)
+
+(* --- Reserved Keyword Handling Tests --- *)
+
+let%expect_test "lua keyword 'end' used as identifier is mangled" =
+  print_endline (compile "let end = 42");
+  [%expect{| local _end_383 = 42 |}]
+
+let%expect_test "lua keyword 'nil' used as identifier is mangled" =
+  print_endline (compile "let nil = 0");
+  [%expect{| local _nil_384 = 0 |}]
+
+let%expect_test "lua keyword 'repeat' used as identifier is mangled" =
+  print_endline (compile "let repeat = 99");
+  [%expect{| local _repeat_385 = 99 |}]
+
+let%expect_test "lua keyword 'until' used as identifier is mangled" =
+  print_endline (compile "let until = 5");
+  [%expect{| local _until_386 = 5 |}]
+
+let%expect_test "lua keyword 'do' in function parameter is mangled" =
+  print_endline (compile "let check do = do");
+  [%expect{|
+    local function check_388(_do_387)
+      return _do_387
+    end
+    |}]
+
+let%expect_test "lua keyword 'local' used as identifier is mangled" =
+  print_endline (compile "let local = 123");
+  [%expect{| local _local_389 = 123 |}]
+
+let%expect_test "lua keyword 'goto' used as identifier is mangled" =
+  print_endline (compile "let goto = 7");
+  [%expect{| local _goto_390 = 7 |}]
+
+let%expect_test "lua keyword 'break' used as identifier is mangled" =
+  print_endline (compile "let break = 3");
+  [%expect{| local _break_391 = 3 |}]
+
+let%expect_test "lua keyword 'return' used as identifier is mangled" =
+  print_endline (compile "let return = 1");
+  [%expect{| local _return_392 = 1 |}]
+
+let%expect_test "lua keyword 'while' used as identifier is mangled" =
+  print_endline (compile "let while = 8");
+  [%expect{| local _while_393 = 8 |}]
+
+let%expect_test "non-keyword identifier is not mangled" =
+  print_endline (compile "let value = 42");
+  [%expect{| local value_394 = 42 |}]
+
+let%expect_test "identifier containing keyword is not mangled" =
+  print_endline (compile "let end_marker = 10");
+  [%expect{| local end_marker_395 = 10 |}]
+
+(* --- Integer Tags Tests --- *)
+
+let%expect_test "constructor uses integer tag 0 for first variant" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let none_val = None");
+  [%expect{|
+    local _Ctor_option_0 = {_tag = 0}
+    local none_val_396 = _Ctor_option_0
+    |}]
+
+let%expect_test "constructor uses integer tag 1 for second variant" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let some_val = Some 42");
+  [%expect{|
+    local some_val_397 = {_tag = 1, _0 = 42}
+    |}]
+
+let%expect_test "three variant type uses correct integer tags" =
+  print_endline (compile "type color = Red | Green | Blue
+let red = Red
+let green = Green
+let blue = Blue");
+  [%expect{|
+    local _Ctor_color_2 = {_tag = 2}
+    local _Ctor_color_1 = {_tag = 1}
+    local _Ctor_color_0 = {_tag = 0}
+    local red_398 = _Ctor_color_0
+    local green_399 = _Ctor_color_1
+    local blue_400 = _Ctor_color_2
+    |}]
+
+let%expect_test "pattern match compares against integer tags" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let is_some opt = match opt with
+  | None -> false
+  | Some _ -> true");
+  [%expect{|
+    local function is_some_402(opt_401)
+      local _scrutinee_403 = opt_401
+      if _scrutinee_403._tag == 1 then
+        return true
+      else
+        if _scrutinee_403._tag == 0 then
+          return false
+        else
+          return error_404("Match failure")
+        end
+      end
+    end
+    |}]
+
+(* --- Nullary Constructor Singletons Tests --- *)
+
+let%expect_test "nullary constructor generates singleton preamble" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let a = None
+let b = None");
+  [%expect{|
+    local _Ctor_option_0 = {_tag = 0}
+    local a_405 = _Ctor_option_0
+    local b_406 = _Ctor_option_0
+    |}]
+
+let%expect_test "multiple nullary constructors each get singleton" =
+  print_endline (compile "type traffic_light = Red | Yellow | Green
+let stop = Red
+let caution = Yellow
+let go = Green");
+  [%expect{|
+    local _Ctor_traffic_light_2 = {_tag = 2}
+    local _Ctor_traffic_light_1 = {_tag = 1}
+    local _Ctor_traffic_light_0 = {_tag = 0}
+    local stop_407 = _Ctor_traffic_light_0
+    local caution_408 = _Ctor_traffic_light_1
+    local go_409 = _Ctor_traffic_light_2
+    |}]
+
+let%expect_test "non-nullary constructor does not use singleton" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let x = Some 1
+let y = Some 2");
+  [%expect{|
+    local x_410 = {_tag = 1, _0 = 1}
+    local y_411 = {_tag = 1, _0 = 2}
+    |}]
+
+let%expect_test "mixed nullary and non-nullary constructors" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let none1 = None
+let some1 = Some 10
+let none2 = None
+let some2 = Some 20");
+  [%expect{|
+    local _Ctor_option_0 = {_tag = 0}
+    local none1_412 = _Ctor_option_0
+    local some1_413 = {_tag = 1, _0 = 10}
+    local none2_414 = _Ctor_option_0
+    local some2_415 = {_tag = 1, _0 = 20}
+    |}]
+
+(* --- Switch Dispatch Table Tests --- *)
+
+let%expect_test "four or more constructors uses dispatch table" =
+  print_endline (compile "type direction = North | South | East | West
+let to_num dir = match dir with
+  | North -> 0
+  | South -> 1
+  | East -> 2
+  | West -> 3");
+  [%expect{|
+    local function to_num_417(dir_416)
+      local _scrutinee_418 = dir_416
+      local _switch = _scrutinee_418
+      local _dispatch = {[3] = function()
+      return 3
+    end, [2] = function()
+      return 2
+    end, [1] = function()
+      return 1
+    end, [0] = function()
+      return 0
+    end}
+      local _handler = _dispatch[_switch._tag]
+      if _handler then
+        return _handler()
+      else
+        return error("Match failure")
+      end
+    end
+    |}]
+
+let%expect_test "five constructors uses dispatch table" =
+  print_endline (compile "type weekday = Mon | Tue | Wed | Thu | Fri
+let day_num day = match day with
+  | Mon -> 1
+  | Tue -> 2
+  | Wed -> 3
+  | Thu -> 4
+  | Fri -> 5");
+  [%expect{|
+    local function day_num_420(day_419)
+      local _scrutinee_421 = day_419
+      local _switch = _scrutinee_421
+      local _dispatch = {[4] = function()
+      return 5
+    end, [3] = function()
+      return 4
+    end, [2] = function()
+      return 3
+    end, [1] = function()
+      return 2
+    end, [0] = function()
+      return 1
+    end}
+      local _handler = _dispatch[_switch._tag]
+      if _handler then
+        return _handler()
+      else
+        return error("Match failure")
+      end
+    end
+    |}]
+
+let%expect_test "three constructors uses if-chain not dispatch" =
+  print_endline (compile "type rgb = R | G | B
+let to_num color = match color with
+  | R -> 0
+  | G -> 1
+  | B -> 2");
+  [%expect{|
+    local function to_num_423(color_422)
+      local _scrutinee_424 = color_422
+      if _scrutinee_424._tag == 2 then
+        return 2
+      else
+        if _scrutinee_424._tag == 1 then
+          return 1
+        else
+          if _scrutinee_424._tag == 0 then
+            return 0
+          else
+            return error_425("Match failure")
+          end
+        end
+      end
+    end
+    |}]
+
+let%expect_test "dispatch table with constructor arguments" =
+  print_endline (compile "type expr = Num of int | Add of int | Sub of int | Mul of int
+let eval expression = match expression with
+  | Num n -> n
+  | Add n -> n + 1
+  | Sub n -> n - 1
+  | Mul n -> n * 2");
+  [%expect{|
+    local function eval_431(expression_426)
+      local _scrutinee_432 = expression_426
+      local _switch = _scrutinee_432
+      local _dispatch = {[3] = function()
+      local n_430 = _scrutinee_432._0
+      local n_430 = _scrutinee_432._0
+      return n_430 * 2
+    end, [2] = function()
+      local n_429 = _scrutinee_432._0
+      local n_429 = _scrutinee_432._0
+      return n_429 - 1
+    end, [1] = function()
+      local n_428 = _scrutinee_432._0
+      local n_428 = _scrutinee_432._0
+      return n_428 + 1
+    end, [0] = function()
+      local n_427 = _scrutinee_432._0
+      local n_427 = _scrutinee_432._0
+      return n_427
+    end}
+      local _handler = _dispatch[_switch._tag]
+      if _handler then
+        return _handler()
+      else
+        return error("Match failure")
+      end
+    end
+    |}]
+
+(* --- IIFE Optimization Tests --- *)
+
+let%expect_test "nested let in value position is floated out" =
+  print_endline (compile "let result = let x = 1 in x + 2");
+  [%expect{|
+    local x_433 = 1
+    local result_434 = x_433 + 2
+    |}]
+
+let%expect_test "deeply nested let is fully floated" =
+  print_endline (compile "let result = let a = 1 in let b = 2 in a + b");
+  [%expect{|
+    local a_435 = 1
+    local b_436 = 2
+    local result_437 = a_435 + b_436
+    |}]
+
+let%expect_test "if in value position uses assignment not IIFE" =
+  print_endline (compile "let result = if true then 1 else 2");
+  [%expect{|
+    local result_438
+    if true then
+      result_438 = 1
+    else
+      result_438 = 2
+    end
+    |}]
+
+let%expect_test "if with complex condition uses assignment" =
+  print_endline (compile "let x = 5
+let result = if x > 0 then 1 else 0");
+  [%expect{|
+    local x_439 = 5
+    local result_440
+    if x_439 > 0 then
+      result_440 = 1
+    else
+      result_440 = 0
+    end
+    |}]
+
+let%expect_test "nested if in value position is handled" =
+  print_endline (compile "let result = if true then if false then 1 else 2 else 3");
+  [%expect{|
+    local result_441
+    if true then
+      if false then
+        result_441 = 1
+      else
+        result_441 = 2
+      end
+    else
+      result_441 = 3
+    end
+    |}]
+
+let%expect_test "let with if value is properly floated" =
+  print_endline (compile "let result = let flag = if true then 1 else 0 in flag + 1");
+  [%expect{|
+    local flag_442
+    if true then
+      flag_442 = 1
+    else
+      flag_442 = 0
+    end
+    local result_443 = flag_442 + 1
+    |}]
+
+let%expect_test "sequence in value position is floated" =
+  print_endline (compile "let result = let _ = print 1 in 42");
+  [%expect{|
+    local __445 = print(1)
+    local result_444 = 42
+    |}]
+
+let%expect_test "function body still uses statements not IIFE" =
+  print_endline (compile "let compute x = let y = x + 1 in y * 2");
+  [%expect{|
+    local function compute_448(x_446)
+      local y_447 = x_446 + 1
+      return y_447 * 2
+    end
+    |}]
+
+let%expect_test "if in function body uses statement form" =
+  print_endline (compile "let abs n = if n < 0 then 0 - n else n");
+  [%expect{|
+    local function abs_450(n_449)
+      if n_449 < 0 then
+        return 0 - n_449
+      else
+        return n_449
+      end
+    end
+    |}]
+
+(* --- Tail Call Optimization Tests --- *)
+
+let%expect_test "simple tail recursive function generates proper return" =
+  print_endline (compile "let rec sum_to n acc = if n <= 0 then acc else sum_to (n - 1) (acc + n)");
+  [%expect{|
+    local sum_to_451
+    sum_to_451 = function(n_452, acc_453)
+      if n_452 <= 0 then
+        return acc_453
+      else
+        return sum_to_451(n_452 - 1, acc_453 + n_452)
+      end
+    end
+    |}]
+
+let%expect_test "tail call in then branch uses return" =
+  print_endline (compile "let rec countdown n = if n <= 0 then 0 else countdown (n - 1)");
+  [%expect{|
+    local countdown_454
+    countdown_454 = function(n_455)
+      if n_455 <= 0 then
+        return 0
+      else
+        return countdown_454(n_455 - 1)
+      end
+    end
+    |}]
+
+let%expect_test "tail call in else branch uses return" =
+  print_endline (compile "let rec find_zero n = if n == 0 then true else find_zero (n - 1)");
+  [%expect{|
+    local find_zero_456
+    find_zero_456 = function(n_457)
+      if n_457 == 0 then
+        return true
+      else
+        return find_zero_456(n_457 - 1)
+      end
+    end
+    |}]
+
+let%expect_test "mutual recursion generates proper tail calls" =
+  print_endline (compile "let rec is_even n = if n == 0 then true else is_odd (n - 1)
+and is_odd n = if n == 0 then false else is_even (n - 1)");
+  [%expect{|
+    local is_even_458, is_odd_459
+    is_even_458 = function(n_460)
+      if n_460 == 0 then
+        return true
+      else
+        return is_odd_459(n_460 - 1)
+      end
+    end
+    is_odd_459 = function(n_461)
+      if n_461 == 0 then
+        return false
+      else
+        return is_even_458(n_461 - 1)
+      end
+    end
+    |}]
+
+let%expect_test "non-tail call is not in return position" =
+  print_endline (compile "let rec factorial n = if n <= 1 then 1 else n * factorial (n - 1)");
+  [%expect{|
+    local factorial_462
+    factorial_462 = function(n_463)
+      if n_463 <= 1 then
+        return 1
+      else
+        return n_463 * factorial_462(n_463 - 1)
+      end
+    end
+    |}]
+
+let%expect_test "accumulator pattern enables tail call" =
+  print_endline (compile "let rec factorial_acc n acc = if n <= 1 then acc else factorial_acc (n - 1) (n * acc)");
+  [%expect{|
+    local factorial_acc_464
+    factorial_acc_464 = function(n_465, acc_466)
+      if n_465 <= 1 then
+        return acc_466
+      else
+        return factorial_acc_464(n_465 - 1, n_465 * acc_466)
+      end
+    end
+    |}]
+
+(* --- Combined Feature Tests --- *)
+
+let%expect_test "reserved keyword in pattern match with dispatch" =
+  print_endline (compile "type cmd = And | Or | Not | Xor
+let eval_cmd and_val = match and_val with
+  | And -> 1
+  | Or -> 2
+  | Not -> 3
+  | Xor -> 4");
+  [%expect{|
+    local function eval_cmd_468(and_val_467)
+      local _scrutinee_469 = and_val_467
+      local _switch = _scrutinee_469
+      local _dispatch = {[3] = function()
+      return 4
+    end, [2] = function()
+      return 3
+    end, [1] = function()
+      return 2
+    end, [0] = function()
+      return 1
+    end}
+      local _handler = _dispatch[_switch._tag]
+      if _handler then
+        return _handler()
+      else
+        return error("Match failure")
+      end
+    end
+    |}]
+
+let%expect_test "singleton with IIFE optimization" =
+  print_endline (compile "type 'a option = None | Some of 'a
+let get_or_default opt default_val =
+  let result = if true then opt else None in
+  match result with
+  | None -> default_val
+  | Some x -> x");
+  [%expect{|
+    local _Ctor_option_0 = {_tag = 0}
+    local function get_or_default_474(opt_470, default_val_471)
+      local result_472
+      if true then
+        result_472 = opt_470
+      else
+        result_472 = _Ctor_option_0
+      end
+      local _scrutinee_475 = result_472
+      if _scrutinee_475._tag == 1 then
+        local x_473 = _scrutinee_475._0
+        local x_473 = _scrutinee_475._0
+        return x_473
+      else
+        if _scrutinee_475._tag == 0 then
+          return default_val_471
+        else
+          return error_476("Match failure")
+        end
+      end
+    end
+    |}]
+
+let%expect_test "all features combined - complex example" =
+  print_endline (compile "type 'a option = None | Some of 'a
+type direction = North | South | East | West
+
+let process_direction dir =
+  let opt_value = if dir == 0 then None else Some dir in
+  let result = match opt_value with
+    | None -> 0
+    | Some n -> n
+  in
+  result + 1");
+  [%expect{|
+    local _Ctor_option_0 = {_tag = 0}
+    local function process_direction_481(dir_477)
+      local opt_value_478
+      if dir_477 == 0 then
+        opt_value_478 = _Ctor_option_0
+      else
+        opt_value_478 = {_tag = 1, _0 = dir_477}
+      end
+      local _scrutinee_482 = opt_value_478
+      local result_480
+      if _scrutinee_482._tag == 1 then
+        local n_479 = _scrutinee_482._0
+        local n_479 = _scrutinee_482._0
+        result_480 = n_479
+      else
+        if _scrutinee_482._tag == 0 then
+          result_480 = 0
+        else
+          result_480 = error_483("Match failure")
+        end
+      end
+      return result_480 + 1
+    end
     |}]

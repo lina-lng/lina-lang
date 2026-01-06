@@ -42,8 +42,8 @@ let rec simplify_pattern (pat : Typed_tree.typed_pattern) : simple_pattern =
     PatConstant (simplify_constant c)
   | Typed_tree.TypedPatternTuple pats ->
     PatTuple (List.map simplify_pattern pats)
-  | Typed_tree.TypedPatternConstructor (name, arg) ->
-    PatConstructor (name, Option.map simplify_pattern arg)
+  | Typed_tree.TypedPatternConstructor (ctor_info, arg) ->
+    PatConstructor (ctor_info.Types.constructor_name, Option.map simplify_pattern arg)
   | Typed_tree.TypedPatternRecord (fields, is_open) ->
     let simplified_fields = List.map (fun (f : Typed_tree.typed_record_pattern_field) ->
       (f.typed_pattern_field_name, simplify_pattern f.typed_pattern_field_pattern)

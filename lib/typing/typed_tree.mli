@@ -11,7 +11,7 @@ and typed_pattern_desc =
   | TypedPatternWildcard
   | TypedPatternConstant of Parsing.Syntax_tree.constant
   | TypedPatternTuple of typed_pattern list
-  | TypedPatternConstructor of string * typed_pattern option
+  | TypedPatternConstructor of Types.constructor_info * typed_pattern option
   | TypedPatternRecord of typed_record_pattern_field list * bool
 
 and typed_record_pattern_field = {
@@ -29,7 +29,7 @@ and typed_expression_desc =
   | TypedExpressionVariable of Identifier.t
   | TypedExpressionConstant of Parsing.Syntax_tree.constant
   | TypedExpressionTuple of typed_expression list
-  | TypedExpressionConstructor of string * typed_expression option
+  | TypedExpressionConstructor of Types.constructor_info * typed_expression option
   | TypedExpressionApply of typed_expression * typed_expression list
   | TypedExpressionFunction of typed_pattern list * typed_expression
   | TypedExpressionLet of Parsing.Syntax_tree.recursion_flag * typed_binding list * typed_expression

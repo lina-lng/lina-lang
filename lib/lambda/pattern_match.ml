@@ -13,7 +13,7 @@ type head_constructor =
   | HCWildcard
   | HCConstant of Parsing.Syntax_tree.constant
   | HCTuple of int  (* arity *)
-  | HCConstructor of string
+  | HCConstructor of string * int  (* name, tag_index *)
   | HCRecord of string list  (* field names *)
 
 (* Clause in pattern matrix *)
@@ -65,8 +65,8 @@ let head_of_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor =
     HCConstant c
   | Typing.Typed_tree.TypedPatternTuple pats ->
     HCTuple (List.length pats)
-  | Typing.Typed_tree.TypedPatternConstructor (name, _) ->
-    HCConstructor name
+  | Typing.Typed_tree.TypedPatternConstructor (ctor_info, _) ->
+    HCConstructor (ctor_info.Typing.Types.constructor_name, ctor_info.Typing.Types.constructor_tag_index)
   | Typing.Typed_tree.TypedPatternRecord (fields, _) ->
     HCRecord (List.map (fun f -> f.Typing.Typed_tree.typed_pattern_field_name) fields)
 
@@ -155,7 +155,7 @@ let sub_patterns (pat : Typing.Typed_tree.typed_pattern) (head : head_constructo
   (* Matching constructors *)
   | Typing.Typed_tree.TypedPatternTuple pats, HCTuple _ ->
     Some pats
-  | Typing.Typed_tree.TypedPatternConstructor (name, arg), HCConstructor name' when name = name' ->
+  | Typing.Typed_tree.TypedPatternConstructor (ctor_info, arg), HCConstructor (name', _) when ctor_info.Typing.Types.constructor_name = name' ->
     begin match arg with
     | Some p -> Some [p]
     | None -> Some []
@@ -275,7 +275,7 @@ let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_const
     | [] -> List.rev acc
     | x :: xs ->
       let eq h1 h2 = match h1, h2 with
-        | HCConstructor n1, HCConstructor n2 -> n1 = n2
+        | HCConstructor (n1, _), HCConstructor (n2, _) -> n1 = n2
         | HCConstant c1, HCConstant c2 -> constants_equal c1 c2
         | HCTuple a1, HCTuple a2 -> a1 = a2
         | HCRecord f1, HCRecord f2 -> f1 = f2
@@ -289,12 +289,12 @@ let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_const
 (* Adjust arity for constructor based on whether it has an arg in any pattern *)
 let adjust_constructor_arity (matrix : pattern_matrix) (col : int) (head : head_constructor) : int =
   match head with
-  | HCConstructor name ->
+  | HCConstructor (name, _) ->
     (* Check if any pattern with this constructor has an argument *)
     let has_arg = List.exists (fun clause ->
       let pat = List.nth clause.clause_patterns col in
       match pat.pattern_desc with
-      | Typing.Typed_tree.TypedPatternConstructor (n, Some _) when n = name -> true
+      | Typing.Typed_tree.TypedPatternConstructor (ctor_info, Some _) when ctor_info.Typing.Types.constructor_name = name -> true
       | _ -> false
     ) matrix.clauses in
     if has_arg then 1 else 0

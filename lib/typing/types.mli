@@ -64,6 +64,8 @@ val instantiate : type_scheme -> type_expression
 
 type constructor_info = {
   constructor_name : string;
+  constructor_tag_index : int;
+  constructor_type_name : string;
   constructor_argument_type : type_expression option;
   constructor_result_type : type_expression;
   constructor_type_parameters : type_variable list;
