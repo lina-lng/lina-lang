@@ -21,6 +21,13 @@ and type_expression_desc =
   | TypeConstructor of string * type_expression list
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
+  | TypeRecord of type_record_field list * bool  (* bool = is_open, i.e. has .. *)
+[@@deriving show, eq]
+
+and type_record_field = {
+  type_field_name : string;
+  type_field_type : type_expression;
+}
 [@@deriving show, eq]
 
 type pattern = pattern_desc Location.located
@@ -34,6 +41,13 @@ and pattern_desc =
   | PatternConstructor of string * pattern option
   | PatternAlias of pattern * string
   | PatternConstraint of pattern * type_expression
+  | PatternRecord of record_pattern_field list * bool  (* bool = is_open *)
+[@@deriving show, eq]
+
+and record_pattern_field = {
+  pattern_field_name : string Location.located;
+  pattern_field_pattern : pattern option;  (* None for punning: { x } = { x = x } *)
+}
 [@@deriving show, eq]
 
 type expression = expression_desc Location.located
@@ -50,6 +64,24 @@ and expression_desc =
   | ExpressionIf of expression * expression * expression option
   | ExpressionSequence of expression * expression
   | ExpressionConstraint of expression * type_expression
+  | ExpressionRecord of record_field list
+  | ExpressionRecordAccess of expression * string
+  | ExpressionRecordUpdate of expression * record_field list
+  | ExpressionMatch of expression * match_arm list
+[@@deriving show, eq]
+
+and record_field = {
+  field_name : string Location.located;
+  field_value : expression;
+}
+[@@deriving show, eq]
+
+and match_arm = {
+  arm_pattern : pattern;
+  arm_guard : expression option;
+  arm_expression : expression;
+  arm_location : Location.t;
+}
 [@@deriving show, eq]
 
 and binding = {

@@ -37,6 +37,9 @@ type lambda =
   | LambdaGetField of int * lambda
   | LambdaSwitch of lambda * switch_case list * lambda option
   | LambdaConstructor of string * lambda option
+  | LambdaMakeRecord of (string * lambda) list
+  | LambdaGetRecordField of string * lambda
+  | LambdaRecordUpdate of lambda * (string * lambda) list
 
 and switch_case = {
   switch_tag : int;

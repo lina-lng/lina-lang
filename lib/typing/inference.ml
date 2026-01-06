@@ -75,19 +75,30 @@ let rec infer_pattern env (pattern : pattern) =
             (List.map (fun tv -> tv.id) constructor_info.constructor_type_parameters)
             fresh_params
         in
-        let rec substitute ty =
-          match representative ty with
-          | TypeVariable tv ->
-            begin match List.assoc_opt tv.id subst with
-            | Some fresh_ty -> fresh_ty
-            | None -> ty
+        let rec substitute type_to_substitute =
+          match representative type_to_substitute with
+          | TypeVariable type_var ->
+            begin match List.assoc_opt type_var.id subst with
+            | Some fresh_type -> fresh_type
+            | None -> type_to_substitute
             end
-          | TypeConstructor (path, args) ->
-            TypeConstructor (path, List.map substitute args)
-          | TypeTuple elements ->
-            TypeTuple (List.map substitute elements)
-          | TypeArrow (arg, result) ->
-            TypeArrow (substitute arg, substitute result)
+          | TypeConstructor (path, type_arguments) ->
+            TypeConstructor (path, List.map substitute type_arguments)
+          | TypeTuple element_types ->
+            TypeTuple (List.map substitute element_types)
+          | TypeArrow (argument_type, result_type) ->
+            TypeArrow (substitute argument_type, substitute result_type)
+          | TypeRecord row ->
+            TypeRecord (substitute_row row)
+          | TypeRowEmpty ->
+            TypeRowEmpty
+        and substitute_row row = {
+          row_fields = List.map (fun (field_name, field) ->
+            (field_name, match field with
+              | RowFieldPresent field_type -> RowFieldPresent (substitute field_type))
+          ) row.row_fields;
+          row_more = substitute row.row_more;
+        }
         in
         (Option.map substitute constructor_info.constructor_argument_type,
          substitute constructor_info.constructor_result_type)
@@ -127,6 +138,42 @@ let rec infer_pattern env (pattern : pattern) =
 
   | PatternConstraint (inner_pattern, _type_expr) ->
     infer_pattern env inner_pattern
+
+  | PatternRecord (pattern_fields, is_open) ->
+    (* Infer types for each field pattern and collect bindings *)
+    let typed_field_patterns, field_types, updated_environment =
+      List.fold_left (fun (typed_fields_accumulator, field_types_accumulator, current_environment) pattern_field ->
+        let field_name = pattern_field.pattern_field_name.Location.value in
+        let inner_pattern = match pattern_field.pattern_field_pattern with
+          | Some pattern -> pattern
+          | None ->
+            (* Punning: { x } means { x = x } - create a variable pattern *)
+            Location.{ value = PatternVariable field_name;
+                       location = pattern_field.pattern_field_name.Location.location }
+        in
+        let typed_inner_pattern, inner_pattern_type, updated_env = infer_pattern current_environment inner_pattern in
+        let typed_field = {
+          Typed_tree.typed_pattern_field_name = field_name;
+          typed_pattern_field_pattern = typed_inner_pattern;
+        } in
+        (typed_field :: typed_fields_accumulator,
+         (field_name, RowFieldPresent inner_pattern_type) :: field_types_accumulator,
+         updated_env)
+      ) ([], [], env) pattern_fields
+    in
+    let typed_field_patterns = List.rev typed_field_patterns in
+    let field_types = List.sort compare (List.rev field_types) in
+    let row_more = if is_open then new_type_variable () else TypeRowEmpty in
+    let record_type = TypeRecord {
+      row_fields = field_types;
+      row_more;
+    } in
+    let typed_pattern = {
+      pattern_desc = TypedPatternRecord (typed_field_patterns, is_open);
+      pattern_type = record_type;
+      pattern_location = loc;
+    } in
+    (typed_pattern, record_type, updated_environment)
 
 let rec infer_expression env (expr : expression) =
   let loc = expr.Location.location in
@@ -178,19 +225,30 @@ let rec infer_expression env (expr : expression) =
             (List.map (fun tv -> tv.id) constructor_info.constructor_type_parameters)
             fresh_params
         in
-        let rec substitute ty =
-          match representative ty with
-          | TypeVariable tv ->
-            begin match List.assoc_opt tv.id subst with
-            | Some fresh_ty -> fresh_ty
-            | None -> ty
+        let rec substitute type_to_substitute =
+          match representative type_to_substitute with
+          | TypeVariable type_var ->
+            begin match List.assoc_opt type_var.id subst with
+            | Some fresh_type -> fresh_type
+            | None -> type_to_substitute
             end
-          | TypeConstructor (path, args) ->
-            TypeConstructor (path, List.map substitute args)
-          | TypeTuple elements ->
-            TypeTuple (List.map substitute elements)
-          | TypeArrow (arg, result) ->
-            TypeArrow (substitute arg, substitute result)
+          | TypeConstructor (path, type_arguments) ->
+            TypeConstructor (path, List.map substitute type_arguments)
+          | TypeTuple element_types ->
+            TypeTuple (List.map substitute element_types)
+          | TypeArrow (argument_type, result_type) ->
+            TypeArrow (substitute argument_type, substitute result_type)
+          | TypeRecord row ->
+            TypeRecord (substitute_row row)
+          | TypeRowEmpty ->
+            TypeRowEmpty
+        and substitute_row row = {
+          row_fields = List.map (fun (field_name, field) ->
+            (field_name, match field with
+              | RowFieldPresent field_type -> RowFieldPresent (substitute field_type))
+          ) row.row_fields;
+          row_more = substitute row.row_more;
+        }
         in
         (Option.map substitute constructor_info.constructor_argument_type,
          substitute constructor_info.constructor_result_type)
@@ -293,6 +351,117 @@ let rec infer_expression env (expr : expression) =
 
   | ExpressionConstraint (inner_expr, _type_expr) ->
     infer_expression env inner_expr
+
+  | ExpressionRecord record_fields ->
+    (* Infer types for each field value *)
+    let typed_record_fields = List.map (fun record_field ->
+      let field_name = record_field.field_name.Location.value in
+      let typed_field_value = infer_expression env record_field.field_value in
+      {
+        Typed_tree.typed_field_name = field_name;
+        typed_field_value;
+      }
+    ) record_fields in
+    (* Build row type from inferred field types *)
+    let row_field_types = List.map (fun typed_field ->
+      (typed_field.Typed_tree.typed_field_name,
+       RowFieldPresent typed_field.typed_field_value.expression_type)
+    ) typed_record_fields in
+    let record_type = TypeRecord {
+      row_fields = List.sort compare row_field_types;
+      row_more = TypeRowEmpty;  (* Record literals are closed *)
+    } in
+    {
+      expression_desc = TypedExpressionRecord typed_record_fields;
+      expression_type = record_type;
+      expression_location = loc;
+    }
+
+  | ExpressionRecordAccess (record_expression, field_name) ->
+    (* Infer the record expression type *)
+    let typed_record_expression = infer_expression env record_expression in
+    (* The field type is a fresh variable *)
+    let field_type = new_type_variable () in
+    (* The row tail is a fresh variable (for row polymorphism) *)
+    let row_tail = new_type_variable () in
+    (* Expected record type: { field_name: field_type; .. } *)
+    let expected_record_type = TypeRecord {
+      row_fields = [(field_name, RowFieldPresent field_type)];
+      row_more = row_tail;
+    } in
+    Unification.unify loc expected_record_type typed_record_expression.expression_type;
+    {
+      expression_desc = TypedExpressionRecordAccess (typed_record_expression, field_name);
+      expression_type = field_type;
+      expression_location = loc;
+    }
+
+  | ExpressionRecordUpdate (base_expression, update_fields) ->
+    (* Infer the base record expression type *)
+    let typed_base_expression = infer_expression env base_expression in
+    (* Infer types for each update field *)
+    let typed_update_fields = List.map (fun update_field ->
+      let field_name = update_field.field_name.Location.value in
+      let typed_field_value = infer_expression env update_field.field_value in
+      {
+        Typed_tree.typed_field_name = field_name;
+        typed_field_value;
+      }
+    ) update_fields in
+    (* Build expected row type from update fields *)
+    let update_field_types = List.map (fun typed_field ->
+      (typed_field.Typed_tree.typed_field_name,
+       RowFieldPresent typed_field.typed_field_value.expression_type)
+    ) typed_update_fields in
+    let row_tail = new_type_variable () in
+    let expected_base_type = TypeRecord {
+      row_fields = List.sort compare update_field_types;
+      row_more = row_tail;
+    } in
+    Unification.unify loc expected_base_type typed_base_expression.expression_type;
+    (* Result type is same as base type *)
+    {
+      expression_desc = TypedExpressionRecordUpdate (typed_base_expression, typed_update_fields);
+      expression_type = typed_base_expression.expression_type;
+      expression_location = loc;
+    }
+
+  | ExpressionMatch (scrutinee_expression, match_arms) ->
+    (* Infer type of the scrutinee *)
+    let typed_scrutinee = infer_expression env scrutinee_expression in
+    let scrutinee_type = typed_scrutinee.expression_type in
+    (* Create fresh type variable for the result *)
+    let result_type = new_type_variable () in
+    (* Type-check each match arm *)
+    let typed_match_arms = List.map (fun match_arm ->
+      (* Infer pattern type and get bindings *)
+      let typed_pattern, pattern_type, arm_environment = infer_pattern env match_arm.arm_pattern in
+      (* Unify pattern type with scrutinee type *)
+      Unification.unify match_arm.arm_location scrutinee_type pattern_type;
+      (* Type-check guard if present - must be bool *)
+      let typed_guard = match match_arm.arm_guard with
+        | None -> None
+        | Some guard_expression ->
+          let typed_guard_expression = infer_expression arm_environment guard_expression in
+          Unification.unify guard_expression.Location.location type_bool typed_guard_expression.expression_type;
+          Some typed_guard_expression
+      in
+      (* Type-check arm body with pattern bindings *)
+      let typed_arm_expression = infer_expression arm_environment match_arm.arm_expression in
+      (* Unify arm result with overall result type *)
+      Unification.unify match_arm.arm_location result_type typed_arm_expression.expression_type;
+      {
+        Typed_tree.typed_arm_pattern = typed_pattern;
+        typed_arm_guard = typed_guard;
+        typed_arm_expression;
+        typed_arm_location = match_arm.arm_location;
+      }
+    ) match_arms in
+    {
+      expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
+      expression_type = result_type;
+      expression_location = loc;
+    }
 
 and infer_bindings env rec_flag bindings =
   match rec_flag with

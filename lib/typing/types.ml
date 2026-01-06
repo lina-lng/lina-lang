@@ -26,6 +26,16 @@ and type_expression =
   | TypeConstructor of type_path * type_expression list
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
+  | TypeRecord of row
+  | TypeRowEmpty
+
+and row = {
+  row_fields : (string * row_field) list;  (* Sorted by label *)
+  row_more : type_expression;               (* Row variable or TypeRowEmpty *)
+}
+
+and row_field =
+  | RowFieldPresent of type_expression
 
 and type_path =
   | PathBuiltin of builtin_type
@@ -49,6 +59,20 @@ let type_float = TypeConstructor (PathBuiltin BuiltinFloat, [])
 let type_string = TypeConstructor (PathBuiltin BuiltinString, [])
 let type_bool = TypeConstructor (PathBuiltin BuiltinBool, [])
 let type_unit = TypeConstructor (PathBuiltin BuiltinUnit, [])
+
+(* Create a closed record type *)
+let type_record_closed fields =
+  TypeRecord {
+    row_fields = List.sort compare fields;
+    row_more = TypeRowEmpty;
+  }
+
+(* Create an open record type with a fresh row variable *)
+let type_record_open fields =
+  TypeRecord {
+    row_fields = List.sort compare fields;
+    row_more = new_type_variable ();
+  }
 
 let rec representative ty =
   match ty with
@@ -85,6 +109,14 @@ let generalize ty =
     | TypeArrow (arg, result) ->
       collect arg;
       collect result
+    | TypeRecord row -> collect_row row
+    | TypeRowEmpty -> ()
+  and collect_row row =
+    List.iter (fun (_, field) ->
+      match field with
+      | RowFieldPresent ty -> collect ty
+    ) row.row_fields;
+    collect row.row_more
   in
   collect ty;
   { quantified_variables = !generalized_vars; body = ty }
@@ -110,6 +142,17 @@ let instantiate scheme =
         TypeTuple (List.map copy elements)
       | TypeArrow (arg, result) ->
         TypeArrow (copy arg, copy result)
+      | TypeRecord row ->
+        TypeRecord (copy_row row)
+      | TypeRowEmpty ->
+        TypeRowEmpty
+    and copy_row row = {
+      row_fields = List.map (fun (name, field) ->
+        (name, match field with
+          | RowFieldPresent ty -> RowFieldPresent (copy ty))
+      ) row.row_fields;
+      row_more = copy row.row_more;
+    }
     in
     copy scheme.body
   end
@@ -148,6 +191,29 @@ let rec pp_type_expression fmt ty =
       (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") pp_type_expression) elements
   | TypeArrow (arg, result) ->
     Format.fprintf fmt "(%a -> %a)" pp_type_expression arg pp_type_expression result
+  | TypeRecord row ->
+    pp_row fmt row
+  | TypeRowEmpty ->
+    Format.fprintf fmt "{}"
+
+and pp_row fmt row =
+  Format.fprintf fmt "{ ";
+  List.iteri (fun i (name, field) ->
+    if i > 0 then Format.fprintf fmt "; ";
+    match field with
+    | RowFieldPresent ty -> Format.fprintf fmt "%s : %a" name pp_type_expression ty
+  ) row.row_fields;
+  begin match representative row.row_more with
+  | TypeRowEmpty ->
+    if row.row_fields <> [] then Format.fprintf fmt " }"
+    else Format.fprintf fmt "}"
+  | TypeVariable _ ->
+    if row.row_fields <> [] then Format.fprintf fmt "; .. }"
+    else Format.fprintf fmt ".. }"
+  | _ ->
+    if row.row_fields <> [] then Format.fprintf fmt "; .. }"
+    else Format.fprintf fmt ".. }"
+  end
 
 and pp_type_path fmt = function
   | PathBuiltin BuiltinInt -> Format.fprintf fmt "int"

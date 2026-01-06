@@ -37,6 +37,9 @@ type lambda =
   | LambdaGetField of int * lambda
   | LambdaSwitch of lambda * switch_case list * lambda option
   | LambdaConstructor of string * lambda option
+  | LambdaMakeRecord of (string * lambda) list
+  | LambdaGetRecordField of string * lambda
+  | LambdaRecordUpdate of lambda * (string * lambda) list
 
 and switch_case = {
   switch_tag : int;
@@ -90,12 +93,23 @@ let rec translate_pattern_binding pattern value body =
   | TypedPatternConstructor (_, arg_pattern) ->
     begin match arg_pattern with
     | None -> body
-    | Some p ->
+    | Some inner_pattern ->
       let temp_id = Identifier.create "_ctor" in
-      let arg_access = LambdaGetField (0, LambdaVariable temp_id) in
-      let inner = translate_pattern_binding p arg_access body in
+      let arg_access = LambdaGetRecordField ("_0", LambdaVariable temp_id) in
+      let inner = translate_pattern_binding inner_pattern arg_access body in
       LambdaLet (temp_id, value, inner)
     end
+
+  | TypedPatternRecord (field_patterns, _is_open) ->
+    let temp_id = Identifier.create "_record" in
+    let bindings =
+      List.map (fun (field_pattern : typed_record_pattern_field) ->
+        let field_access = LambdaGetRecordField (field_pattern.typed_pattern_field_name, LambdaVariable temp_id) in
+        translate_pattern_binding field_pattern.typed_pattern_field_pattern field_access
+      ) field_patterns
+    in
+    let inner = List.fold_right (fun binding_function accumulator -> binding_function accumulator) bindings body in
+    LambdaLet (temp_id, value, inner)
 
 let rec translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   let open Typing.Typed_tree in
@@ -181,6 +195,77 @@ let rec translate_expression (expr : Typing.Typed_tree.typed_expression) : lambd
     let translated_first = translate_expression first_expr in
     let translated_second = translate_expression second_expr in
     LambdaSequence (translated_first, translated_second)
+
+  | TypedExpressionRecord record_fields ->
+    let translated_fields = List.map (fun (field : typed_record_field) ->
+      (field.typed_field_name, translate_expression field.typed_field_value)
+    ) record_fields in
+    LambdaMakeRecord translated_fields
+
+  | TypedExpressionRecordAccess (record_expression, field_name) ->
+    let translated_record = translate_expression record_expression in
+    LambdaGetRecordField (field_name, translated_record)
+
+  | TypedExpressionRecordUpdate (base_expression, update_fields) ->
+    let translated_base = translate_expression base_expression in
+    let translated_update_fields = List.map (fun (field : typed_record_field) ->
+      (field.typed_field_name, translate_expression field.typed_field_value)
+    ) update_fields in
+    LambdaRecordUpdate (translated_base, translated_update_fields)
+
+  | TypedExpressionMatch (scrutinee_expression, match_arms) ->
+    let translated_scrutinee = translate_expression scrutinee_expression in
+    let scrutinee_id = Identifier.create "_scrutinee" in
+    let failure_case = LambdaApply (LambdaVariable (Identifier.create "error"),
+                                    [LambdaConstant (ConstantString "Match failure")]) in
+    let translated_arms = List.fold_right (fun (arm : typed_match_arm) rest ->
+      let pattern_test = translate_pattern_test arm.typed_arm_pattern (LambdaVariable scrutinee_id) in
+      let arm_body = translate_expression arm.typed_arm_expression in
+      let body_with_pattern_bindings = translate_pattern_binding arm.typed_arm_pattern (LambdaVariable scrutinee_id) arm_body in
+      let guarded_body = match arm.typed_arm_guard with
+        | None -> body_with_pattern_bindings
+        | Some guard_expression ->
+          let arm_body_with_guard = translate_expression arm.typed_arm_expression in
+          let full_body_with_bindings = translate_pattern_binding arm.typed_arm_pattern (LambdaVariable scrutinee_id) arm_body_with_guard in
+          let guard_check = translate_expression guard_expression in
+          let guard_with_bindings = translate_pattern_binding arm.typed_arm_pattern (LambdaVariable scrutinee_id) guard_check in
+          LambdaIfThenElse (guard_with_bindings, full_body_with_bindings, rest)
+      in
+      LambdaIfThenElse (pattern_test, guarded_body, rest)
+    ) match_arms failure_case in
+    LambdaLet (scrutinee_id, translated_scrutinee, translated_arms)
+
+and translate_pattern_test pattern value =
+  let open Typing.Typed_tree in
+  match pattern.pattern_desc with
+  | TypedPatternVariable _ | TypedPatternWildcard -> LambdaConstant (ConstantBool true)
+  | TypedPatternConstant const ->
+    let const_value = LambdaConstant (translate_constant const) in
+    LambdaPrimitive (PrimitiveIntEqual, [value; const_value])
+  | TypedPatternTuple sub_patterns ->
+    let tests = List.mapi (fun index sub_pattern ->
+      translate_pattern_test sub_pattern (LambdaGetField (index, value))
+    ) sub_patterns in
+    List.fold_left (fun accumulator test ->
+      LambdaIfThenElse (accumulator, test, LambdaConstant (ConstantBool false))
+    ) (LambdaConstant (ConstantBool true)) tests
+  | TypedPatternConstructor (constructor_name, argument_pattern) ->
+    let tag_test = LambdaPrimitive (PrimitiveIntEqual,
+      [LambdaGetRecordField ("_tag", value); LambdaConstant (ConstantString constructor_name)]) in
+    begin match argument_pattern with
+    | None -> tag_test
+    | Some inner_pattern ->
+      let arg_test = translate_pattern_test inner_pattern (LambdaGetRecordField ("_0", value)) in
+      LambdaIfThenElse (tag_test, arg_test, LambdaConstant (ConstantBool false))
+    end
+  | TypedPatternRecord (field_patterns, _is_open) ->
+    let tests = List.map (fun (field_pattern : typed_record_pattern_field) ->
+      translate_pattern_test field_pattern.typed_pattern_field_pattern
+        (LambdaGetRecordField (field_pattern.typed_pattern_field_name, value))
+    ) field_patterns in
+    List.fold_left (fun accumulator test ->
+      LambdaIfThenElse (accumulator, test, LambdaConstant (ConstantBool false))
+    ) (LambdaConstant (ConstantBool true)) tests
 
 let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : lambda list =
   let open Typing.Typed_tree in

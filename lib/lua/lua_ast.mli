@@ -47,6 +47,7 @@ and statement =
   | StatementCall of expression * expression list
   | StatementIf of (expression * block) list * block option
   | StatementWhile of expression * block
+  | StatementForIn of identifier list * expression list * block
   | StatementReturn of expression list
   | StatementBreak
   | StatementDo of block

@@ -18,9 +18,9 @@ let make_binding pattern expression loc =
 %token <string> UPPERCASE_IDENTIFIER
 %token <string> TYPE_VARIABLE
 %token TRUE FALSE
-%token LET REC IN FUN IF THEN ELSE TYPE OF AND AS
-%token LPAREN RPAREN LBRACKET RBRACKET
-%token COMMA SEMICOLON COLON ARROW EQUAL BAR UNDERSCORE
+%token LET REC IN FUN IF THEN ELSE TYPE OF AND AS MATCH WITH WHEN
+%token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
+%token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
 %token STAR PLUS MINUS SLASH
 %token LESS GREATER LESS_EQUAL GREATER_EQUAL EQUAL_EQUAL NOT_EQUAL
 %token EOF
@@ -28,7 +28,9 @@ let make_binding pattern expression loc =
 %right ARROW
 %right SEMICOLON
 %nonassoc IN
+%nonassoc WITH
 %left BAR
+%nonassoc WHEN
 %nonassoc AS
 %left COMMA
 %nonassoc THEN
@@ -37,6 +39,7 @@ let make_binding pattern expression loc =
 %left PLUS MINUS
 %left STAR SLASH
 %nonassoc unary_minus
+%left DOT
 %nonassoc APP
 
 %start <Syntax_tree.structure> structure
@@ -127,6 +130,10 @@ simple_type_expression:
     { make_located (TypeConstructor (name, args)) $loc }
   | LPAREN; t = type_expression; RPAREN
     { t }
+  | LBRACE; fields = separated_list(SEMICOLON, type_record_field); RBRACE
+    { make_located (TypeRecord (fields, false)) $loc }
+  | LBRACE; fields = separated_list(SEMICOLON, type_record_field); SEMICOLON; DOTDOT; RBRACE
+    { make_located (TypeRecord (fields, true)) $loc }
 
 expression_eof:
   | e = expression; EOF { e }
@@ -145,9 +152,13 @@ expression:
     { make_located (ExpressionSequence (e1, e2)) $loc }
   | e = expression; COLON; t = type_expression
     { make_located (ExpressionConstraint (e, t)) $loc }
+  | MATCH; scrutinee = expression; WITH; arms = match_arms
+    { make_located (ExpressionMatch (scrutinee, arms)) $loc }
 
 simple_expression:
   | e = application_expression { e }
+  | e = simple_expression; DOT; field = LOWERCASE_IDENTIFIER
+    { make_located (ExpressionRecordAccess (e, field)) $loc }
   | MINUS; e = simple_expression %prec unary_minus
     {
       let zero = make_located (ExpressionConstant (ConstantInteger 0)) $loc in
@@ -204,6 +215,10 @@ atomic_expression:
     { make_located (ExpressionConstructor (name, None)) $loc }
   | name = UPPERCASE_IDENTIFIER; arg = atomic_expression
     { make_located (ExpressionConstructor (name, Some arg)) $loc }
+  | LBRACE; fields = separated_list(SEMICOLON, record_field); RBRACE
+    { make_located (ExpressionRecord fields) $loc }
+  | LBRACE; base = simple_expression; WITH; fields = separated_nonempty_list(SEMICOLON, record_field); RBRACE
+    { make_located (ExpressionRecordUpdate (base, fields)) $loc }
 
 expression_tuple:
   | e1 = expression; COMMA; e2 = expression
@@ -239,6 +254,10 @@ atomic_pattern:
     { make_located (PatternConstructor (name, None)) $loc }
   | name = UPPERCASE_IDENTIFIER; p = atomic_pattern
     { make_located (PatternConstructor (name, Some p)) $loc }
+  | LBRACE; fields = separated_list(SEMICOLON, record_pattern_field); RBRACE
+    { make_located (PatternRecord (fields, false)) $loc }
+  | LBRACE; fields = separated_list(SEMICOLON, record_pattern_field); SEMICOLON; DOTDOT; RBRACE
+    { make_located (PatternRecord (fields, true)) $loc }
 
 pattern:
   | p = simple_pattern { p }
@@ -250,3 +269,36 @@ pattern_tuple:
     { [p1; p2] }
   | ps = pattern_tuple; COMMA; p = pattern
     { ps @ [p] }
+
+(* Record fields for expressions - use simple_expression to avoid semicolon conflict *)
+record_field:
+  | name = LOWERCASE_IDENTIFIER; EQUAL; value = simple_expression
+    { { field_name = make_located name $loc(name); field_value = value } }
+  | name = LOWERCASE_IDENTIFIER
+    {
+      let var_expr = make_located (ExpressionVariable name) $loc(name) in
+      { field_name = make_located name $loc(name); field_value = var_expr }
+    }
+
+(* Record fields for patterns *)
+record_pattern_field:
+  | name = LOWERCASE_IDENTIFIER; EQUAL; p = pattern
+    { { pattern_field_name = make_located name $loc(name); pattern_field_pattern = Some p } }
+  | name = LOWERCASE_IDENTIFIER
+    { { pattern_field_name = make_located name $loc(name); pattern_field_pattern = None } }
+
+(* Match arms *)
+match_arms:
+  | BAR?; first = match_arm; rest = list(preceded(BAR, match_arm))
+    { first :: rest }
+
+match_arm:
+  | p = pattern; ARROW; e = expression
+    { { arm_pattern = p; arm_guard = None; arm_expression = e; arm_location = make_loc $loc } }
+  | p = pattern; WHEN; guard = expression; ARROW; e = expression
+    { { arm_pattern = p; arm_guard = Some guard; arm_expression = e; arm_location = make_loc $loc } }
+
+(* Record fields for types *)
+type_record_field:
+  | name = LOWERCASE_IDENTIFIER; COLON; ty = type_expression
+    { { type_field_name = name; type_field_type = ty } }

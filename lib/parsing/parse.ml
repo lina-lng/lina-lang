@@ -20,13 +20,20 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.OF -> Parser.OF
   | Lexer.AND -> Parser.AND
   | Lexer.AS -> Parser.AS
+  | Lexer.MATCH -> Parser.MATCH
+  | Lexer.WITH -> Parser.WITH
+  | Lexer.WHEN -> Parser.WHEN
   | Lexer.LPAREN -> Parser.LPAREN
   | Lexer.RPAREN -> Parser.RPAREN
   | Lexer.LBRACKET -> Parser.LBRACKET
   | Lexer.RBRACKET -> Parser.RBRACKET
+  | Lexer.LBRACE -> Parser.LBRACE
+  | Lexer.RBRACE -> Parser.RBRACE
   | Lexer.COMMA -> Parser.COMMA
   | Lexer.SEMICOLON -> Parser.SEMICOLON
   | Lexer.COLON -> Parser.COLON
+  | Lexer.DOT -> Parser.DOT
+  | Lexer.DOTDOT -> Parser.DOTDOT
   | Lexer.ARROW -> Parser.ARROW
   | Lexer.EQUAL -> Parser.EQUAL
   | Lexer.BAR -> Parser.BAR

@@ -149,6 +149,11 @@ and print_statement_at_level level stmt =
     let cond_str = print_expression cond in
     let block_str = print_block (level + 1) block in
     Printf.sprintf "%swhile %s do\n%s\n%send" indent cond_str block_str indent
+  | StatementForIn (names, iterator_expressions, block) ->
+    let names_str = String.concat ", " names in
+    let iterator_str = String.concat ", " (List.map print_expression iterator_expressions) in
+    let block_str = print_block (level + 1) block in
+    Printf.sprintf "%sfor %s in %s do\n%s\n%send" indent names_str iterator_str block_str indent
   | StatementReturn [] ->
     Printf.sprintf "%sreturn" indent
   | StatementReturn exprs ->

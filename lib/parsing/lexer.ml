@@ -20,13 +20,20 @@ type token =
   | OF
   | AND
   | AS
+  | MATCH
+  | WITH
+  | WHEN
   | LPAREN
   | RPAREN
   | LBRACKET
   | RBRACKET
+  | LBRACE
+  | RBRACE
   | COMMA
   | SEMICOLON
   | COLON
+  | DOT
+  | DOTDOT
   | ARROW
   | EQUAL
   | BAR
@@ -74,6 +81,9 @@ let keywords =
     ("of", OF);
     ("and", AND);
     ("as", AS);
+    ("match", MATCH);
+    ("with", WITH);
+    ("when", WHEN);
   ]
 
 let keyword_or_identifier str =
@@ -315,6 +325,18 @@ let rec next_token state =
   | ']' ->
     update_location state;
     (RBRACKET, state.current_location)
+  | '{' ->
+    update_location state;
+    (LBRACE, state.current_location)
+  | '}' ->
+    update_location state;
+    (RBRACE, state.current_location)
+  | ".." ->
+    update_location state;
+    (DOTDOT, state.current_location)
+  | '.' ->
+    update_location state;
+    (DOT, state.current_location)
   | ',' ->
     update_location state;
     (COMMA, state.current_location)

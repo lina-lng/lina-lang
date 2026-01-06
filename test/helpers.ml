@@ -17,8 +17,13 @@ let rec strip_type_locations (t : Syntax_tree.type_expression) :
         Syntax_tree.TypeTuple (List.map strip_type_locations ts)
     | Syntax_tree.TypeArrow (t1, t2) ->
         Syntax_tree.TypeArrow (strip_type_locations t1, strip_type_locations t2)
+    | Syntax_tree.TypeRecord (fields, is_open) ->
+        Syntax_tree.TypeRecord (List.map strip_type_record_field_locations fields, is_open)
   in
   { value = desc; location = Location.none }
+
+and strip_type_record_field_locations (f : Syntax_tree.type_record_field) : Syntax_tree.type_record_field =
+  { type_field_name = f.type_field_name; type_field_type = strip_type_locations f.type_field_type }
 
 (** Recursively strip all locations from a pattern *)
 let rec strip_pattern_locations (p : Syntax_tree.pattern) : Syntax_tree.pattern =
@@ -37,8 +42,14 @@ let rec strip_pattern_locations (p : Syntax_tree.pattern) : Syntax_tree.pattern 
     | Syntax_tree.PatternConstraint (p', ty) ->
         Syntax_tree.PatternConstraint
           (strip_pattern_locations p', strip_type_locations ty)
+    | Syntax_tree.PatternRecord (fields, is_open) ->
+        Syntax_tree.PatternRecord (List.map strip_record_pattern_field_locations fields, is_open)
   in
   { value = desc; location = Location.none }
+
+and strip_record_pattern_field_locations (f : Syntax_tree.record_pattern_field) : Syntax_tree.record_pattern_field =
+  { pattern_field_name = strip_loc f.pattern_field_name;
+    pattern_field_pattern = Option.map strip_pattern_locations f.pattern_field_pattern }
 
 (** Recursively strip all locations from an expression *)
 let rec strip_expr_locations (e : Syntax_tree.expression) :
@@ -72,8 +83,27 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
     | Syntax_tree.ExpressionConstraint (e', ty) ->
         Syntax_tree.ExpressionConstraint
           (strip_expr_locations e', strip_type_locations ty)
+    | Syntax_tree.ExpressionRecord fields ->
+        Syntax_tree.ExpressionRecord (List.map strip_record_field_locations fields)
+    | Syntax_tree.ExpressionRecordAccess (e', field) ->
+        Syntax_tree.ExpressionRecordAccess (strip_expr_locations e', field)
+    | Syntax_tree.ExpressionRecordUpdate (base, fields) ->
+        Syntax_tree.ExpressionRecordUpdate
+          (strip_expr_locations base, List.map strip_record_field_locations fields)
+    | Syntax_tree.ExpressionMatch (scrutinee, arms) ->
+        Syntax_tree.ExpressionMatch
+          (strip_expr_locations scrutinee, List.map strip_match_arm_locations arms)
   in
   { value = desc; location = Location.none }
+
+and strip_record_field_locations (f : Syntax_tree.record_field) : Syntax_tree.record_field =
+  { field_name = strip_loc f.field_name; field_value = strip_expr_locations f.field_value }
+
+and strip_match_arm_locations (arm : Syntax_tree.match_arm) : Syntax_tree.match_arm =
+  { arm_pattern = strip_pattern_locations arm.arm_pattern;
+    arm_guard = Option.map strip_expr_locations arm.arm_guard;
+    arm_expression = strip_expr_locations arm.arm_expression;
+    arm_location = Location.none }
 
 and strip_binding_locations (b : Syntax_tree.binding) : Syntax_tree.binding =
   {

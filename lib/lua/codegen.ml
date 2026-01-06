@@ -106,6 +106,20 @@ let rec translate_expression (lambda : Lambda.lambda) : expression =
     in
     ExpressionTable fields
 
+  | Lambda.LambdaMakeRecord field_bindings ->
+    let translated_fields = List.map (fun (field_name, field_value) ->
+      FieldNamed (field_name, translate_expression field_value)
+    ) field_bindings in
+    ExpressionTable translated_fields
+
+  | Lambda.LambdaGetRecordField (field_name, record_expression) ->
+    let translated_record = translate_expression record_expression in
+    ExpressionField (translated_record, field_name)
+
+  | Lambda.LambdaRecordUpdate (base_expression, update_fields) ->
+    let func_body = translate_to_statements (Lambda.LambdaRecordUpdate (base_expression, update_fields)) in
+    ExpressionCall (ExpressionFunction ([], func_body), [])
+
 and translate_to_statements (lambda : Lambda.lambda) : block =
   match lambda with
   | Lambda.LambdaLet (id, value, body) ->
@@ -155,6 +169,20 @@ and translate_to_statements (lambda : Lambda.lambda) : block =
       | None -> None
     in
     [local_stmt; StatementIf (branches, default_stmts)]
+
+  | Lambda.LambdaRecordUpdate (base_expression, update_fields) ->
+    let base_expr = translate_expression base_expression in
+    let result_name = "_result" in
+    let copy_stmt = StatementLocal ([result_name], [ExpressionTable []]) in
+    let copy_loop = StatementForIn (["_k"; "_v"],
+      [ExpressionCall (ExpressionVariable "pairs", [base_expr])],
+      [StatementAssign ([LvalueIndex (ExpressionVariable result_name, ExpressionVariable "_k")],
+                        [ExpressionVariable "_v"])]) in
+    let update_stmts = List.map (fun (field_name, field_value) ->
+      StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
+                       [translate_expression field_value])
+    ) update_fields in
+    copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]]
 
   | _ ->
     let expr = translate_expression lambda in

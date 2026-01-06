@@ -17,6 +17,16 @@ and type_expression =
   | TypeConstructor of type_path * type_expression list
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
+  | TypeRecord of row
+  | TypeRowEmpty
+
+and row = {
+  row_fields : (string * row_field) list;
+  row_more : type_expression;
+}
+
+and row_field =
+  | RowFieldPresent of type_expression
 
 and type_path =
   | PathBuiltin of builtin_type
@@ -37,6 +47,9 @@ val type_float : type_expression
 val type_string : type_expression
 val type_bool : type_expression
 val type_unit : type_expression
+
+val type_record_closed : (string * row_field) list -> type_expression
+val type_record_open : (string * row_field) list -> type_expression
 
 val representative : type_expression -> type_expression
 

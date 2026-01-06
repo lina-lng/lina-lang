@@ -33,3 +33,19 @@
  (name test_props)
  (libraries parsing common qcheck qcheck-alcotest alcotest)
  (modules test_props))
+
+; Records and match tests
+(library
+ (name test_records)
+ (libraries parsing common test_helpers)
+ (modules test_records)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Lua codegen tests
+(library
+ (name test_codegen)
+ (libraries parsing typing lambda lua driver common)
+ (modules test_codegen)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
