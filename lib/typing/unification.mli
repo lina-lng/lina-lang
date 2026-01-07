@@ -60,12 +60,36 @@ val expand_type : Types.type_expression -> Types.type_expression
     On success, both types will represent the same type.
     On failure, raises {!Unification_error}.
 
-    The unification algorithm:
-    1. Follow links to get representatives
+    {3 Algorithm}
+
+    1. Follow links to get representatives via {!Types.representative}
     2. If either is a variable, link it to the other (with occurs check)
-    3. If both are constructors, unify component types
+    3. If both are constructors, unify component types pairwise
     4. If both are arrows/tuples/records, unify recursively
     5. Otherwise, fail with type mismatch
+
+    {3 Occurs Check}
+
+    Before linking a type variable ['a] to a type [t], checks that ['a]
+    does not occur in [t]. This prevents creating infinite types like
+    ['a = 'a -> 'a].
+
+    {3 Row Type Unification}
+
+    Records use row polymorphism. When unifying rows:
+    - Fields present in both rows: types must unify
+    - Fields present in one row only: added to the other row's extension
+    - Both rows closed ([TypeRowEmpty]): must have same fields
+    - One row open (ends in variable): can absorb extra fields
+
+    Example: [{x:int; ..}] unifies with [{x:int; y:bool}] by binding
+    the row variable to [{y:bool}].
+
+    {3 Type Alias Expansion}
+
+    If unification fails and either type is an alias, the types are
+    expanded and retried. This allows [type t = int] to unify with [int].
+    Cyclic type alias expansion is detected and reported.
 
     @param loc Location for error messages
     @param ty1 First type (typically "expected")

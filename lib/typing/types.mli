@@ -153,7 +153,17 @@ val type_record_open : (string * row_field) list -> type_expression
 (** {1 Type Manipulation} *)
 
 (** [representative ty] follows union-find links to find the canonical type.
-    Performs path compression for efficiency. *)
+
+    Performs path compression for efficiency: intermediate links are updated
+    to point directly to the root.
+
+    Behavior:
+    - If [ty] is already canonical (a non-variable or unlinked variable),
+      returns [ty] unchanged
+    - If [ty] is a linked variable, follows the chain and returns the root
+    - Non-[TypeVariable] types are always canonical
+
+    @return The canonical representative of [ty] *)
 val representative : type_expression -> type_expression
 
 (** {1 Type Schemes} *)
@@ -171,10 +181,36 @@ type type_scheme = {
 val trivial_scheme : type_expression -> type_scheme
 
 (** [generalize ty] generalizes a type at the current level.
-    Variables at higher levels become quantified. *)
+
+    Variables with level > [current_level ()] are marked as [generic_level]
+    and collected into the scheme's [quantified_variables] list.
+
+    Behavior:
+    - Variables at current level or below remain monomorphic
+    - Variables at higher levels become polymorphic (quantified)
+    - If [ty] contains no generalizable variables, returns a trivial scheme
+    - Uses a hash table internally for O(n) duplicate detection
+
+    This implements the "level-based" approach to generalization from
+    Rémy's "Extension of ML Type System with a Sorted Equational Theory
+    on Types" (1992).
+
+    @param ty The type to generalize (should be fully unified)
+    @return A type scheme with quantified variables *)
 val generalize : type_expression -> type_scheme
 
-(** [instantiate scheme] creates fresh type variables for all quantifiers. *)
+(** [instantiate scheme] creates fresh type variables for all quantifiers.
+
+    Each quantified variable in [scheme.quantified_variables] is replaced
+    with a fresh type variable at the current level.
+
+    Behavior:
+    - If [scheme.quantified_variables] is empty, returns [scheme.body] unchanged
+    - Fresh variables are created at [current_level ()]
+    - The original scheme is not modified
+
+    @param scheme The polymorphic type scheme to instantiate
+    @return A monomorphic type with fresh variables *)
 val instantiate : type_scheme -> type_expression
 
 (** {1 Type Declarations} *)

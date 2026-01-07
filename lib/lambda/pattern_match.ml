@@ -31,30 +31,24 @@ type pattern_matrix = {
   clauses : clause list;
 }
 
-(* Decision tree output *)
+(* Decision tree output - uses inline records for cleaner pattern matching *)
 type decision_tree =
   | DTFail
-  | DTLeaf of leaf_info
-  | DTSwitch of switch_info
-  | DTGuard of guard_info
-
-and leaf_info = {
-  leaf_bindings : (Identifier.t * occurrence) list;
-  leaf_action : Typing.Typed_tree.typed_expression;
-}
-
-and switch_info = {
-  switch_occurrence : occurrence;
-  switch_cases : (head_constructor * decision_tree) list;
-  switch_default : decision_tree option;
-}
-
-and guard_info = {
-  guard_bindings : (Identifier.t * occurrence) list;
-  guard_condition : Typing.Typed_tree.typed_expression;
-  guard_then : decision_tree;
-  guard_else : decision_tree;
-}
+  | DTLeaf of {
+      leaf_bindings : (Identifier.t * occurrence) list;
+      leaf_action : Typing.Typed_tree.typed_expression;
+    }
+  | DTSwitch of {
+      switch_occurrence : occurrence;
+      switch_cases : (head_constructor * decision_tree) list;
+      switch_default : decision_tree option;
+    }
+  | DTGuard of {
+      guard_bindings : (Identifier.t * occurrence) list;
+      guard_condition : Typing.Typed_tree.typed_expression;
+      guard_then : decision_tree;
+      guard_else : decision_tree;
+    }
 
 (** {1 List Split Utilities}
 

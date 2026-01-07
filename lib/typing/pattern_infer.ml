@@ -108,10 +108,11 @@ let rec infer_pattern env (pattern : pattern) =
     end
 
   | PatternAlias (inner_pattern, name) ->
-    let typed_inner, ty, env = infer_pattern env inner_pattern in
+    (* Note: typed_inner is discarded because TypedPatternAlias doesn't exist yet.
+       The alias pattern binds to a variable, losing the inner pattern structure. *)
+    let _typed_inner, ty, env = infer_pattern env inner_pattern in
     let id = Identifier.create name in
     let env = Environment.add_value name id (trivial_scheme ty) env in
-    let _ = typed_inner in
     let typed_pattern = {
       pattern_desc = TypedPatternVariable id;
       pattern_type = ty;

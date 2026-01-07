@@ -17,33 +17,30 @@ type head_constructor =
   | HCConstructor of string * int  (** name, tag_index *)
   | HCRecord of string list
 
-(** Leaf information in decision tree *)
-type leaf_info = {
-  leaf_bindings : (Common.Identifier.t * occurrence) list;
-  leaf_action : Typing.Typed_tree.typed_expression;
-}
+(** Compiled decision tree.
 
-(** Switch information in decision tree *)
-type switch_info = {
-  switch_occurrence : occurrence;
-  switch_cases : (head_constructor * decision_tree) list;
-  switch_default : decision_tree option;
-}
-
-(** Guard information in decision tree *)
-and guard_info = {
-  guard_bindings : (Common.Identifier.t * occurrence) list;
-  guard_condition : Typing.Typed_tree.typed_expression;
-  guard_then : decision_tree;
-  guard_else : decision_tree;
-}
-
-(** Compiled decision tree *)
-and decision_tree =
+    Uses inline records for cleaner pattern matching:
+    - [DTFail]: Match failure (no clause matched)
+    - [DTLeaf]: Successful match with bindings and action
+    - [DTSwitch]: Branch on head constructor at an occurrence
+    - [DTGuard]: Conditional with guard expression *)
+type decision_tree =
   | DTFail
-  | DTLeaf of leaf_info
-  | DTSwitch of switch_info
-  | DTGuard of guard_info
+  | DTLeaf of {
+      leaf_bindings : (Common.Identifier.t * occurrence) list;
+      leaf_action : Typing.Typed_tree.typed_expression;
+    }
+  | DTSwitch of {
+      switch_occurrence : occurrence;
+      switch_cases : (head_constructor * decision_tree) list;
+      switch_default : decision_tree option;
+    }
+  | DTGuard of {
+      guard_bindings : (Common.Identifier.t * occurrence) list;
+      guard_condition : Typing.Typed_tree.typed_expression;
+      guard_then : decision_tree;
+      guard_else : decision_tree;
+    }
 
 (** Compile match arms into a decision tree *)
 val compile_match : Typing.Typed_tree.typed_match_arm list -> decision_tree

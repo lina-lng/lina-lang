@@ -65,9 +65,10 @@ let lookup_module_path env path_modules loc =
 let rec check_type_expression env (ty_expr : Parsing.Syntax_tree.type_expression) : type_expression =
   let loc = ty_expr.Location.location in
   match ty_expr.Location.value with
-  | TypeVariable name ->
-    (* For now, create a fresh type variable *)
-    let _ = name in
+  | TypeVariable _name ->
+    (* TODO: Track type variable names for consistent instantiation within signatures.
+       Currently, each type variable in a signature gets a fresh unification variable,
+       so `'a -> 'a` becomes `'x -> 'y` instead of preserving the sharing. *)
     new_type_variable ()
 
   | TypeConstructor (name, args) ->
