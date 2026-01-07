@@ -16,18 +16,10 @@ open Types
 open Typed_tree
 
 (** Type of constant literals *)
-let type_of_constant = function
-  | ConstantInteger _ -> type_int
-  | ConstantFloat _ -> type_float
-  | ConstantString _ -> type_string
-  | ConstantBoolean _ -> type_bool
-  | ConstantUnit -> type_unit
+let type_of_constant = Inference_utils.type_of_constant
 
-(** Unify types with alias expansion support.
-    Sets up the type lookup function from the environment before unifying. *)
-let unify env loc ty1 ty2 =
-  Unification.set_type_lookup (fun path -> Environment.find_type_by_path path env);
-  Unification.unify loc ty1 ty2
+(** Unify types with alias expansion support. *)
+let unify = Inference_utils.unify_with_env
 
 (** [infer_pattern env pattern] infers the type of a pattern.
 

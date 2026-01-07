@@ -101,11 +101,14 @@ let trivial_scheme ty = { quantified_variables = []; body = ty }
 
 let generalize ty =
   let current = current_level () in
+  (* Use Hashtbl for O(1) duplicate checking instead of O(n) List.exists *)
+  let seen = Hashtbl.create 16 in
   let generalized_vars = ref [] in
   let rec collect ty =
     match representative ty with
     | TypeVariable tv when tv.level > current ->
-      if not (List.exists (fun v -> v.id = tv.id) !generalized_vars) then begin
+      if not (Hashtbl.mem seen tv.id) then begin
+        Hashtbl.add seen tv.id ();
         tv.level <- generic_level;
         generalized_vars := tv :: !generalized_vars
       end

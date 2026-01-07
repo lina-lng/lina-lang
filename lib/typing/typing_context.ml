@@ -79,11 +79,14 @@ let module_type_lookup ctx path =
 
 let generalize ctx ty =
   let current = ctx.level in
+  (* Use Hashtbl for O(1) duplicate checking instead of O(n) List.exists *)
+  let seen = Hashtbl.create 16 in
   let generalized_vars = ref [] in
   let rec collect ty =
     match Types.representative ty with
     | Types.TypeVariable tv when tv.Types.level > current ->
-      if not (List.exists (fun v -> v.Types.id = tv.Types.id) !generalized_vars) then begin
+      if not (Hashtbl.mem seen tv.Types.id) then begin
+        Hashtbl.add seen tv.Types.id ();
         tv.Types.level <- Types.generic_level;
         generalized_vars := tv :: !generalized_vars
       end

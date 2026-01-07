@@ -56,6 +56,35 @@ and guard_info = {
   guard_else : decision_tree;
 }
 
+(** {1 List Split Utilities}
+
+    These helpers perform single-pass list splitting, avoiding the O(n)
+    double traversal of using List.filteri twice. *)
+
+(** [split_at_remove idx lst] splits [lst] at index [idx], removing the element
+    at that index.
+
+    Returns [(before, after)] where [before] contains elements with index < [idx]
+    and [after] contains elements with index > [idx].
+
+    Example: [split_at_remove 2 [a;b;c;d;e]] returns [([a;b], [d;e])]
+
+    Time complexity: O(n) single pass instead of O(2n) with two List.filteri calls. *)
+let split_at_remove idx lst =
+  let rec go i before = function
+    | [] -> (List.rev before, [])
+    | _ :: xs when i = idx -> (List.rev before, xs)
+    | x :: xs -> go (i + 1) (x :: before) xs
+  in
+  go 0 [] lst
+
+(** [remove_at idx lst] removes the element at index [idx] from [lst].
+
+    Equivalent to [List.filteri (fun i _ -> i <> idx) lst] but single pass. *)
+let remove_at idx lst =
+  let before, after = split_at_remove idx lst in
+  before @ after
+
 (* Get head constructor from a typed pattern *)
 let head_of_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor =
   match pat.pattern_desc with
@@ -211,10 +240,9 @@ let specialize (matrix : pattern_matrix) (col : int) (head : head_constructor) (
   let occ = List.nth matrix.occurrences col in
   let new_sub_occs = sub_occurrences occ head arity in
 
-  (* Replace column with expanded sub-occurrences *)
+  (* Replace column with expanded sub-occurrences (single-pass split) *)
   let new_occurrences =
-    let before = List.filteri (fun i _ -> i < col) matrix.occurrences in
-    let after = List.filteri (fun i _ -> i > col) matrix.occurrences in
+    let before, after = split_at_remove col matrix.occurrences in
     before @ new_sub_occs @ after
   in
 
@@ -226,9 +254,8 @@ let specialize (matrix : pattern_matrix) (col : int) (head : head_constructor) (
     | Some sub_pats ->
       (* Collect bindings from this pattern *)
       let new_bindings = collect_bindings pat occ @ clause.clause_bindings in
-      (* Replace pattern column with sub-patterns *)
-      let before_pats = List.filteri (fun i _ -> i < col) clause.clause_patterns in
-      let after_pats = List.filteri (fun i _ -> i > col) clause.clause_patterns in
+      (* Replace pattern column with sub-patterns (single-pass split) *)
+      let before_pats, after_pats = split_at_remove col clause.clause_patterns in
       Some {
         clause with
         clause_patterns = before_pats @ sub_pats @ after_pats;
@@ -242,17 +269,15 @@ let specialize (matrix : pattern_matrix) (col : int) (head : head_constructor) (
 let default_matrix (matrix : pattern_matrix) (col : int) : pattern_matrix =
   let occ = List.nth matrix.occurrences col in
 
-  (* Remove the column from occurrences *)
-  let new_occurrences =
-    List.filteri (fun i _ -> i <> col) matrix.occurrences
-  in
+  (* Remove the column from occurrences (single-pass) *)
+  let new_occurrences = remove_at col matrix.occurrences in
 
   (* Keep only rows with wildcard at column *)
   let new_clauses = List.filter_map (fun clause ->
     let pat = List.nth clause.clause_patterns col in
     if is_wildcard pat then
       let new_bindings = collect_bindings pat occ @ clause.clause_bindings in
-      let new_patterns = List.filteri (fun i _ -> i <> col) clause.clause_patterns in
+      let new_patterns = remove_at col clause.clause_patterns in
       Some { clause with
         clause_patterns = new_patterns;
         clause_bindings = new_bindings
@@ -277,6 +302,22 @@ let select_column (matrix : pattern_matrix) : int =
     in
     find_needed 0 first_clause.clause_patterns
 
+(** Generate a unique key for a head constructor for deduplication.
+    This allows O(1) hash-based duplicate detection instead of O(n) list search. *)
+let rec head_constructor_key = function
+  | HCWildcard -> "W"
+  | HCConstructor (name, _) -> "C:" ^ name
+  | HCConstant c -> "K:" ^ constant_to_string c
+  | HCTuple arity -> "T:" ^ string_of_int arity
+  | HCRecord fields -> "R:" ^ String.concat "," fields
+
+and constant_to_string = function
+  | Parsing.Syntax_tree.ConstantInteger i -> "i" ^ string_of_int i
+  | Parsing.Syntax_tree.ConstantFloat f -> "f" ^ string_of_float f
+  | Parsing.Syntax_tree.ConstantString s -> "s" ^ s
+  | Parsing.Syntax_tree.ConstantBoolean b -> "b" ^ string_of_bool b
+  | Parsing.Syntax_tree.ConstantUnit -> "u"
+
 (* Collect head constructors from a column *)
 let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_constructor list =
   let heads = List.filter_map (fun clause ->
@@ -286,21 +327,13 @@ let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_const
     | HCWildcard -> None
     | _ -> Some head
   ) matrix.clauses in
-  (* Remove duplicates *)
-  let rec unique acc = function
-    | [] -> List.rev acc
-    | x :: xs ->
-      let eq h1 h2 = match h1, h2 with
-        | HCConstructor (n1, _), HCConstructor (n2, _) -> n1 = n2
-        | HCConstant c1, HCConstant c2 -> constants_equal c1 c2
-        | HCTuple a1, HCTuple a2 -> a1 = a2
-        | HCRecord f1, HCRecord f2 -> f1 = f2
-        | _ -> false
-      in
-      if List.exists (eq x) acc then unique acc xs
-      else unique (x :: acc) xs
-  in
-  unique [] heads
+  (* Remove duplicates using hash-based deduplication (O(n) instead of O(n²)) *)
+  let seen = Hashtbl.create 16 in
+  List.filter (fun h ->
+    let key = head_constructor_key h in
+    if Hashtbl.mem seen key then false
+    else (Hashtbl.add seen key (); true)
+  ) heads
 
 (* Adjust arity for constructor based on whether it has an arg in any pattern *)
 let adjust_constructor_arity (matrix : pattern_matrix) (col : int) (head : head_constructor) : int =

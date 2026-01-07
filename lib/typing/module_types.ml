@@ -89,28 +89,31 @@ and pp_signature_item fmt = function
 let module_type_to_string mty =
   Format.asprintf "%a" pp_module_type mty
 
-(** Lookup helpers for signatures *)
+(** {1 Signature Lookup Helpers}
 
-let find_value_in_sig name sig_ =
-  List.find_map (function
+    These functions search for items within a signature by name.
+    Uses a generic finder internally to avoid code duplication. *)
+
+(** Generic signature item finder *)
+let find_in_sig (matcher : signature_item -> 'a option) (sig_ : signature) : 'a option =
+  List.find_map matcher sig_
+
+let find_value_in_sig name =
+  find_in_sig (function
     | SigValue (n, desc) when n = name -> Some desc
-    | _ -> None
-  ) sig_
+    | _ -> None)
 
-let find_type_in_sig name sig_ =
-  List.find_map (function
+let find_type_in_sig name =
+  find_in_sig (function
     | SigType (n, decl) when n = name -> Some decl
-    | _ -> None
-  ) sig_
+    | _ -> None)
 
-let find_module_in_sig name sig_ =
-  List.find_map (function
+let find_module_in_sig name =
+  find_in_sig (function
     | SigModule (n, mty) when n = name -> Some mty
-    | _ -> None
-  ) sig_
+    | _ -> None)
 
-let find_module_type_in_sig name sig_ =
-  List.find_map (function
+let find_module_type_in_sig name =
+  find_in_sig (function
     | SigModuleType (n, mty) when n = name -> Some mty
-    | _ -> None
-  ) sig_
+    | _ -> None)

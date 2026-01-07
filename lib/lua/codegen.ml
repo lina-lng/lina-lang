@@ -1,56 +1,29 @@
 open Common
 open Lua_ast
 
-(* Lua 5.1+ reserved keywords *)
-let lua_reserved_keywords = [
-  "and"; "break"; "do"; "else"; "elseif"; "end"; "false"; "for";
-  "function"; "goto"; "if"; "in"; "local"; "nil"; "not"; "or";
-  "repeat"; "return"; "then"; "true"; "until"; "while"
-]
-
-let is_lua_keyword name = List.mem name lua_reserved_keywords
-
-let mangle_identifier (id : Identifier.t) : identifier =
-  let name = Identifier.name id in
-  let stamp = Identifier.stamp id in
-  let base_name = if is_lua_keyword name then "_" ^ name else name in
-  if stamp = 0 then base_name
-  else Printf.sprintf "%s_%d" base_name stamp
+(** Re-export identifier mangling for external use *)
+let mangle_identifier = Identifier_mangle.mangle_identifier
 
 (** {1 Code Generation Context}
 
     The context tracks state accumulated during code generation,
-    eliminating the need for global mutable state. *)
-
-module SingletonKey = struct
-  type t = string * int  (* type_name, tag_index *)
-  let compare = compare
-end
-module SingletonSet = Set.Make(SingletonKey)
+    using the Singleton_registry module for nullary constructor tracking. *)
 
 (** Code generation context, threaded through translation functions. *)
 type context = {
-  singletons : SingletonSet.t;  (** Registered nullary constructor singletons *)
+  singletons : Singleton_registry.t;  (** Registered nullary constructor singletons *)
 }
 
 (** Create an empty context *)
-let empty_context = { singletons = SingletonSet.empty }
-
-(** Get the variable name for a singleton constructor *)
-let singleton_var_name type_name tag_index =
-  Codegen_constants.singleton_var_name type_name tag_index
+let empty_context = { singletons = Singleton_registry.empty }
 
 (** Register a singleton in the context *)
 let register_singleton ctx type_name tag_index =
-  { singletons = SingletonSet.add (type_name, tag_index) ctx.singletons }
+  { singletons = Singleton_registry.register ctx.singletons type_name tag_index }
 
 (** Generate singleton preamble from context *)
 let generate_singleton_preamble ctx =
-  SingletonSet.fold (fun (type_name, tag_index) acc ->
-    let var_name = singleton_var_name type_name tag_index in
-    let table = ExpressionTable [FieldNamed ("_tag", ExpressionNumber (float_of_int tag_index))] in
-    StatementLocal ([var_name], [table]) :: acc
-  ) ctx.singletons []
+  Singleton_registry.generate_preamble ctx.singletons
 
 let translate_constant = function
   | Lambda.ConstantInt n -> ExpressionNumber (float_of_int n)
@@ -147,7 +120,7 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
   | Lambda.LambdaConstructor (tag, None) when tag.Lambda.tag_is_nullary ->
     (* Nullary constructor: use singleton *)
     let ctx = register_singleton ctx tag.Lambda.tag_type_name tag.Lambda.tag_index in
-    (ExpressionVariable (singleton_var_name tag.Lambda.tag_type_name tag.Lambda.tag_index), ctx)
+    (ExpressionVariable (Singleton_registry.var_name tag.Lambda.tag_type_name tag.Lambda.tag_index), ctx)
 
   | Lambda.LambdaConstructor (tag, arg) ->
     let fields = [FieldNamed ("_tag", ExpressionNumber (float_of_int tag.Lambda.tag_index))] in
@@ -199,12 +172,14 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let translated_arg, ctx = translate_expression ctx arg_expr in
     (ExpressionCall (translated_func, [translated_arg]), ctx)
 
-(** Helper to translate a list of expressions *)
+(** Helper to translate a list of expressions.
+    Uses cons + reverse for O(n) instead of O(n²) list append. *)
 and translate_expression_list ctx exprs =
-  List.fold_left (fun (acc, ctx) expr ->
+  let reversed, ctx = List.fold_left (fun (acc, ctx) expr ->
     let translated, ctx = translate_expression ctx expr in
-    (acc @ [translated], ctx)
-  ) ([], ctx) exprs
+    (translated :: acc, ctx)
+  ) ([], ctx) exprs in
+  (List.rev reversed, ctx)
 
 (** Translate a value and assign it to a variable, threading context *)
 and translate_value_to_assignment ctx name lambda : block * context =
@@ -245,12 +220,14 @@ and translate_switch_as_dispatch ctx _scrutinee_name tag_access cases default =
   *)
   let dispatch_name = Codegen_constants.dispatch_table_name in
   let handler_name = Codegen_constants.dispatch_handler_name in
-  let dispatch_entries, ctx = List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
+  (* Use cons + reverse for O(n) instead of O(n²) list append *)
+  let dispatch_entries_rev, ctx = List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
     let handler_body, ctx = translate_to_statements ctx case.switch_body in
     let handler = ExpressionFunction ([], handler_body) in
     let entry = FieldIndexed (ExpressionNumber (float_of_int case.switch_tag), handler) in
-    (acc @ [entry], ctx)
+    (entry :: acc, ctx)
   ) ([], ctx) cases in
+  let dispatch_entries = List.rev dispatch_entries_rev in
   let dispatch_table = ExpressionTable dispatch_entries in
   let dispatch_decl = StatementLocal ([dispatch_name], [dispatch_table]) in
   let handler_lookup = ExpressionIndex (ExpressionVariable dispatch_name, tag_access) in

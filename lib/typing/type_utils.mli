@@ -4,6 +4,10 @@
     the type inference and module system. It consolidates duplicated code
     for type parameter substitution and path substitution.
 
+    {2 Row Utilities}
+
+    Helper functions for manipulating row types in records.
+
     {2 Type Parameter Substitution}
 
     Used for instantiating polymorphic types and expanding type aliases.
@@ -14,6 +18,21 @@
     Used when applying functors to replace parameter paths with argument paths.
     For example, when applying [F(M)], occurrences of the parameter path
     are replaced with [M]'s path. *)
+
+(** {1 Row Utilities} *)
+
+(** [map_row_types f row] applies [f] to each type within a row (shallow).
+
+    Unlike [Type_traversal.map_row], this does not recurse into sub-types.
+    It applies [f] directly to each field type and the row tail.
+
+    @param f The transformation to apply to each type
+    @param row The row to transform
+    @return A new row with transformed types *)
+val map_row_types :
+  (Types.type_expression -> Types.type_expression) ->
+  Types.row ->
+  Types.row
 
 (** {1 Type Parameter Substitution} *)
 

@@ -5,6 +5,16 @@
 
 open Types
 
+(** {1 Row Utilities} *)
+
+let map_row_types f row = {
+  row_fields = List.map (fun (name, field) ->
+    (name, match field with
+      | RowFieldPresent ty -> RowFieldPresent (f ty))
+  ) row.row_fields;
+  row_more = f row.row_more;
+}
+
 (** {1 Type Parameter Substitution} *)
 
 let substitute_type_params params args body =
@@ -25,14 +35,8 @@ let substitute_type_params params args body =
       | TypeArrow (arg, result) ->
         TypeArrow (subst arg, subst result)
       | TypeRecord row ->
-        TypeRecord (subst_row row)
+        TypeRecord (map_row_types subst row)
       | TypeRowEmpty -> TypeRowEmpty
-    and subst_row row = {
-      row_fields = List.map (fun (name, field) ->
-        (name, match field with RowFieldPresent ty -> RowFieldPresent (subst ty))
-      ) row.row_fields;
-      row_more = subst row.row_more;
-    }
     in
     subst body
 
@@ -63,14 +67,8 @@ let instantiate_constructor (ctor : constructor_info) =
     | TypeArrow (arg, result) ->
       TypeArrow (substitute arg, substitute result)
     | TypeRecord row ->
-      TypeRecord (substitute_row row)
+      TypeRecord (map_row_types substitute row)
     | TypeRowEmpty -> TypeRowEmpty
-  and substitute_row row = {
-    row_fields = List.map (fun (name, field) ->
-      (name, match field with RowFieldPresent ty -> RowFieldPresent (substitute ty))
-    ) row.row_fields;
-    row_more = substitute row.row_more;
-  }
   in
   (Option.map substitute ctor.constructor_argument_type,
    substitute ctor.constructor_result_type)

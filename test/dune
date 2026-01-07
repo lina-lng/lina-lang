@@ -89,3 +89,51 @@
  (modules test_occurrence_builder)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Type traversal tests
+(library
+ (name test_type_traversal)
+ (libraries typing)
+ (modules test_type_traversal)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Inference utilities tests
+(library
+ (name test_inference_utils)
+ (libraries typing parsing common)
+ (modules test_inference_utils)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Lua identifier mangling tests
+(library
+ (name test_identifier_mangle)
+ (libraries lua common)
+ (modules test_identifier_mangle)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Singleton registry tests
+(library
+ (name test_singleton_registry)
+ (libraries lua common)
+ (modules test_singleton_registry)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Pattern match helper tests
+(library
+ (name test_pattern_match_helpers)
+ (libraries lambda parsing)
+ (modules test_pattern_match_helpers)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Row type mapping tests
+(library
+ (name test_map_row_types)
+ (libraries typing)
+ (modules test_map_row_types)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

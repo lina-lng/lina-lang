@@ -1,6 +1,9 @@
 open Common
 open Types
 
+(** String set for efficient label membership testing *)
+module StringSet = Set.Make(String)
+
 exception Unification_error of {
   expected : type_expression;
   actual : type_expression;
@@ -202,9 +205,11 @@ and unify_rows location row1 row2 =
       ()  (* Should not happen if we built all_labels correctly *)
   ) all_labels;
 
-  (* Unify the remaining row tails *)
-  let remaining1 = List.filter (fun (l, _) -> not (List.mem l labels2)) row1.row_fields in
-  let remaining2 = List.filter (fun (l, _) -> not (List.mem l labels1)) row2.row_fields in
+  (* Unify the remaining row tails using sets for O(n log n) instead of O(n²) *)
+  let labels1_set = StringSet.of_list labels1 in
+  let labels2_set = StringSet.of_list labels2 in
+  let remaining1 = List.filter (fun (l, _) -> not (StringSet.mem l labels2_set)) row1.row_fields in
+  let remaining2 = List.filter (fun (l, _) -> not (StringSet.mem l labels1_set)) row2.row_fields in
 
   match remaining1, remaining2 with
   | [], [] ->
