@@ -1,0 +1,80 @@
+(* Test: Dispatch table threshold behavior *)
+(* Tests the codegen constant for dispatch table vs if-chain *)
+
+(* 3 constructors - should use if-chain *)
+type small = A | B | C
+
+let test_small x = match x with
+  | A -> 1
+  | B -> 2
+  | C -> 3
+
+let _ = print (test_small A)
+let _ = print (test_small B)
+let _ = print (test_small C)
+
+(* 4 constructors - threshold for dispatch table *)
+type medium = W | X | Y | Z
+
+let test_medium x = match x with
+  | W -> 10
+  | X -> 20
+  | Y -> 30
+  | Z -> 40
+
+let _ = print (test_medium W)
+let _ = print (test_medium X)
+let _ = print (test_medium Y)
+let _ = print (test_medium Z)
+
+(* 6 constructors - definitely uses dispatch table *)
+type large = P | Q | R | S | T | U
+
+let test_large x = match x with
+  | P -> 100
+  | Q -> 200
+  | R -> 300
+  | S -> 400
+  | T -> 500
+  | U -> 600
+
+let _ = print (test_large P)
+let _ = print (test_large Q)
+let _ = print (test_large R)
+let _ = print (test_large S)
+let _ = print (test_large T)
+let _ = print (test_large U)
+
+(* Mixed patterns - data carrying constructors *)
+type expr = Num of int | Add of expr * expr | Mul of expr * expr | Sub of expr * expr
+
+let rec eval e = match e with
+  | Num n -> n
+  | Add (a, b) -> eval a + eval b
+  | Mul (a, b) -> eval a * eval b
+  | Sub (a, b) -> eval a - eval b
+
+let expr1 = Add (Num 10, Mul (Num 3, Num 4))
+let expr2 = Sub (Mul (Num 5, Num 6), Num 8)
+
+let _ = print (eval expr1)
+let _ = print (eval expr2)
+
+(* Match with wildcards mixed in *)
+type status =
+  | Pending
+  | Running
+  | Success
+  | Failed
+  | Cancelled
+
+let status_code s = match s with
+  | Pending -> 0
+  | Running -> 1
+  | Success -> 2
+  | Failed -> 3
+  | Cancelled -> 4
+
+let _ = print (status_code Pending)
+let _ = print (status_code Success)
+let _ = print (status_code Cancelled)

@@ -1,0 +1,56 @@
+(* Test: Deep pattern matching compilation *)
+(* Exercises the occurrence builder with deep nesting *)
+
+(* Binary tree with deep pattern matching *)
+type tree = Leaf | Node of tree * int * tree
+
+let rec tree_sum t = match t with
+  | Leaf -> 0
+  | Node (Leaf, v, Leaf) -> v
+  | Node (left, v, right) ->
+    tree_sum left + v + tree_sum right
+
+(* Create a small tree *)
+let t1 = Node (Leaf, 1, Leaf)
+let t2 = Node (t1, 2, Node (Leaf, 3, Leaf))
+let t3 = Node (t2, 4, t1)
+
+let _ = print (tree_sum t3)
+
+(* Deeply nested tuples *)
+let nested_tuple_sum x = match x with
+  | (((a, b), c), d) -> a + b + c + d
+
+let _ = print (nested_tuple_sum (((1, 2), 3), 4))
+
+(* Record with nested patterns *)
+type point = { x : int; y : int }
+type rect = { topleft : point; botright : point }
+
+let rect_area r = match r with
+  | { topleft = { x = x1; y = y1 }; botright = { x = x2; y = y2 } } ->
+    (x2 - x1) * (y2 - y1)
+
+let my_rect = { topleft = { x = 0; y = 0 }; botright = { x = 10; y = 5 } }
+let _ = print (rect_area my_rect)
+
+(* Mixed constructor and tuple patterns *)
+type result = Ok of int * int | Err of string
+
+let process_result r = match r with
+  | Ok (a, b) -> a + b
+  | Err _ -> 0
+
+let _ = print (process_result (Ok (10, 20)))
+
+(* Deep constructor nesting *)
+type 'a option = None | Some of 'a
+type 'a list = Nil | Cons of 'a * 'a list
+
+let sum_option_list lst = match lst with
+  | Nil -> 0
+  | Cons (Some x, Nil) -> x
+  | Cons (Some x, rest) -> x
+  | Cons (None, rest) -> 0
+
+let _ = print (sum_option_list (Cons (Some 42, Nil)))

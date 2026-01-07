@@ -1,2 +1,50 @@
-val infer_expression : Environment.t -> Parsing.Syntax_tree.expression -> Typed_tree.typed_expression
-val infer_structure : Environment.t -> Parsing.Syntax_tree.structure -> Typed_tree.typed_structure * Environment.t
+(** Type inference for Lina programs.
+
+    This module implements Hindley-Milner type inference with extensions for:
+    - Row polymorphism (structural records)
+    - Pattern matching with exhaustiveness checking
+    - Module system with functors and signatures
+
+    Type inference uses Algorithm W with level-based generalization for
+    efficient let-polymorphism. The algorithm works in two phases:
+    1. Expression type inference: assign types to all expressions
+    2. Structure inference: process type and module declarations
+
+    @see <https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system>
+         Hindley-Milner type system *)
+
+(** {1 Expression Inference} *)
+
+(** [infer_expression env expr] infers the type of an expression.
+
+    Traverses the expression AST, assigns type variables to unknowns,
+    and uses unification to solve constraints. The returned typed expression
+    has full type annotations.
+
+    @param env The typing environment containing bindings
+    @param expr The expression to type-check
+    @return A typed expression with inferred types
+    @raise Compiler_error.Type_error on type mismatches
+    @raise Unification.Unification_error on unification failures *)
+val infer_expression :
+  Environment.t -> Parsing.Syntax_tree.expression -> Typed_tree.typed_expression
+
+(** {1 Structure Inference} *)
+
+(** [infer_structure env structure] infers types for a complete structure.
+
+    Processes all structure items (let bindings, type definitions, modules)
+    and returns a typed structure along with the updated environment.
+
+    Type definitions are added to the environment before processing bindings,
+    allowing forward references within a structure.
+
+    @param env The initial typing environment
+    @param structure The structure to type-check
+    @return A pair of (typed_structure, updated_environment)
+    @raise Compiler_error.Type_error on type errors
+    @raise Unification.Unification_error on unification failures *)
+val infer_structure :
+  Environment.t ->
+  Parsing.Syntax_tree.structure ->
+  Typed_tree.typed_structure * Environment.t

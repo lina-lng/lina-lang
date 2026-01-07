@@ -152,8 +152,8 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
 
 and translate_dt_constructor_switch scrutinee target cases default translate_expr =
   let num_cases = List.length cases in
-  (* Use LambdaSwitch for 4+ cases (enables dispatch table in codegen) *)
-  if num_cases >= 4 then
+  (* Use LambdaSwitch for many cases (enables dispatch table in codegen) *)
+  if num_cases >= Codegen_constants.dispatch_table_threshold then
     let switch_cases = List.map (fun ((_name, tag_index), tree) ->
       { switch_tag = tag_index;
         switch_body = translate_decision_tree scrutinee tree translate_expr }
@@ -211,7 +211,7 @@ let rec translate_pattern_binding pattern value body =
     body
 
   | TypedPatternTuple patterns ->
-    let temp_id = Identifier.create "_tuple" in
+    let temp_id = Identifier.create Codegen_constants.tuple_temp_prefix in
     let bindings =
       List.mapi (fun i p ->
         let field_access = LambdaGetField (i, LambdaVariable temp_id) in
@@ -225,14 +225,14 @@ let rec translate_pattern_binding pattern value body =
     begin match arg_pattern with
     | None -> body
     | Some inner_pattern ->
-      let temp_id = Identifier.create "_ctor" in
+      let temp_id = Identifier.create Codegen_constants.constructor_temp_prefix in
       let arg_access = LambdaGetRecordField ("_0", LambdaVariable temp_id) in
       let inner = translate_pattern_binding inner_pattern arg_access body in
       LambdaLet (temp_id, value, inner)
     end
 
   | TypedPatternRecord (field_patterns, _is_open) ->
-    let temp_id = Identifier.create "_record" in
+    let temp_id = Identifier.create Codegen_constants.record_temp_prefix in
     let bindings =
       List.map (fun (field_pattern : typed_record_pattern_field) ->
         let field_access = LambdaGetRecordField (field_pattern.typed_pattern_field_name, LambdaVariable temp_id) in
@@ -362,7 +362,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
       | TypedStructureInclude (mexpr, included_bindings) ->
         let translated_mexpr = translate_module_expression mexpr in
         (* Create a temp for the included module *)
-        let temp_id = Identifier.create "_included" in
+        let temp_id = Identifier.create Codegen_constants.included_module_prefix in
         let temp_binding = `Single (temp_id, translated_mexpr) in
         (* Create bindings that access the temp *)
         let new_locals = List.map (fun (name, id) ->
@@ -478,7 +478,7 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
       List.map (fun (p : typed_pattern) ->
         match p.pattern_desc with
         | TypedPatternVariable id -> id
-        | _ -> Identifier.create "_param"
+        | _ -> Identifier.create Codegen_constants.param_prefix
       ) param_patterns
     in
     let translated_body = translate_expression body_expr in
@@ -505,7 +505,7 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
         List.map (fun (binding : typed_binding) ->
           let id = match binding.binding_pattern.pattern_desc with
             | TypedPatternVariable id -> id
-            | _ -> Identifier.create "_rec"
+            | _ -> Identifier.create Codegen_constants.rec_prefix
           in
           let translated_expr = translate_expression binding.binding_expression in
           (id, translated_expr)
@@ -547,7 +547,7 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
 
   | TypedExpressionMatch (scrutinee_expression, match_arms) ->
     let translated_scrutinee = translate_expression scrutinee_expression in
-    let scrutinee_id = Identifier.create "_scrutinee" in
+    let scrutinee_id = Identifier.create Codegen_constants.scrutinee_prefix in
     (* Use the pattern match compiler with Maranget's decision tree algorithm *)
     let decision_tree = Pattern_match.compile_match match_arms in
     let match_body = translate_decision_tree
@@ -571,7 +571,7 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
       List.map (fun (binding : typed_binding) ->
         let id = match binding.binding_pattern.pattern_desc with
           | TypedPatternVariable id -> id
-          | _ -> Identifier.create "_top"
+          | _ -> Identifier.create Codegen_constants.top_prefix
         in
         let translated_expr = translate_expression binding.binding_expression in
         LambdaLet (id, translated_expr, LambdaConstant ConstantUnit)
@@ -582,7 +582,7 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
         List.map (fun (binding : typed_binding) ->
           let id = match binding.binding_pattern.pattern_desc with
             | TypedPatternVariable id -> id
-            | _ -> Identifier.create "_rec"
+            | _ -> Identifier.create Codegen_constants.rec_prefix
           in
           let translated_expr = translate_expression binding.binding_expression in
           (id, translated_expr)
@@ -611,7 +611,7 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
 
   | TypedStructureInclude (mexpr, included_bindings) ->
     (* Generate local bindings for included values *)
-    let module_temp = Identifier.create "_include" in
+    let module_temp = Identifier.create Codegen_constants.include_prefix in
     let module_binding = LambdaLet (module_temp, translate_module_expression mexpr, LambdaConstant ConstantUnit) in
     let value_bindings = List.map (fun (name, id) ->
       LambdaLet (id, LambdaModuleAccess (LambdaVariable module_temp, name), LambdaConstant ConstantUnit)

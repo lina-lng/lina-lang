@@ -1,0 +1,81 @@
+(* Test: Type inference edge cases *)
+(* Tests expression and pattern inference *)
+
+(* Polymorphic identity function *)
+let id x = x
+
+let int_id = id 42
+let bool_id = id true
+let string_id = id "hello"
+
+let _ = print int_id
+
+(* Polymorphic pair *)
+let make_pair x y = (x, y)
+
+let int_pair = make_pair 1 2
+let mixed_pair = make_pair 42 true
+
+let get_first p = match p with
+  | (a, _) -> a
+
+let get_second p = match p with
+  | (_, b) -> b
+
+let _ = print (get_first int_pair)
+let _ = print (get_second int_pair)
+
+(* Polymorphic option operations *)
+type 'a option = None | Some of 'a
+
+let map_option f opt = match opt with
+  | None -> None
+  | Some x -> Some (f x)
+
+let double x = x + x
+let result = map_option double (Some 21)
+
+let unwrap opt default = match opt with
+  | None -> default
+  | Some x -> x
+
+let _ = print (unwrap result 0)
+
+(* Polymorphic list operations *)
+type 'a list = Nil | Cons of 'a * 'a list
+
+let rec length lst = match lst with
+  | Nil -> 0
+  | Cons (_, rest) -> 1 + length rest
+
+let my_list = Cons (1, Cons (2, Cons (3, Nil)))
+let _ = print (length my_list)
+
+(* Higher-order functions *)
+let apply f x = f x
+let add1 x = x + 1
+let mul2 x = x * 2
+
+let _ = print (apply add1 41)
+let _ = print (apply mul2 21)
+
+(* Composition via explicit application *)
+let combined x = mul2 (add1 x)
+let _ = print (combined 20)
+
+(* Record inference *)
+type person = { name : string; age : int }
+
+let get_age p = p.age
+let birthday p = { p with age = p.age + 1 }
+
+let alice = { name = "Alice"; age = 30 }
+let older_alice = birthday alice
+
+let _ = print (get_age older_alice)
+
+(* Nested patterns with inference *)
+let nested_match p = match p with
+  | (a, b, c, d) -> a + b + c + d
+
+let _ = print (nested_match (1, 2, 3, 4))

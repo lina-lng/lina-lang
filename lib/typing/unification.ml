@@ -18,36 +18,6 @@ let type_lookup_ref : (path -> type_declaration option) ref = ref (fun _ -> None
 
 let set_type_lookup f = type_lookup_ref := f
 
-(* Substitute type parameters in a manifest type *)
-let substitute_params params args body =
-  if params = [] then body
-  else
-    let substitution = List.map2 (fun tv arg -> (tv.id, arg)) params args in
-    let rec subst ty =
-      match representative ty with
-      | TypeVariable tv ->
-        begin match List.assoc_opt tv.id substitution with
-        | Some replacement -> replacement
-        | None -> ty
-        end
-      | TypeConstructor (path, type_args) ->
-        TypeConstructor (path, List.map subst type_args)
-      | TypeTuple elements ->
-        TypeTuple (List.map subst elements)
-      | TypeArrow (arg, result) ->
-        TypeArrow (subst arg, subst result)
-      | TypeRecord row ->
-        TypeRecord (subst_row row)
-      | TypeRowEmpty -> TypeRowEmpty
-    and subst_row row = {
-      row_fields = List.map (fun (name, field) ->
-        (name, match field with RowFieldPresent ty -> RowFieldPresent (subst ty))
-      ) row.row_fields;
-      row_more = subst row.row_more;
-    }
-    in
-    subst body
-
 (** Set of paths, used for cycle detection during type alias expansion *)
 module PathSet = Set.Make(struct
   type t = path
@@ -69,7 +39,7 @@ let rec expand_type_aux visiting ty =
       else begin
         let visiting' = PathSet.add path visiting in
         let manifest = Option.get decl.declaration_manifest in
-        let expanded = substitute_params decl.declaration_parameters args manifest in
+        let expanded = Type_utils.substitute_type_params decl.declaration_parameters args manifest in
         let (final, _) = expand_type_aux visiting' expanded in  (* Recursively expand with cycle check *)
         (final, true)
       end

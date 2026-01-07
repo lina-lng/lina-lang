@@ -57,3 +57,35 @@
  (modules test_modules)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Typing context tests
+(library
+ (name test_typing_context)
+ (libraries typing common)
+ (modules test_typing_context)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Type utilities tests
+(library
+ (name test_type_utils)
+ (libraries typing common)
+ (modules test_type_utils)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Codegen context threading tests
+(library
+ (name test_codegen_context)
+ (libraries lua lambda typing driver common)
+ (modules test_codegen_context)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Pattern match compilation tests
+(library
+ (name test_occurrence_builder)
+ (libraries lambda typing driver parsing common unix)
+ (modules test_occurrence_builder)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

@@ -1,0 +1,43 @@
+(* Test: Context threading for singleton optimization *)
+(* Multiple nullary constructors from different types should all share singletons *)
+
+type color = Red | Green | Blue
+type option = None | Some of int
+type result = Ok of int | Err
+
+(* Test singleton sharing within type *)
+let r1 = Red
+let r2 = Red
+let r3 = Red
+
+(* Test singleton across different types *)
+let none1 = None
+let none2 = None
+let err1 = Err
+let err2 = Err
+let g = Green
+let b = Blue
+
+(* Test in nested let expressions *)
+let nested =
+  let a = None in
+  let b = None in
+  let c = Red in
+  42
+
+(* Test in conditionals *)
+let conditional flag =
+  if flag then None else None
+
+(* Verify the program runs correctly *)
+let _ = print nested
+
+(* Test that values are correct *)
+let check_color c = match c with
+  | Red -> 0
+  | Green -> 1
+  | Blue -> 2
+
+let _ = print (check_color r1)
+let _ = print (check_color g)
+let _ = print (check_color b)

@@ -7,8 +7,10 @@ let current_level () = !current_level_ref
 let enter_level () = incr current_level_ref
 let leave_level () = decr current_level_ref
 let reset_level () = current_level_ref := 1
+let set_level level = current_level_ref := level
 
 let next_type_variable_id = ref 0
+let set_next_type_variable_id id = next_type_variable_id := id
 
 let fresh_type_variable_id () =
   let id = !next_type_variable_id in

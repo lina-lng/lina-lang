@@ -1,0 +1,63 @@
+(* Test: Path handling in module system *)
+(* Tests that modules and paths work correctly *)
+
+(* Simple module with type and value *)
+module M = struct
+  type t = int
+  let value = 42
+  let to_int x = x
+end
+
+(* Module alias *)
+module N = M
+
+let x = M.value
+let y = N.value
+
+let _ = print x
+let _ = print y
+let _ = print (M.to_int x)
+let _ = print (N.to_int y)
+
+(* Nested module *)
+module Outer = struct
+  module Inner = struct
+    type t = int
+    let value = 100
+    let to_int x = x
+  end
+end
+
+module InnerAlias = Outer.Inner
+
+let z = InnerAlias.value
+let _ = print (InnerAlias.to_int z)
+
+(* Functor with module paths *)
+module type CONFIG = sig
+  val factor : int
+end
+
+module MakeMultiplier(C : CONFIG) = struct
+  let multiply x = x * C.factor
+end
+
+module DoubleConfig = struct
+  let factor = 2
+end
+
+module TripleConfig = struct
+  let factor = 3
+end
+
+module Doubler = MakeMultiplier(DoubleConfig)
+module Tripler = MakeMultiplier(TripleConfig)
+
+let _ = print (Doubler.multiply 10)
+let _ = print (Tripler.multiply 10)
+
+(* Functor application with inline struct *)
+module QuadConfig = struct let factor = 4 end
+module Quadrupler = MakeMultiplier(QuadConfig)
+
+let _ = print (Quadrupler.multiply 10)

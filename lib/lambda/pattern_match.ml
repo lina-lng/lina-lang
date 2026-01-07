@@ -86,28 +86,44 @@ let is_wildcard (pat : Typing.Typed_tree.typed_pattern) : bool =
   | Typing.Typed_tree.TypedPatternVariable _ | Typing.Typed_tree.TypedPatternWildcard -> true
   | _ -> false
 
-(* Extend occurrence with a step *)
+(* Occurrence builders: build in reverse order for O(1) extension, reverse at end.
+   This avoids O(n²) complexity from repeated list concatenation. *)
+type occurrence_builder = occurrence_step list  (* stored in reverse order *)
+
+let extend_builder (builder : occurrence_builder) (step : occurrence_step) : occurrence_builder =
+  step :: builder  (* O(1) cons *)
+
+let finalize_builder (builder : occurrence_builder) : occurrence =
+  List.rev builder  (* O(n) once at the end *)
+
+(* For backward compatibility and simple cases *)
 let extend_occurrence (occ : occurrence) (step : occurrence_step) : occurrence =
   occ @ [step]
 
-(* Collect variable bindings from a pattern *)
-let rec collect_bindings (pat : Typing.Typed_tree.typed_pattern) (occ : occurrence) : (Identifier.t * occurrence) list =
-  match pat.pattern_desc with
-  | Typing.Typed_tree.TypedPatternVariable id -> [(id, occ)]
-  | Typing.Typed_tree.TypedPatternWildcard -> []
-  | Typing.Typed_tree.TypedPatternConstant _ -> []
-  | Typing.Typed_tree.TypedPatternTuple pats ->
-    List.concat (List.mapi (fun i p ->
-      collect_bindings p (extend_occurrence occ (OccTupleField i))
-    ) pats)
-  | Typing.Typed_tree.TypedPatternConstructor (_, None) -> []
-  | Typing.Typed_tree.TypedPatternConstructor (_, Some arg) ->
-    collect_bindings arg (extend_occurrence occ OccConstructorArg)
-  | Typing.Typed_tree.TypedPatternRecord (fields, _) ->
-    List.concat (List.map (fun (f : Typing.Typed_tree.typed_record_pattern_field) ->
-      collect_bindings f.typed_pattern_field_pattern
-        (extend_occurrence occ (OccRecordField f.typed_pattern_field_name))
-    ) fields)
+(* Collect variable bindings from a pattern using O(1) builder extension *)
+let collect_bindings (pat : Typing.Typed_tree.typed_pattern) (occ : occurrence) : (Identifier.t * occurrence) list =
+  (* Convert initial occurrence to builder (reverse it since builder is in reverse order) *)
+  let initial_builder = List.rev occ in
+  let rec collect_with_builder (pat : Typing.Typed_tree.typed_pattern) (builder : occurrence_builder) =
+    match pat.pattern_desc with
+    | Typing.Typed_tree.TypedPatternVariable id ->
+      [(id, finalize_builder builder)]
+    | Typing.Typed_tree.TypedPatternWildcard -> []
+    | Typing.Typed_tree.TypedPatternConstant _ -> []
+    | Typing.Typed_tree.TypedPatternTuple pats ->
+      List.concat (List.mapi (fun i p ->
+        collect_with_builder p (extend_builder builder (OccTupleField i))
+      ) pats)
+    | Typing.Typed_tree.TypedPatternConstructor (_, None) -> []
+    | Typing.Typed_tree.TypedPatternConstructor (_, Some arg) ->
+      collect_with_builder arg (extend_builder builder OccConstructorArg)
+    | Typing.Typed_tree.TypedPatternRecord (fields, _) ->
+      List.concat (List.map (fun (f : Typing.Typed_tree.typed_record_pattern_field) ->
+        collect_with_builder f.typed_pattern_field_pattern
+          (extend_builder builder (OccRecordField f.typed_pattern_field_name))
+      ) fields)
+  in
+  collect_with_builder pat initial_builder
 
 (* Create initial matrix from match arms *)
 let initial_matrix (arms : Typing.Typed_tree.typed_match_arm list) : pattern_matrix =

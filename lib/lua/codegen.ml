@@ -17,29 +17,40 @@ let mangle_identifier (id : Identifier.t) : identifier =
   if stamp = 0 then base_name
   else Printf.sprintf "%s_%d" base_name stamp
 
-(* Singleton registry for nullary constructors *)
+(** {1 Code Generation Context}
+
+    The context tracks state accumulated during code generation,
+    eliminating the need for global mutable state. *)
+
 module SingletonKey = struct
   type t = string * int  (* type_name, tag_index *)
   let compare = compare
 end
 module SingletonSet = Set.Make(SingletonKey)
 
-let singleton_registry = ref SingletonSet.empty
+(** Code generation context, threaded through translation functions. *)
+type context = {
+  singletons : SingletonSet.t;  (** Registered nullary constructor singletons *)
+}
 
-let reset_singletons () = singleton_registry := SingletonSet.empty
+(** Create an empty context *)
+let empty_context = { singletons = SingletonSet.empty }
 
+(** Get the variable name for a singleton constructor *)
 let singleton_var_name type_name tag_index =
-  Printf.sprintf "_Ctor_%s_%d" type_name tag_index
+  Codegen_constants.singleton_var_name type_name tag_index
 
-let register_singleton type_name tag_index =
-  singleton_registry := SingletonSet.add (type_name, tag_index) !singleton_registry
+(** Register a singleton in the context *)
+let register_singleton ctx type_name tag_index =
+  { singletons = SingletonSet.add (type_name, tag_index) ctx.singletons }
 
-let generate_singleton_preamble () =
+(** Generate singleton preamble from context *)
+let generate_singleton_preamble ctx =
   SingletonSet.fold (fun (type_name, tag_index) acc ->
     let var_name = singleton_var_name type_name tag_index in
     let table = ExpressionTable [FieldNamed ("_tag", ExpressionNumber (float_of_int tag_index))] in
     StatementLocal ([var_name], [table]) :: acc
-  ) !singleton_registry []
+  ) ctx.singletons []
 
 let translate_constant = function
   | Lambda.ConstantInt n -> ExpressionNumber (float_of_int n)
@@ -81,135 +92,149 @@ let translate_primitive prim args =
   | _ ->
     ExpressionNil
 
-let rec translate_expression (lambda : Lambda.lambda) : expression =
+(** Translate a lambda expression to a Lua expression, threading context.
+    Returns (expression, updated_context). *)
+let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context =
   match lambda with
   | Lambda.LambdaVariable id ->
-    ExpressionVariable (mangle_identifier id)
+    (ExpressionVariable (mangle_identifier id), ctx)
 
   | Lambda.LambdaConstant const ->
-    translate_constant const
+    (translate_constant const, ctx)
 
   | Lambda.LambdaApply (func, args) ->
-    let func_expr = translate_expression func in
-    let arg_exprs = List.map translate_expression args in
-    ExpressionCall (func_expr, arg_exprs)
+    let func_expr, ctx = translate_expression ctx func in
+    let arg_exprs, ctx = translate_expression_list ctx args in
+    (ExpressionCall (func_expr, arg_exprs), ctx)
 
   | Lambda.LambdaFunction (params, body) ->
     let param_names = List.map mangle_identifier params in
-    let body_stmts = translate_to_statements body in
-    ExpressionFunction (param_names, body_stmts)
+    let body_stmts, ctx = translate_to_statements ctx body in
+    (ExpressionFunction (param_names, body_stmts), ctx)
 
   | Lambda.LambdaLet (id, value, body) ->
-    let func_body = translate_to_statements (Lambda.LambdaLet (id, value, body)) in
-    ExpressionCall (ExpressionFunction ([], func_body), [])
+    let func_body, ctx = translate_to_statements ctx (Lambda.LambdaLet (id, value, body)) in
+    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
   | Lambda.LambdaLetRecursive (bindings, body) ->
-    let func_body = translate_to_statements (Lambda.LambdaLetRecursive (bindings, body)) in
-    ExpressionCall (ExpressionFunction ([], func_body), [])
+    let func_body, ctx = translate_to_statements ctx (Lambda.LambdaLetRecursive (bindings, body)) in
+    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
   | Lambda.LambdaPrimitive (prim, args) ->
-    let arg_exprs = List.map translate_expression args in
-    translate_primitive prim arg_exprs
+    let arg_exprs, ctx = translate_expression_list ctx args in
+    (translate_primitive prim arg_exprs, ctx)
 
   | Lambda.LambdaIfThenElse (_cond, _then_branch, _else_branch) ->
-    let func_body = translate_to_statements lambda in
-    ExpressionCall (ExpressionFunction ([], func_body), [])
+    let func_body, ctx = translate_to_statements ctx lambda in
+    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
   | Lambda.LambdaSequence (_first, _second) ->
-    let func_body = translate_to_statements lambda in
-    ExpressionCall (ExpressionFunction ([], func_body), [])
+    let func_body, ctx = translate_to_statements ctx lambda in
+    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
   | Lambda.LambdaMakeBlock (_, fields) ->
-    let field_exprs = List.map translate_expression fields in
-    ExpressionTable (List.map (fun f -> FieldArray f) field_exprs)
+    let field_exprs, ctx = translate_expression_list ctx fields in
+    (ExpressionTable (List.map (fun f -> FieldArray f) field_exprs), ctx)
 
   | Lambda.LambdaGetField (n, obj) ->
-    let obj_expr = translate_expression obj in
-    ExpressionIndex (obj_expr, ExpressionNumber (float_of_int (n + 1)))
+    let obj_expr, ctx = translate_expression ctx obj in
+    (ExpressionIndex (obj_expr, ExpressionNumber (float_of_int (n + 1))), ctx)
 
   | Lambda.LambdaSwitch (_scrutinee, _cases, _default) ->
-    let func_body = translate_to_statements lambda in
-    ExpressionCall (ExpressionFunction ([], func_body), [])
+    let func_body, ctx = translate_to_statements ctx lambda in
+    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
   | Lambda.LambdaConstructor (tag, None) when tag.Lambda.tag_is_nullary ->
     (* Nullary constructor: use singleton *)
-    register_singleton tag.Lambda.tag_type_name tag.Lambda.tag_index;
-    ExpressionVariable (singleton_var_name tag.Lambda.tag_type_name tag.Lambda.tag_index)
+    let ctx = register_singleton ctx tag.Lambda.tag_type_name tag.Lambda.tag_index in
+    (ExpressionVariable (singleton_var_name tag.Lambda.tag_type_name tag.Lambda.tag_index), ctx)
 
   | Lambda.LambdaConstructor (tag, arg) ->
     let fields = [FieldNamed ("_tag", ExpressionNumber (float_of_int tag.Lambda.tag_index))] in
-    let fields = match arg with
-      | None -> fields
+    let fields, ctx = match arg with
+      | None -> (fields, ctx)
       | Some arg_expr ->
-        fields @ [FieldNamed ("_0", translate_expression arg_expr)]
+        let translated, ctx = translate_expression ctx arg_expr in
+        (fields @ [FieldNamed ("_0", translated)], ctx)
     in
-    ExpressionTable fields
+    (ExpressionTable fields, ctx)
 
   | Lambda.LambdaMakeRecord field_bindings ->
-    let translated_fields = List.map (fun (field_name, field_value) ->
-      FieldNamed (field_name, translate_expression field_value)
-    ) field_bindings in
-    ExpressionTable translated_fields
+    let translated_fields, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
+      let translated, ctx = translate_expression ctx field_value in
+      (FieldNamed (field_name, translated) :: acc, ctx)
+    ) ([], ctx) field_bindings in
+    (ExpressionTable (List.rev translated_fields), ctx)
 
   | Lambda.LambdaGetRecordField (field_name, record_expression) ->
-    let translated_record = translate_expression record_expression in
-    ExpressionField (translated_record, field_name)
+    let translated_record, ctx = translate_expression ctx record_expression in
+    (ExpressionField (translated_record, field_name), ctx)
 
   | Lambda.LambdaRecordUpdate (base_expression, update_fields) ->
-    let func_body = translate_to_statements (Lambda.LambdaRecordUpdate (base_expression, update_fields)) in
-    ExpressionCall (ExpressionFunction ([], func_body), [])
+    let func_body, ctx = translate_to_statements ctx (Lambda.LambdaRecordUpdate (base_expression, update_fields)) in
+    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
   | Lambda.LambdaModule bindings ->
     (* Module as a Lua table with named fields *)
-    let fields = List.map (fun (binding : Lambda.module_binding) ->
-      FieldNamed (binding.mb_name, translate_expression binding.mb_value)
-    ) bindings in
-    ExpressionTable fields
+    let fields, ctx = List.fold_left (fun (acc, ctx) (binding : Lambda.module_binding) ->
+      let translated, ctx = translate_expression ctx binding.mb_value in
+      (FieldNamed (binding.mb_name, translated) :: acc, ctx)
+    ) ([], ctx) bindings in
+    (ExpressionTable (List.rev fields), ctx)
 
   | Lambda.LambdaModuleAccess (module_expr, field_name) ->
     (* Module access as field access: M.x *)
-    let translated_module = translate_expression module_expr in
-    ExpressionField (translated_module, field_name)
+    let translated_module, ctx = translate_expression ctx module_expr in
+    (ExpressionField (translated_module, field_name), ctx)
 
   | Lambda.LambdaFunctor (param_id, body) ->
     (* Functor as a function: functor (X : S) -> ME becomes function(X) return ME end *)
     let param_name = mangle_identifier param_id in
-    let body_stmts = translate_to_statements body in
-    ExpressionFunction ([param_name], body_stmts)
+    let body_stmts, ctx = translate_to_statements ctx body in
+    (ExpressionFunction ([param_name], body_stmts), ctx)
 
   | Lambda.LambdaFunctorApply (func_expr, arg_expr) ->
     (* Functor application: F(X) becomes F(X) function call *)
-    let translated_func = translate_expression func_expr in
-    let translated_arg = translate_expression arg_expr in
-    ExpressionCall (translated_func, [translated_arg])
+    let translated_func, ctx = translate_expression ctx func_expr in
+    let translated_arg, ctx = translate_expression ctx arg_expr in
+    (ExpressionCall (translated_func, [translated_arg]), ctx)
 
-(* Helper to translate a value and assign it to a variable *)
-and translate_value_to_assignment name lambda : block =
+(** Helper to translate a list of expressions *)
+and translate_expression_list ctx exprs =
+  List.fold_left (fun (acc, ctx) expr ->
+    let translated, ctx = translate_expression ctx expr in
+    (acc @ [translated], ctx)
+  ) ([], ctx) exprs
+
+(** Translate a value and assign it to a variable, threading context *)
+and translate_value_to_assignment ctx name lambda : block * context =
   match lambda with
   | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
     (* Nested let: float it out and then assign *)
     let inner_name = mangle_identifier inner_id in
-    let inner_expr = translate_expression inner_value in
+    let inner_expr, ctx = translate_expression ctx inner_value in
     let inner_decl = StatementLocal ([inner_name], [inner_expr]) in
-    inner_decl :: translate_value_to_assignment name inner_body
+    let rest_stmts, ctx = translate_value_to_assignment ctx name inner_body in
+    (inner_decl :: rest_stmts, ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
     (* Nested if: generate if statement with assignments *)
-    let cond_expr = translate_expression cond in
-    let then_stmts = translate_value_to_assignment name then_branch in
-    let else_stmts = translate_value_to_assignment name else_branch in
-    [StatementIf ([(cond_expr, then_stmts)], Some else_stmts)]
+    let cond_expr, ctx = translate_expression ctx cond in
+    let then_stmts, ctx = translate_value_to_assignment ctx name then_branch in
+    let else_stmts, ctx = translate_value_to_assignment ctx name else_branch in
+    ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
 
   | Lambda.LambdaSequence (first, second) ->
-    let first_stmts = translate_to_effect first in
-    first_stmts @ translate_value_to_assignment name second
+    let first_stmts, ctx = translate_to_effect ctx first in
+    let rest_stmts, ctx = translate_value_to_assignment ctx name second in
+    (first_stmts @ rest_stmts, ctx)
 
   | _ ->
-    let expr = translate_expression lambda in
-    [StatementAssign ([LvalueVariable name], [expr])]
+    let expr, ctx = translate_expression ctx lambda in
+    ([StatementAssign ([LvalueVariable name], [expr])], ctx)
 
-(* Helper for dispatch table switch (used for 4+ cases) *)
-and translate_switch_as_dispatch _scrutinee_name tag_access cases default =
+(** Dispatch table switch translation for many cases, threading context *)
+and translate_switch_as_dispatch ctx _scrutinee_name tag_access cases default =
   (* Generate:
      local _dispatch = {
        [0] = function() ... end,
@@ -218,33 +243,35 @@ and translate_switch_as_dispatch _scrutinee_name tag_access cases default =
      local _handler = _dispatch[scrutinee._tag]
      if _handler then return _handler() else <default> end
   *)
-  let dispatch_name = "_dispatch" in
-  let handler_name = "_handler" in
-  let dispatch_entries = List.map (fun (case : Lambda.switch_case) ->
-    let handler_body = translate_to_statements case.switch_body in
+  let dispatch_name = Codegen_constants.dispatch_table_name in
+  let handler_name = Codegen_constants.dispatch_handler_name in
+  let dispatch_entries, ctx = List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
+    let handler_body, ctx = translate_to_statements ctx case.switch_body in
     let handler = ExpressionFunction ([], handler_body) in
-    FieldIndexed (ExpressionNumber (float_of_int case.switch_tag), handler)
-  ) cases in
+    let entry = FieldIndexed (ExpressionNumber (float_of_int case.switch_tag), handler) in
+    (acc @ [entry], ctx)
+  ) ([], ctx) cases in
   let dispatch_table = ExpressionTable dispatch_entries in
   let dispatch_decl = StatementLocal ([dispatch_name], [dispatch_table]) in
   let handler_lookup = ExpressionIndex (ExpressionVariable dispatch_name, tag_access) in
   let handler_decl = StatementLocal ([handler_name], [handler_lookup]) in
   let handler_call = ExpressionCall (ExpressionVariable handler_name, []) in
-  let default_stmts = match default with
-    | Some d -> translate_to_statements d
-    | None -> [StatementReturn [ExpressionCall (ExpressionVariable "error",
-                [ExpressionString "Match failure"])]]
+  let default_stmts, ctx = match default with
+    | Some d -> translate_to_statements ctx d
+    | None -> ([StatementReturn [ExpressionCall (ExpressionVariable "error",
+                [ExpressionString "Match failure"])]], ctx)
   in
-  [
+  ([
     dispatch_decl;
     handler_decl;
     StatementIf (
       [(ExpressionVariable handler_name, [StatementReturn [handler_call]])],
       Some default_stmts
     )
-  ]
+  ], ctx)
 
-and translate_to_statements (lambda : Lambda.lambda) : block =
+(** Translate a lambda to a block of statements, threading context *)
+and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
   match lambda with
   | Lambda.LambdaLet (id, value, body) ->
     begin match value with
@@ -252,7 +279,7 @@ and translate_to_statements (lambda : Lambda.lambda) : block =
       (* Float nested let out to avoid IIFE:
          let id = (let inner = v in e) in body
          becomes: let inner = v in let id = e in body *)
-      translate_to_statements (Lambda.LambdaLet (inner_id, inner_value,
+      translate_to_statements ctx (Lambda.LambdaLet (inner_id, inner_value,
         Lambda.LambdaLet (id, inner_body, body)))
 
     | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
@@ -261,197 +288,229 @@ and translate_to_statements (lambda : Lambda.lambda) : block =
          becomes: local id; if c then id = e1 else id = e2 end; body *)
       let name = mangle_identifier id in
       let decl = StatementLocal ([name], []) in
-      let cond_expr = translate_expression cond in
-      let then_stmts = translate_value_to_assignment name then_branch in
-      let else_stmts = translate_value_to_assignment name else_branch in
+      let cond_expr, ctx = translate_expression ctx cond in
+      let then_stmts, ctx = translate_value_to_assignment ctx name then_branch in
+      let else_stmts, ctx = translate_value_to_assignment ctx name else_branch in
       let if_stmt = StatementIf ([(cond_expr, then_stmts)], Some else_stmts) in
-      decl :: if_stmt :: translate_to_statements body
+      let rest, ctx = translate_to_statements ctx body in
+      (decl :: if_stmt :: rest, ctx)
 
     | Lambda.LambdaSequence (first, second) ->
       (* Float sequence to avoid IIFE:
          let id = (e1; e2) in body
          becomes: e1; let id = e2 in body *)
-      let first_stmts = translate_to_effect first in
-      first_stmts @ translate_to_statements (Lambda.LambdaLet (id, second, body))
+      let first_stmts, ctx = translate_to_effect ctx first in
+      let rest, ctx = translate_to_statements ctx (Lambda.LambdaLet (id, second, body)) in
+      (first_stmts @ rest, ctx)
 
     | _ ->
       let name = mangle_identifier id in
-      let value_expr = translate_expression value in
+      let value_expr, ctx = translate_expression ctx value in
       let local_stmt = StatementLocal ([name], [value_expr]) in
-      local_stmt :: translate_to_statements body
+      let rest, ctx = translate_to_statements ctx body in
+      (local_stmt :: rest, ctx)
     end
 
   | Lambda.LambdaLetRecursive (bindings, body) ->
     let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
     let forward_decl = StatementLocal (names, []) in
-    let assignments =
-      List.map (fun (id, value) ->
+    let assignments, ctx =
+      List.fold_left (fun (acc, ctx) (id, value) ->
         let name = mangle_identifier id in
-        let value_expr = translate_expression value in
-        StatementAssign ([LvalueVariable name], [value_expr])
-      ) bindings
+        let value_expr, ctx = translate_expression ctx value in
+        (acc @ [StatementAssign ([LvalueVariable name], [value_expr])], ctx)
+      ) ([], ctx) bindings
     in
-    forward_decl :: assignments @ translate_to_statements body
+    let rest, ctx = translate_to_statements ctx body in
+    (forward_decl :: assignments @ rest, ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
-    let cond_expr = translate_expression cond in
-    let then_stmts = translate_to_statements then_branch in
-    let else_stmts = translate_to_statements else_branch in
-    [StatementIf ([(cond_expr, then_stmts)], Some else_stmts)]
+    let cond_expr, ctx = translate_expression ctx cond in
+    let then_stmts, ctx = translate_to_statements ctx then_branch in
+    let else_stmts, ctx = translate_to_statements ctx else_branch in
+    ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
 
   | Lambda.LambdaSequence (first, second) ->
-    let first_stmts = translate_to_effect first in
-    let second_stmts = translate_to_statements second in
-    first_stmts @ second_stmts
+    let first_stmts, ctx = translate_to_effect ctx first in
+    let second_stmts, ctx = translate_to_statements ctx second in
+    (first_stmts @ second_stmts, ctx)
 
   | Lambda.LambdaSwitch (scrutinee, cases, default) ->
-    let scrutinee_expr = translate_expression scrutinee in
-    let temp_name = "_switch" in
+    let scrutinee_expr, ctx = translate_expression ctx scrutinee in
+    let temp_name = Codegen_constants.switch_scrutinee_name in
     let local_stmt = StatementLocal ([temp_name], [scrutinee_expr]) in
     let tag_access = ExpressionField (ExpressionVariable temp_name, "_tag") in
     let num_cases = List.length cases in
-    (* Use dispatch table for 4+ cases, otherwise use if-chain *)
-    if num_cases >= 4 then
-      translate_switch_as_dispatch temp_name tag_access cases default
-      |> fun stmts -> local_stmt :: stmts
+    (* Use dispatch table for many cases, otherwise use if-chain *)
+    if num_cases >= Codegen_constants.dispatch_table_threshold then
+      let stmts, ctx = translate_switch_as_dispatch ctx temp_name tag_access cases default in
+      (local_stmt :: stmts, ctx)
     else
-      let branches =
-        List.map (fun (case : Lambda.switch_case) ->
+      let branches, ctx =
+        List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
+          let body, ctx = translate_to_statements ctx case.switch_body in
           let cond = ExpressionBinaryOp (OpEqual, tag_access,
             ExpressionNumber (float_of_int case.switch_tag)) in
-          let body = translate_to_statements case.switch_body in
-          (cond, body)
-        ) cases
+          (acc @ [(cond, body)], ctx)
+        ) ([], ctx) cases
       in
-      let default_stmts = match default with
-        | Some d -> Some (translate_to_statements d)
-        | None -> None
+      let default_stmts, ctx = match default with
+        | Some d ->
+          let stmts, ctx = translate_to_statements ctx d in
+          (Some stmts, ctx)
+        | None -> (None, ctx)
       in
-      [local_stmt; StatementIf (branches, default_stmts)]
+      ([local_stmt; StatementIf (branches, default_stmts)], ctx)
 
   | Lambda.LambdaRecordUpdate (base_expression, update_fields) ->
-    let base_expr = translate_expression base_expression in
-    let result_name = "_result" in
+    let base_expr, ctx = translate_expression ctx base_expression in
+    let result_name = Codegen_constants.record_update_result_name in
+    let key_name = Codegen_constants.pair_key_name in
+    let value_name = Codegen_constants.pair_value_name in
     let copy_stmt = StatementLocal ([result_name], [ExpressionTable []]) in
-    let copy_loop = StatementForIn (["_k"; "_v"],
+    let copy_loop = StatementForIn ([key_name; value_name],
       [ExpressionCall (ExpressionVariable "pairs", [base_expr])],
-      [StatementAssign ([LvalueIndex (ExpressionVariable result_name, ExpressionVariable "_k")],
-                        [ExpressionVariable "_v"])]) in
-    let update_stmts = List.map (fun (field_name, field_value) ->
-      StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
-                       [translate_expression field_value])
-    ) update_fields in
-    copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]]
+      [StatementAssign ([LvalueIndex (ExpressionVariable result_name, ExpressionVariable key_name)],
+                        [ExpressionVariable value_name])]) in
+    let update_stmts, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
+      let translated, ctx = translate_expression ctx field_value in
+      (acc @ [StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
+                              [translated])], ctx)
+    ) ([], ctx) update_fields in
+    (copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]], ctx)
 
   | _ ->
-    let expr = translate_expression lambda in
-    [StatementReturn [expr]]
+    let expr, ctx = translate_expression ctx lambda in
+    ([StatementReturn [expr]], ctx)
 
-and translate_to_effect (lambda : Lambda.lambda) : block =
+(** Translate a lambda for side effects only (no return value), threading context *)
+and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
   match lambda with
   | Lambda.LambdaApply (func, args) ->
-    let func_expr = translate_expression func in
-    let arg_exprs = List.map translate_expression args in
-    [StatementCall (func_expr, arg_exprs)]
+    let func_expr, ctx = translate_expression ctx func in
+    let arg_exprs, ctx = translate_expression_list ctx args in
+    ([StatementCall (func_expr, arg_exprs)], ctx)
 
   | Lambda.LambdaPrimitive (Lambda.PrimitivePrint, args) ->
-    let arg_exprs = List.map translate_expression args in
-    [StatementCall (ExpressionVariable "print", arg_exprs)]
+    let arg_exprs, ctx = translate_expression_list ctx args in
+    ([StatementCall (ExpressionVariable "print", arg_exprs)], ctx)
 
   | Lambda.LambdaSequence (first, second) ->
-    translate_to_effect first @ translate_to_effect second
+    let first_stmts, ctx = translate_to_effect ctx first in
+    let second_stmts, ctx = translate_to_effect ctx second in
+    (first_stmts @ second_stmts, ctx)
 
   | Lambda.LambdaLet (id, value, body) ->
     let name = mangle_identifier id in
-    let value_expr = translate_expression value in
-    StatementLocal ([name], [value_expr]) :: translate_to_effect body
+    let value_expr, ctx = translate_expression ctx value in
+    let rest, ctx = translate_to_effect ctx body in
+    (StatementLocal ([name], [value_expr]) :: rest, ctx)
 
   | Lambda.LambdaLetRecursive (bindings, body) ->
     let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
     let forward_decl = StatementLocal (names, []) in
-    let assignments =
-      List.map (fun (id, value) ->
+    let assignments, ctx =
+      List.fold_left (fun (acc, ctx) (id, value) ->
         let name = mangle_identifier id in
-        let value_expr = translate_expression value in
-        StatementAssign ([LvalueVariable name], [value_expr])
-      ) bindings
+        let value_expr, ctx = translate_expression ctx value in
+        (acc @ [StatementAssign ([LvalueVariable name], [value_expr])], ctx)
+      ) ([], ctx) bindings
     in
-    forward_decl :: assignments @ translate_to_effect body
+    let rest, ctx = translate_to_effect ctx body in
+    (forward_decl :: assignments @ rest, ctx)
 
   | _ ->
-    let expr = translate_expression lambda in
+    let expr, ctx = translate_expression ctx lambda in
     match expr with
-    | ExpressionCall (func, args) -> [StatementCall (func, args)]
-    | _ -> []
+    | ExpressionCall (func, args) -> ([StatementCall (func, args)], ctx)
+    | _ -> ([], ctx)
 
-(* Helper to generate top-level binding with let floating *)
-let rec generate_top_level_binding (target_name : identifier) (value : Lambda.lambda) : block =
+(** Generate top-level binding with let floating, threading context *)
+let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambda.lambda)
+    : block * context =
   match value with
   | Lambda.LambdaFunction (params, body) ->
     let param_names = List.map mangle_identifier params in
-    let body_stmts = translate_to_statements body in
-    [StatementLocalFunction (target_name, param_names, body_stmts)]
+    let body_stmts, ctx = translate_to_statements ctx body in
+    ([StatementLocalFunction (target_name, param_names, body_stmts)], ctx)
 
   | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
     (* Float nested let out:
        let target = (let inner = v in e)
        becomes: let inner = v; let target = e *)
     let inner_name = mangle_identifier inner_id in
-    let inner_stmts = generate_top_level_binding inner_name inner_value in
-    inner_stmts @ generate_top_level_binding target_name inner_body
+    let inner_stmts, ctx = generate_top_level_binding ctx inner_name inner_value in
+    let rest_stmts, ctx = generate_top_level_binding ctx target_name inner_body in
+    (inner_stmts @ rest_stmts, ctx)
 
   | Lambda.LambdaIfThenElse (condition, then_branch, else_branch) ->
     (* Transform if-in-value:
        let target = if c then e1 else e2
        becomes: local target; if c then target = e1 else target = e2 end *)
     let declaration = StatementLocal ([target_name], []) in
-    let condition_expr = translate_expression condition in
-    let then_stmts = translate_value_to_assignment target_name then_branch in
-    let else_stmts = translate_value_to_assignment target_name else_branch in
+    let condition_expr, ctx = translate_expression ctx condition in
+    let then_stmts, ctx = translate_value_to_assignment ctx target_name then_branch in
+    let else_stmts, ctx = translate_value_to_assignment ctx target_name else_branch in
     let if_statement = StatementIf ([(condition_expr, then_stmts)], Some else_stmts) in
-    [declaration; if_statement]
+    ([declaration; if_statement], ctx)
 
   | Lambda.LambdaSequence (first_expr, second_expr) ->
     (* Float sequence:
        let target = (e1; e2)
        becomes: e1; let target = e2 *)
-    let first_stmts = translate_to_effect first_expr in
-    first_stmts @ generate_top_level_binding target_name second_expr
+    let first_stmts, ctx = translate_to_effect ctx first_expr in
+    let rest_stmts, ctx = generate_top_level_binding ctx target_name second_expr in
+    (first_stmts @ rest_stmts, ctx)
 
   | _ ->
-    let value_expr = translate_expression value in
-    [StatementLocal ([target_name], [value_expr])]
+    let value_expr, ctx = translate_expression ctx value in
+    ([StatementLocal ([target_name], [value_expr])], ctx)
 
-let generate_top_level (lambda : Lambda.lambda) : block =
+(** Generate statements for a top-level lambda, threading context *)
+let generate_top_level ctx (lambda : Lambda.lambda) : block * context =
   match lambda with
   | Lambda.LambdaLet (identifier, value, Lambda.LambdaConstant Lambda.ConstantUnit) ->
     let target_name = mangle_identifier identifier in
-    generate_top_level_binding target_name value
+    generate_top_level_binding ctx target_name value
 
   | Lambda.LambdaLetRecursive (bindings, Lambda.LambdaConstant Lambda.ConstantUnit) ->
     let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
     let forward_decl = StatementLocal (names, []) in
-    let function_defs =
-      List.filter_map (fun (id, value) ->
+    let function_defs, ctx =
+      List.fold_left (fun (acc, ctx) (id, value) ->
         let name = mangle_identifier id in
         match value with
         | Lambda.LambdaFunction (params, body) ->
           let param_names = List.map mangle_identifier params in
-          let body_stmts = translate_to_statements body in
-          Some (StatementAssign ([LvalueVariable name],
-            [ExpressionFunction (param_names, body_stmts)]))
+          let body_stmts, ctx = translate_to_statements ctx body in
+          let stmt = StatementAssign ([LvalueVariable name],
+            [ExpressionFunction (param_names, body_stmts)]) in
+          (acc @ [stmt], ctx)
         | _ ->
-          let value_expr = translate_expression value in
-          Some (StatementAssign ([LvalueVariable name], [value_expr]))
-      ) bindings
+          let value_expr, ctx = translate_expression ctx value in
+          let stmt = StatementAssign ([LvalueVariable name], [value_expr]) in
+          (acc @ [stmt], ctx)
+      ) ([], ctx) bindings
     in
-    forward_decl :: function_defs
+    (forward_decl :: function_defs, ctx)
 
   | _ ->
-    translate_to_effect lambda
+    translate_to_effect ctx lambda
 
+(** Generate Lua code from a list of Lambda IR nodes.
+
+    This is the main entry point for code generation. It uses an empty
+    context and threads it through all translation functions, collecting
+    singleton registrations along the way.
+
+    @param lambdas The Lambda IR nodes to translate
+    @return A Lua chunk (list of statements) *)
 let generate lambdas =
-  reset_singletons ();
-  let body = List.concat_map generate_top_level lambdas in
-  let preamble = generate_singleton_preamble () in
+  let body, final_ctx =
+    List.fold_left (fun (acc, ctx) lambda ->
+      let stmts, ctx = generate_top_level ctx lambda in
+      (acc @ stmts, ctx)
+    ) ([], empty_context) lambdas
+  in
+  let preamble = generate_singleton_preamble final_ctx in
   preamble @ body
