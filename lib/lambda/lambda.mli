@@ -47,6 +47,15 @@ type lambda =
   | LambdaMakeRecord of (string * lambda) list
   | LambdaGetRecordField of string * lambda
   | LambdaRecordUpdate of lambda * (string * lambda) list
+  | LambdaModule of module_binding list
+  | LambdaModuleAccess of lambda * string
+  | LambdaFunctor of Identifier.t * lambda
+  | LambdaFunctorApply of lambda * lambda
+
+and module_binding = {
+  mb_name : string;
+  mb_value : lambda;
+}
 
 and switch_case = {
   switch_tag : int;

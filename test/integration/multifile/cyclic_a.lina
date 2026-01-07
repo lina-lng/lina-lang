@@ -1,0 +1,2 @@
+(* Cyclic dependency test: A uses B *)
+let use_b x = CyclicB.value + x

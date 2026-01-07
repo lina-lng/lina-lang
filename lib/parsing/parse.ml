@@ -23,6 +23,15 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.MATCH -> Parser.MATCH
   | Lexer.WITH -> Parser.WITH
   | Lexer.WHEN -> Parser.WHEN
+  (* Module system tokens *)
+  | Lexer.MODULE -> Parser.MODULE
+  | Lexer.STRUCT -> Parser.STRUCT
+  | Lexer.END -> Parser.END
+  | Lexer.SIG -> Parser.SIG
+  | Lexer.FUNCTOR -> Parser.FUNCTOR
+  | Lexer.OPEN -> Parser.OPEN
+  | Lexer.INCLUDE -> Parser.INCLUDE
+  | Lexer.VAL -> Parser.VAL
   | Lexer.LPAREN -> Parser.LPAREN
   | Lexer.RPAREN -> Parser.RPAREN
   | Lexer.LBRACKET -> Parser.LBRACKET

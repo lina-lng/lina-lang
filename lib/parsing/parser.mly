@@ -19,6 +19,7 @@ let make_binding pattern expression loc =
 %token <string> TYPE_VARIABLE
 %token TRUE FALSE
 %token LET REC IN FUN IF THEN ELSE TYPE OF AND AS MATCH WITH WHEN
+%token MODULE STRUCT END SIG FUNCTOR OPEN INCLUDE VAL
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
 %token STAR PLUS MINUS SLASH
@@ -49,6 +50,7 @@ let make_binding pattern expression loc =
 %on_error_reduce expression
 %on_error_reduce simple_expression
 %on_error_reduce application_expression
+%on_error_reduce postfix_expression
 %on_error_reduce atomic_expression
 %on_error_reduce pattern
 %on_error_reduce simple_pattern
@@ -65,6 +67,14 @@ structure_item:
     { make_located (StructureValue (rf, bindings)) $loc }
   | TYPE; decls = separated_nonempty_list(AND, type_declaration)
     { make_located (StructureType decls) $loc }
+  | MODULE; binding = module_binding
+    { make_located (StructureModule binding) $loc }
+  | MODULE; TYPE; name = UPPERCASE_IDENTIFIER; EQUAL; mt = module_type
+    { make_located (StructureModuleType (make_located name $loc(name), mt)) $loc }
+  | OPEN; path = module_path
+    { make_located (StructureOpen path) $loc }
+  | INCLUDE; me = module_expression
+    { make_located (StructureInclude me) $loc }
 
 rec_flag:
   | { Nonrecursive }
@@ -86,6 +96,23 @@ type_declaration:
       { type_name = make_located name $loc(name);
         type_parameters = params;
         type_kind = kind;
+        type_location = make_loc $loc }
+    }
+
+(* Type declaration in signatures - allows abstract types (no = definition) *)
+signature_type_declaration:
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; kind = type_declaration_kind
+    {
+      { type_name = make_located name $loc(name);
+        type_parameters = params;
+        type_kind = kind;
+        type_location = make_loc $loc }
+    }
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER
+    {
+      { type_name = make_located name $loc(name);
+        type_parameters = params;
+        type_kind = TypeAbstract;
         type_location = make_loc $loc }
     }
 
@@ -157,8 +184,6 @@ expression:
 
 simple_expression:
   | e = application_expression { e }
-  | e = simple_expression; DOT; field = LOWERCASE_IDENTIFIER
-    { make_located (ExpressionRecordAccess (e, field)) $loc }
   | MINUS; e = simple_expression %prec unary_minus
     {
       let zero = make_located (ExpressionConstant (ConstantInteger 0)) $loc in
@@ -184,13 +209,22 @@ simple_expression:
   | GREATER_EQUAL { ">=" }
 
 application_expression:
-  | e = atomic_expression { e }
-  | func = application_expression; arg = atomic_expression %prec APP
+  | e = postfix_expression { e }
+  | func = application_expression; arg = postfix_expression %prec APP
     {
       match func.value with
       | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [arg])) $loc
       | _ -> make_located (ExpressionApply (func, [arg])) $loc
     }
+
+(* Postfix expressions: record/field access binds tighter than application *)
+postfix_expression:
+  | e = atomic_expression { e }
+  | e = postfix_expression; DOT; field = LOWERCASE_IDENTIFIER
+    { make_located (ExpressionRecordAccess (e, field)) $loc }
+  | e = postfix_expression; DOT; field = UPPERCASE_IDENTIFIER
+    (* Allow M.N for nested module access - type checker handles the semantics *)
+    { make_located (ExpressionRecordAccess (e, field)) $loc }
 
 atomic_expression:
   | LPAREN; RPAREN
@@ -302,3 +336,130 @@ match_arm:
 type_record_field:
   | name = LOWERCASE_IDENTIFIER; COLON; ty = type_expression
     { { type_field_name = name; type_field_type = ty } }
+
+(* ==================== Module System ==================== *)
+
+(* Module paths: M or M.N.P *)
+module_path:
+  | names = separated_nonempty_list(DOT, UPPERCASE_IDENTIFIER)
+    { make_located names $loc }
+
+(* Module bindings: module M = ... or module F(X : S) = ... *)
+module_binding:
+  (* Simple: module M = ME *)
+  | name = UPPERCASE_IDENTIFIER; EQUAL; expr = module_expression
+    { { module_name = make_located name $loc(name);
+        module_params = [];
+        module_type = None;
+        module_expr = expr;
+        module_location = make_loc $loc } }
+  (* Sealed: module M : MT = ME *)
+  | name = UPPERCASE_IDENTIFIER; COLON; mt = module_type; EQUAL; expr = module_expression
+    { { module_name = make_located name $loc(name);
+        module_params = [];
+        module_type = Some mt;
+        module_expr = expr;
+        module_location = make_loc $loc } }
+  (* Functor shorthand: module F(X : S) = ME *)
+  | name = UPPERCASE_IDENTIFIER; params = nonempty_list(functor_parameter); EQUAL; expr = module_expression
+    { { module_name = make_located name $loc(name);
+        module_params = params;
+        module_type = None;
+        module_expr = expr;
+        module_location = make_loc $loc } }
+  (* Functor with result type: module F(X : S) : T = ME *)
+  | name = UPPERCASE_IDENTIFIER; params = nonempty_list(functor_parameter); COLON; mt = module_type; EQUAL; expr = module_expression
+    { { module_name = make_located name $loc(name);
+        module_params = params;
+        module_type = Some mt;
+        module_expr = expr;
+        module_location = make_loc $loc } }
+
+(* Functor parameters: (X : S) *)
+functor_parameter:
+  | LPAREN; name = UPPERCASE_IDENTIFIER; COLON; mt = module_type; RPAREN
+    { { functor_param_name = make_located name $loc(name); functor_param_type = mt } }
+
+(* Module expressions *)
+module_expression:
+  | me = simple_module_expression { me }
+  | FUNCTOR; params = nonempty_list(functor_parameter); ARROW; body = module_expression
+    { make_located (ModuleFunctor (params, body)) $loc }
+
+simple_module_expression:
+  | me = atomic_module_expression { me }
+  | func = simple_module_expression; LPAREN; arg = module_expression; RPAREN
+    { make_located (ModuleApply (func, arg)) $loc }
+
+atomic_module_expression:
+  | STRUCT; items = list(structure_item); END
+    { make_located (ModuleStructure items) $loc }
+  | path = module_path
+    { make_located (ModulePath path) $loc }
+  | LPAREN; me = module_expression; COLON; mt = module_type; RPAREN
+    { make_located (ModuleConstraint (me, mt)) $loc }
+  | LPAREN; me = module_expression; RPAREN
+    { me }
+
+(* Module types (signatures) *)
+module_type:
+  | mt = simple_module_type { mt }
+  | FUNCTOR; params = nonempty_list(functor_parameter); ARROW; result = module_type
+    { make_located (ModuleTypeFunctor (params, result)) $loc }
+
+simple_module_type:
+  | mt = atomic_module_type { mt }
+  | mt = simple_module_type; WITH; constraints = separated_nonempty_list(AND, with_constraint)
+    { make_located (ModuleTypeWith (mt, constraints)) $loc }
+
+atomic_module_type:
+  | SIG; items = list(signature_item); END
+    { make_located (ModuleTypeSignature items) $loc }
+  | path = module_path
+    { make_located (ModuleTypePath path) $loc }
+  | LPAREN; mt = module_type; RPAREN
+    { mt }
+
+(* Signature items *)
+signature_item:
+  | VAL; name = LOWERCASE_IDENTIFIER; COLON; ty = type_expression
+    { make_located (SignatureValue (make_located name $loc(name), ty)) $loc }
+  | TYPE; decls = separated_nonempty_list(AND, signature_type_declaration)
+    { make_located (SignatureType decls) $loc }
+  | MODULE; name = UPPERCASE_IDENTIFIER; COLON; mt = module_type
+    { make_located (SignatureModule (make_located name $loc(name), mt)) $loc }
+  | MODULE; TYPE; name = UPPERCASE_IDENTIFIER
+    { make_located (SignatureModuleType (make_located name $loc(name), None)) $loc }
+  | MODULE; TYPE; name = UPPERCASE_IDENTIFIER; EQUAL; mt = module_type
+    { make_located (SignatureModuleType (make_located name $loc(name), Some mt)) $loc }
+  | OPEN; path = module_path
+    { make_located (SignatureOpen path) $loc }
+  | INCLUDE; mt = module_type
+    { make_located (SignatureInclude mt) $loc }
+
+(* With constraints *)
+with_constraint:
+  | TYPE; path = longident_type; params = type_parameters; EQUAL; ty = type_expression
+    { WithType (path, params, ty) }
+  | MODULE; path = longident; EQUAL; target = module_path
+    { WithModule (path, target) }
+
+(* Longidents for qualified names *)
+longident:
+  | name = LOWERCASE_IDENTIFIER
+    { make_located (Lident name) $loc }
+  | li = longident; DOT; name = LOWERCASE_IDENTIFIER
+    { make_located (Ldot (li, name)) $loc }
+
+longident_type:
+  | name = LOWERCASE_IDENTIFIER
+    { make_located (Lident name) $loc }
+  | path = module_path; DOT; name = LOWERCASE_IDENTIFIER
+    { let rec build_longident = function
+        | [] -> failwith "empty module path"
+        | [m] -> make_located (Lident m) $loc(path)
+        | m :: rest ->
+            let inner = build_longident rest in
+            make_located (Ldot (inner, m)) $loc(path)
+      in
+      make_located (Ldot (build_longident (List.rev path.value), name)) $loc }

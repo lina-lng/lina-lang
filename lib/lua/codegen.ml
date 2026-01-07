@@ -159,6 +159,30 @@ let rec translate_expression (lambda : Lambda.lambda) : expression =
     let func_body = translate_to_statements (Lambda.LambdaRecordUpdate (base_expression, update_fields)) in
     ExpressionCall (ExpressionFunction ([], func_body), [])
 
+  | Lambda.LambdaModule bindings ->
+    (* Module as a Lua table with named fields *)
+    let fields = List.map (fun (binding : Lambda.module_binding) ->
+      FieldNamed (binding.mb_name, translate_expression binding.mb_value)
+    ) bindings in
+    ExpressionTable fields
+
+  | Lambda.LambdaModuleAccess (module_expr, field_name) ->
+    (* Module access as field access: M.x *)
+    let translated_module = translate_expression module_expr in
+    ExpressionField (translated_module, field_name)
+
+  | Lambda.LambdaFunctor (param_id, body) ->
+    (* Functor as a function: functor (X : S) -> ME becomes function(X) return ME end *)
+    let param_name = mangle_identifier param_id in
+    let body_stmts = translate_to_statements body in
+    ExpressionFunction ([param_name], body_stmts)
+
+  | Lambda.LambdaFunctorApply (func_expr, arg_expr) ->
+    (* Functor application: F(X) becomes F(X) function call *)
+    let translated_func = translate_expression func_expr in
+    let translated_arg = translate_expression arg_expr in
+    ExpressionCall (translated_func, [translated_arg])
+
 (* Helper to translate a value and assign it to a variable *)
 and translate_value_to_assignment name lambda : block =
   match lambda with

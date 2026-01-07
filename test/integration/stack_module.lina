@@ -1,0 +1,41 @@
+(* Test: More complex module - Stack implementation *)
+type 'a stack = Empty | Push of 'a * 'a stack
+
+module Stack = struct
+  let empty = Empty
+
+  let push x s = Push (x, s)
+
+  let pop s = match s with
+    | Empty -> Empty
+    | Push (_, rest) -> rest
+
+  let top_or default s = match s with
+    | Empty -> default
+    | Push (x, _) -> x
+
+  let is_empty s = match s with
+    | Empty -> 1
+    | Push _ -> 0
+end
+
+(* Build a stack: 3 -> 2 -> 1 -> Empty *)
+let s = Stack.empty
+let s = Stack.push 1 s
+let s = Stack.push 2 s
+let s = Stack.push 3 s
+
+let top1 = Stack.top_or 0 s
+let _ = print top1  (* Expected: 3 *)
+
+let s = Stack.pop s
+let top2 = Stack.top_or 0 s
+let _ = print top2  (* Expected: 2 *)
+
+let s = Stack.pop s
+let top3 = Stack.top_or 0 s
+let _ = print top3  (* Expected: 1 *)
+
+let s = Stack.pop s
+let empty = Stack.is_empty s
+let _ = print empty  (* Expected: 1 *)

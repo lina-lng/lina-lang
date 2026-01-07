@@ -23,6 +23,15 @@ type token =
   | MATCH
   | WITH
   | WHEN
+  (* Module system tokens *)
+  | MODULE
+  | STRUCT
+  | END
+  | SIG
+  | FUNCTOR
+  | OPEN
+  | INCLUDE
+  | VAL
   | LPAREN
   | RPAREN
   | LBRACKET
@@ -84,6 +93,15 @@ let keywords =
     ("match", MATCH);
     ("with", WITH);
     ("when", WHEN);
+    (* Module system keywords *)
+    ("module", MODULE);
+    ("struct", STRUCT);
+    ("end", END);
+    ("sig", SIG);
+    ("functor", FUNCTOR);
+    ("open", OPEN);
+    ("include", INCLUDE);
+    ("val", VAL);
   ]
 
 let keyword_or_identifier str =

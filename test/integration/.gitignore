@@ -1,0 +1,5 @@
+# Compiled Lua files
+*.lua
+
+# Output directory
+output/

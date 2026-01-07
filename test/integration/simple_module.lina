@@ -1,0 +1,9 @@
+(* Test: Simple module definition and access *)
+module Math = struct
+  let add x y = x + y
+  let sub x y = x - y
+  let mul x y = x * y
+end
+
+let result = Math.add 10 (Math.mul 3 4)
+let _ = print result  (* Expected: 22 *)

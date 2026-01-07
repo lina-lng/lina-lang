@@ -30,7 +30,8 @@ and row_field =
 
 and type_path =
   | PathBuiltin of builtin_type
-  | PathUser of string
+  | PathUser of string                    (* Local type: t *)
+  | PathDot of string list * string       (* Module type: M.t, M.N.t *)
 
 and builtin_type =
   | BuiltinInt

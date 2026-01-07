@@ -1,0 +1,15 @@
+(* Test: Module signatures and value hiding *)
+module Counter : sig
+  val make : int -> int
+  val inc : int -> int
+end = struct
+  let make n = n
+  let inc x = x + 1
+  let hidden_helper x = x * 2  (* Not exposed in signature *)
+end
+
+let c = Counter.make 0
+let c = Counter.inc c
+let c = Counter.inc c
+let c = Counter.inc c
+let _ = print c  (* Expected: 3 *)

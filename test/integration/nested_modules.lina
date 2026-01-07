@@ -1,0 +1,18 @@
+(* Test: Nested modules and deep access *)
+module Outer = struct
+  module Middle = struct
+    module Inner = struct
+      let deep = 42
+      let deeper x = x + 100
+    end
+  end
+  let value = 10
+end
+
+let a = Outer.value
+let b = Outer.Middle.Inner.deep
+let c = Outer.Middle.Inner.deeper 5
+
+let _ = print a  (* Expected: 10 *)
+let _ = print b  (* Expected: 42 *)
+let _ = print c  (* Expected: 105 *)

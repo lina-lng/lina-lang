@@ -1,0 +1,31 @@
+(* Test: Recursive functions inside modules *)
+
+(* Simple recursion *)
+module Fib = struct
+  let rec fib n =
+    if n <= 1 then n
+    else fib (n - 1) + fib (n - 2)
+end
+
+let result1 = Fib.fib 10
+let _ = print result1  (* Expected: 55 *)
+
+(* Factorial *)
+module Factorial = struct
+  let rec fact n =
+    if n <= 1 then 1
+    else n * fact (n - 1)
+end
+
+let result2 = Factorial.fact 5
+let _ = print result2  (* Expected: 120 *)
+
+(* Recursive with helpers *)
+module GCD = struct
+  let rec gcd a b =
+    if b == 0 then a
+    else gcd b (a - (a / b) * b)
+end
+
+let result3 = GCD.gcd 48 18
+let _ = print result3  (* Expected: 6 *)

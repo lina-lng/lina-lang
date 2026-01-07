@@ -1,0 +1,4 @@
+(* Main entry point - standalone test *)
+(* Each file is compiled independently *)
+let result = 10 + 5
+let _ = print result  (* Expected: 15 *)

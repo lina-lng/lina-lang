@@ -1,0 +1,16 @@
+(* Test: Functors - parameterized modules *)
+module MakeMultiplier(Config : sig val factor : int end) = struct
+  let multiply x = x * Config.factor
+  let double x = multiply x + multiply x
+end
+
+module Times2 = MakeMultiplier(struct let factor = 2 end)
+module Times5 = MakeMultiplier(struct let factor = 5 end)
+
+let a = Times2.multiply 10  (* 20 *)
+let b = Times5.multiply 10  (* 50 *)
+let c = Times2.double 3     (* 12 *)
+
+let _ = print a
+let _ = print b
+let _ = print c

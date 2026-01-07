@@ -1,0 +1,7 @@
+(* Math operations module - standalone, no external dependencies *)
+(* Each file is compiled independently *)
+let square x = x * x
+let cube x = x * x * x
+
+(* Test that this file compiles standalone *)
+let test = square 3

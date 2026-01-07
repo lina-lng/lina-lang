@@ -1,0 +1,31 @@
+(* Test: Modules with ADTs and pattern matching *)
+type 'a option = None | Some of 'a
+
+module Option = struct
+  let map f opt = match opt with
+    | None -> None
+    | Some x -> Some (f x)
+
+  let get_or default opt = match opt with
+    | None -> default
+    | Some x -> x
+
+  let is_some opt = match opt with
+    | None -> 0
+    | Some _ -> 1
+end
+
+let opt1 = Some 21
+let opt2 = Option.map (fun x -> x * 2) opt1
+let result1 = Option.get_or 0 opt2
+let _ = print result1  (* Expected: 42 *)
+
+let opt3 = None
+let result2 = Option.get_or 99 opt3
+let _ = print result2  (* Expected: 99 *)
+
+let result3 = Option.is_some opt1
+let _ = print result3  (* Expected: 1 *)
+
+let result4 = Option.is_some opt3
+let _ = print result4  (* Expected: 0 *)

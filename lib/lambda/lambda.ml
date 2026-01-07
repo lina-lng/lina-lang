@@ -47,6 +47,16 @@ type lambda =
   | LambdaMakeRecord of (string * lambda) list
   | LambdaGetRecordField of string * lambda
   | LambdaRecordUpdate of lambda * (string * lambda) list
+  (* Module constructs *)
+  | LambdaModule of module_binding list           (** Module as table of bindings *)
+  | LambdaModuleAccess of lambda * string         (** M.x - module field access *)
+  | LambdaFunctor of Identifier.t * lambda        (** functor (X : S) -> ME *)
+  | LambdaFunctorApply of lambda * lambda         (** F(X) - functor application *)
+
+and module_binding = {
+  mb_name : string;
+  mb_value : lambda;
+}
 
 and switch_case = {
   switch_tag : int;
@@ -232,7 +242,197 @@ let rec translate_pattern_binding pattern value body =
     let inner = List.fold_right (fun binding_function accumulator -> binding_function accumulator) bindings body in
     LambdaLet (temp_id, value, inner)
 
-let rec translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
+(** Translate a module path to a lambda expression *)
+let rec translate_module_path (path : Typing.Module_types.path) : lambda =
+  match path with
+  | Typing.Module_types.PathIdent id ->
+    (* Module identifier - use the same stamp from typing *)
+    LambdaVariable (Identifier.create_with_stamp id.ident_name id.ident_stamp)
+  | Typing.Module_types.PathDot (parent, name) ->
+    (* Nested module access: M.N *)
+    let parent_expr = translate_module_path parent in
+    LambdaModuleAccess (parent_expr, name)
+  | Typing.Module_types.PathApply (func_path, arg_path) ->
+    (* Functor application path: F(X) *)
+    let func_expr = translate_module_path func_path in
+    let arg_expr = translate_module_path arg_path in
+    LambdaFunctorApply (func_expr, arg_expr)
+
+(** Check if a structure needs complex translation (open, include, recursive bindings, or inter-function references) *)
+and structure_needs_complex_translation (structure : Typing.Typed_tree.typed_structure) : bool =
+  let open Typing.Typed_tree in
+  (* Collect all defined names and check for functions that might reference them *)
+  let defined_names = List.concat_map (fun item ->
+    match item.structure_item_desc with
+    | TypedStructureValue (_, bindings) ->
+      List.filter_map (fun (b : typed_binding) ->
+        match b.binding_pattern.pattern_desc with
+        | TypedPatternVariable id -> Some (Identifier.name id)
+        | _ -> None
+      ) bindings
+    | _ -> []
+  ) structure in
+  let has_multiple_functions =
+    let function_count = List.fold_left (fun count item ->
+      match item.structure_item_desc with
+      | TypedStructureValue (_, bindings) ->
+        count + List.length (List.filter (fun (b : typed_binding) ->
+          match b.binding_expression.expression_desc with
+          | TypedExpressionFunction _ -> true
+          | _ -> false
+        ) bindings)
+      | _ -> count
+    ) 0 structure in
+    function_count > 1 && List.length defined_names > 1
+  in
+  has_multiple_functions ||
+  List.exists (fun item ->
+    match item.structure_item_desc with
+    | TypedStructureOpen _ | TypedStructureInclude _ -> true
+    | TypedStructureValue (Parsing.Syntax_tree.Recursive, _) -> true  (* Recursive bindings need special handling *)
+    | _ -> false
+  ) structure
+
+(** Translate a structure with opens/includes by wrapping in an IIFE *)
+and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structure) : lambda =
+  let open Typing.Typed_tree in
+  (* Process items in order, collecting local bindings and final module fields *)
+  let rec process items local_bindings module_fields =
+    match items with
+    | [] ->
+      (* Build the module table from collected fields *)
+      let module_table = LambdaModule (List.rev module_fields) in
+      (* Wrap with local bindings - handle both single and recursive bindings *)
+      List.fold_left (fun body binding ->
+        match binding with
+        | `Single (id, value) -> LambdaLet (id, value, body)
+        | `Recursive bindings -> LambdaLetRecursive (bindings, body)
+      ) module_table local_bindings
+    | item :: rest ->
+      match item.structure_item_desc with
+      | TypedStructureValue (rec_flag, bindings) ->
+        (* For values, we need to define them as locals first *)
+        let value_bindings = List.filter_map (fun (binding : typed_binding) ->
+          match binding.binding_pattern.pattern_desc with
+          | TypedPatternVariable id ->
+            let value = translate_expression binding.binding_expression in
+            Some (id, value)
+          | _ -> None
+        ) bindings in
+        let field_refs = List.filter_map (fun (binding : typed_binding) ->
+          match binding.binding_pattern.pattern_desc with
+          | TypedPatternVariable id ->
+            Some { mb_name = Identifier.name id; mb_value = LambdaVariable id }
+          | _ -> None
+        ) bindings in
+        (* For recursive bindings, we need to wrap them with LambdaLetRecursive *)
+        let new_local_bindings = match rec_flag with
+          | Parsing.Syntax_tree.Recursive ->
+            (* Mark this group as recursive so we can emit LambdaLetRecursive later *)
+            (`Recursive value_bindings) :: local_bindings
+          | Parsing.Syntax_tree.Nonrecursive ->
+            (* Non-recursive bindings are added individually *)
+            List.fold_right (fun (id, v) acc -> (`Single (id, v)) :: acc) value_bindings local_bindings
+        in
+        process rest new_local_bindings (List.rev_append field_refs module_fields)
+      | TypedStructureType _ ->
+        process rest local_bindings module_fields
+      | TypedStructureModuleType _ ->
+        process rest local_bindings module_fields  (* Module types have no runtime representation *)
+      | TypedStructureModule (name_id, inner_mexpr) ->
+        let value = translate_module_expression inner_mexpr in
+        let new_local = `Single (name_id, value) in
+        let new_field = { mb_name = Identifier.name name_id; mb_value = LambdaVariable name_id } in
+        process rest (new_local :: local_bindings) (new_field :: module_fields)
+      | TypedStructureOpen (module_path, opened_bindings) ->
+        let module_expr = translate_module_path module_path in
+        let new_locals = List.map (fun (name, id) ->
+          `Single (id, LambdaModuleAccess (module_expr, name))
+        ) opened_bindings in
+        let new_fields = List.map (fun (_name, id) ->
+          { mb_name = Identifier.name id; mb_value = LambdaVariable id }
+        ) opened_bindings in
+        process rest (List.rev_append new_locals local_bindings) (List.rev_append new_fields module_fields)
+      | TypedStructureInclude (mexpr, included_bindings) ->
+        let translated_mexpr = translate_module_expression mexpr in
+        (* Create a temp for the included module *)
+        let temp_id = Identifier.create "_included" in
+        let temp_binding = `Single (temp_id, translated_mexpr) in
+        (* Create bindings that access the temp *)
+        let new_locals = List.map (fun (name, id) ->
+          `Single (id, LambdaModuleAccess (LambdaVariable temp_id, name))
+        ) included_bindings in
+        let new_fields = List.map (fun (_name, id) ->
+          { mb_name = Identifier.name id; mb_value = LambdaVariable id }
+        ) included_bindings in
+        process rest (List.rev_append new_locals (temp_binding :: local_bindings)) (List.rev_append new_fields module_fields)
+  in
+  process structure [] []
+
+(** Translate a typed module expression to lambda *)
+and translate_module_expression (mexpr : Typing.Typed_tree.typed_module_expression) : lambda =
+  let open Typing.Typed_tree in
+  match mexpr.module_desc with
+  | TypedModuleStructure structure ->
+    if structure_needs_complex_translation structure then
+      (* Use IIFE-style translation for structures with open/include *)
+      translate_structure_with_opens structure
+    else
+      (* Simple case: just create a table *)
+      let bindings = collect_module_bindings structure in
+      LambdaModule bindings
+  | TypedModulePath path ->
+    translate_module_path path
+  | TypedModuleFunctor (param, body) ->
+    (* Functor becomes a function taking a module and returning a module *)
+    let param_id = Identifier.create_with_stamp param.Typing.Module_types.param_name param.param_id.ident_stamp in
+    let translated_body = translate_module_expression body in
+    LambdaFunctor (param_id, translated_body)
+  | TypedModuleApply (func_mexpr, arg_mexpr) ->
+    (* Functor application becomes function application *)
+    let translated_func = translate_module_expression func_mexpr in
+    let translated_arg = translate_module_expression arg_mexpr in
+    LambdaFunctorApply (translated_func, translated_arg)
+  | TypedModuleConstraint (inner, _) ->
+    translate_module_expression inner
+
+(** Collect bindings from a structure for module table *)
+and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : module_binding list =
+  let open Typing.Typed_tree in
+  List.concat_map (fun item ->
+    match item.structure_item_desc with
+    | TypedStructureValue (_rec_flag, bindings) ->
+      List.filter_map (fun (binding : typed_binding) ->
+        match binding.binding_pattern.pattern_desc with
+        | TypedPatternVariable id ->
+          let name = Identifier.name id in
+          let value = translate_expression binding.binding_expression in
+          Some { mb_name = name; mb_value = value }
+        | _ -> None
+      ) bindings
+    | TypedStructureType _ ->
+      []  (* Types don't contribute runtime values *)
+    | TypedStructureModuleType _ ->
+      []  (* Module types don't contribute runtime values *)
+    | TypedStructureModule (name_id, inner_mexpr) ->
+      let value = translate_module_expression inner_mexpr in
+      [{ mb_name = Identifier.name name_id; mb_value = value }]
+    | TypedStructureOpen (module_path, opened_bindings) ->
+      (* Generate local bindings for opened values: local add = Math.add *)
+      let module_expr = translate_module_path module_path in
+      List.map (fun (name, id) ->
+        { mb_name = Identifier.name id; mb_value = LambdaModuleAccess (module_expr, name) }
+      ) opened_bindings
+    | TypedStructureInclude (mexpr, included_bindings) ->
+      (* For include inside a module, we inline the module's values directly *)
+      (* Each included value becomes a field that accesses the included module *)
+      let translated_mexpr = translate_module_expression mexpr in
+      List.map (fun (name, id) ->
+        { mb_name = Identifier.name id; mb_value = LambdaModuleAccess (translated_mexpr, name) }
+      ) included_bindings
+  ) structure
+
+and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   let open Typing.Typed_tree in
   match expr.expression_desc with
   | TypedExpressionVariable id ->
@@ -352,6 +552,11 @@ let rec translate_expression (expr : Typing.Typed_tree.typed_expression) : lambd
     in
     LambdaLet (scrutinee_id, translated_scrutinee, match_body)
 
+  | TypedExpressionModuleAccess (path, name) ->
+    (* Translate module path to lambda, then access the field *)
+    let module_expr = translate_module_path path in
+    LambdaModuleAccess (module_expr, name)
+
 let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : lambda list =
   let open Typing.Typed_tree in
   match item.structure_item_desc with
@@ -383,6 +588,30 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
 
   | TypedStructureType _ ->
     []
+
+  | TypedStructureModuleType _ ->
+    []  (* Module types have no runtime representation *)
+
+  | TypedStructureModule (module_id, mexpr) ->
+    (* Translate module definition as a let binding *)
+    let translated_module = translate_module_expression mexpr in
+    [LambdaLet (module_id, translated_module, LambdaConstant ConstantUnit)]
+
+  | TypedStructureOpen (module_path, opened_bindings) ->
+    (* Generate local bindings for opened values: local add = Math.add *)
+    let module_expr = translate_module_path module_path in
+    List.map (fun (name, id) ->
+      LambdaLet (id, LambdaModuleAccess (module_expr, name), LambdaConstant ConstantUnit)
+    ) opened_bindings
+
+  | TypedStructureInclude (mexpr, included_bindings) ->
+    (* Generate local bindings for included values *)
+    let module_temp = Identifier.create "_include" in
+    let module_binding = LambdaLet (module_temp, translate_module_expression mexpr, LambdaConstant ConstantUnit) in
+    let value_bindings = List.map (fun (name, id) ->
+      LambdaLet (id, LambdaModuleAccess (LambdaVariable module_temp, name), LambdaConstant ConstantUnit)
+    ) included_bindings in
+    module_binding :: value_bindings
 
 let translate_structure structure =
   List.concat_map translate_structure_item structure

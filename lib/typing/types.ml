@@ -39,7 +39,8 @@ and row_field =
 
 and type_path =
   | PathBuiltin of builtin_type
-  | PathUser of string
+  | PathUser of string                    (* Local type: t *)
+  | PathDot of string list * string       (* Module type: M.t, M.N.t *)
 
 and builtin_type =
   | BuiltinInt
@@ -224,6 +225,8 @@ and pp_type_path fmt = function
   | PathBuiltin BuiltinBool -> Format.fprintf fmt "bool"
   | PathBuiltin BuiltinUnit -> Format.fprintf fmt "unit"
   | PathUser name -> Format.fprintf fmt "%s" name
+  | PathDot (modules, name) ->
+    Format.fprintf fmt "%s.%s" (String.concat "." modules) name
 
 let pp_type_scheme fmt scheme =
   if scheme.quantified_variables = [] then

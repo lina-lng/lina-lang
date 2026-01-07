@@ -1,0 +1,8 @@
+(* Utility module - standalone, no external dependencies *)
+(* Each file is compiled independently *)
+let double x = x + x
+let triple x = x + x + x
+let square x = x * x
+
+(* Test that this file compiles standalone *)
+let test = double 5

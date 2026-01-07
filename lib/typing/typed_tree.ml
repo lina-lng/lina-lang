@@ -39,6 +39,7 @@ and typed_expression_desc =
   | TypedExpressionRecordAccess of typed_expression * string
   | TypedExpressionRecordUpdate of typed_expression * typed_record_field list
   | TypedExpressionMatch of typed_expression * typed_match_arm list
+  | TypedExpressionModuleAccess of Module_types.path * string  (** M.x, M.N.x *)
 
 and typed_record_field = {
   typed_field_name : string;
@@ -66,5 +67,23 @@ type typed_structure_item = {
 and typed_structure_item_desc =
   | TypedStructureValue of Parsing.Syntax_tree.recursion_flag * typed_binding list
   | TypedStructureType of Types.type_declaration list
+  | TypedStructureModule of Common.Identifier.t * typed_module_expression
+  | TypedStructureModuleType of string * Module_types.module_type  (** module type S = MT *)
+  | TypedStructureOpen of Module_types.path * (string * Common.Identifier.t) list  (** path, opened value bindings *)
+  | TypedStructureInclude of typed_module_expression * (string * Common.Identifier.t) list  (** module expr, included value bindings *)
 
-type typed_structure = typed_structure_item list
+(** Typed module expression *)
+and typed_module_expression = {
+  module_desc : typed_module_desc;
+  module_type : Module_types.module_type;
+  module_location : Location.t;
+}
+
+and typed_module_desc =
+  | TypedModuleStructure of typed_structure
+  | TypedModulePath of Module_types.path
+  | TypedModuleFunctor of Module_types.functor_parameter * typed_module_expression
+  | TypedModuleApply of typed_module_expression * typed_module_expression
+  | TypedModuleConstraint of typed_module_expression * Module_types.module_type
+
+and typed_structure = typed_structure_item list

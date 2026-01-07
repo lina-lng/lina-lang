@@ -1,0 +1,45 @@
+(* Test: open and include *)
+
+(* Test open - brings values into scope *)
+module Math = struct
+  let add x y = x + y
+  let sub x y = x - y
+end
+
+open Math
+let result1 = add 10 (sub 20 5)
+let _ = print result1  (* Expected: 25 *)
+
+(* Test open nested module *)
+module Outer = struct
+  module Inner = struct
+    let value = 42
+  end
+end
+
+open Outer.Inner
+let result2 = value
+let _ = print result2  (* Expected: 42 *)
+
+(* Test include - brings values into new module *)
+module Base = struct
+  let x = 1
+  let y = 2
+end
+
+module Extended = struct
+  include Base
+  let z = x + y
+end
+
+let result3 = Extended.z
+let _ = print result3  (* Expected: 3 *)
+
+(* Test include with override *)
+module Override = struct
+  include Base
+  let x = 100
+end
+
+let result4 = Override.x
+let _ = print result4  (* Expected: 100 *)

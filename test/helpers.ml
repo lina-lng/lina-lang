@@ -93,6 +93,9 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
     | Syntax_tree.ExpressionMatch (scrutinee, arms) ->
         Syntax_tree.ExpressionMatch
           (strip_expr_locations scrutinee, List.map strip_match_arm_locations arms)
+    | Syntax_tree.ExpressionModuleAccess (path, name) ->
+        Syntax_tree.ExpressionModuleAccess
+          ({ path with location = Location.none }, name)
   in
   { value = desc; location = Location.none }
 
@@ -145,6 +148,11 @@ let strip_structure_item_locations (item : Syntax_tree.structure_item) :
         Syntax_tree.StructureValue (rf, List.map strip_binding_locations bindings)
     | Syntax_tree.StructureType decls ->
         Syntax_tree.StructureType (List.map strip_type_decl_locations decls)
+    (* Module items - not yet implemented in tests *)
+    | Syntax_tree.StructureModule _ -> failwith "Module support not yet implemented"
+    | Syntax_tree.StructureModuleType _ -> failwith "Module type support not yet implemented"
+    | Syntax_tree.StructureOpen _ -> failwith "Open support not yet implemented"
+    | Syntax_tree.StructureInclude _ -> failwith "Include support not yet implemented"
   in
   { value = desc; location = Location.none }
 

@@ -10,6 +10,350 @@ let type_of_constant = function
   | ConstantBoolean _ -> type_bool
   | ConstantUnit -> type_unit
 
+(** Convert a syntax module path to an internal path *)
+let module_path_to_internal_path base_id path_modules =
+  match path_modules with
+  | [] -> Module_types.PathIdent base_id
+  | _ :: rest ->
+    List.fold_left (fun acc name ->
+      Module_types.PathDot (acc, name)
+    ) (Module_types.PathIdent base_id) rest
+
+(** Look up a module by path. Returns (base_module_binding, final_module_binding) *)
+let lookup_module_path env path_modules loc =
+  match path_modules with
+  | [] -> Compiler_error.type_error loc "Empty module path"
+  | [name] ->
+    begin match Environment.find_module name env with
+    | Some binding -> (binding, binding)
+    | None -> Compiler_error.type_error loc (Printf.sprintf "Unbound module: %s" name)
+    end
+  | first :: rest ->
+    let rec follow_path mod_type path =
+      match path with
+      | [] -> Compiler_error.type_error loc "Empty path in module lookup"
+      | [name] ->
+        begin match mod_type with
+        | Module_types.ModTypeSig sig_ ->
+          begin match Module_types.find_module_in_sig name sig_ with
+          | Some mty ->
+            let mod_id = Module_types.fresh_module_ident name in
+            Module_types.{ mod_id; mod_type = mty; mod_alias = None }
+          | None ->
+            Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" name)
+          end
+        | _ ->
+          Compiler_error.type_error loc "Expected a signature"
+        end
+      | name :: rest ->
+        begin match mod_type with
+        | Module_types.ModTypeSig sig_ ->
+          begin match Module_types.find_module_in_sig name sig_ with
+          | Some mty -> follow_path mty rest
+          | None ->
+            Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" name)
+          end
+        | _ ->
+          Compiler_error.type_error loc "Expected a signature"
+        end
+    in
+    begin match Environment.find_module first env with
+    | Some base_binding ->
+      let final_binding = follow_path base_binding.mod_type rest in
+      (base_binding, final_binding)
+    | None -> Compiler_error.type_error loc (Printf.sprintf "Unbound module: %s" first)
+    end
+
+(** Check a syntax module type and convert to semantic module type *)
+let rec check_module_type env (mty : module_type) : Module_types.module_type =
+  let loc = mty.Location.location in
+  match mty.Location.value with
+  | ModuleTypePath module_path ->
+    (* Module type path like S or M.S *)
+    let path_modules = module_path.Location.value in
+    begin match path_modules with
+    | [name] ->
+      (* Simple module type name *)
+      begin match Environment.find_module_type name env with
+      | Some (Some resolved_mty) -> resolved_mty
+      | Some None ->
+        Compiler_error.type_error loc (Printf.sprintf "Module type %s is abstract" name)
+      | None ->
+        Compiler_error.type_error loc (Printf.sprintf "Unbound module type: %s" name)
+      end
+    | path_parts ->
+      (* Qualified path like M.N.S: module path is M.N, type name is S *)
+      let rec split_last = function
+        | [] -> failwith "impossible: empty path"
+        | [x] -> ([], x)
+        | x :: rest ->
+          let (prefix, last) = split_last rest in
+          (x :: prefix, last)
+      in
+      let (module_path, type_name) = split_last path_parts in
+      begin match module_path with
+      | [] ->
+        (* Should never happen since pattern [name] is handled above *)
+        Compiler_error.type_error loc "Invalid module type path"
+      | _ ->
+        let (_, final_binding) = lookup_module_path env module_path loc in
+        begin match final_binding.mod_type with
+        | Module_types.ModTypeSig sig_ ->
+          begin match Module_types.find_module_type_in_sig type_name sig_ with
+          | Some (Some resolved) -> resolved
+          | Some None ->
+            Compiler_error.type_error loc (Printf.sprintf "Module type %s is abstract" type_name)
+          | None ->
+            Compiler_error.type_error loc (Printf.sprintf "Module type %s not found in module" type_name)
+          end
+        | Module_types.ModTypeFunctor _ ->
+          Compiler_error.type_error loc "Cannot find module type in functor"
+        | Module_types.ModTypeIdent _ ->
+          Compiler_error.type_error loc "Cannot find module type in abstract module"
+        end
+      end
+    end
+
+  | ModuleTypeSignature sig_items ->
+    (* Explicit signature: sig ... end *)
+    let semantic_sig = check_signature env sig_items in
+    Module_types.ModTypeSig semantic_sig
+
+  | ModuleTypeFunctor (params, result) ->
+    (* Functor type: functor (X : S) -> MT *)
+    begin match params with
+    | [] ->
+      Compiler_error.type_error loc "Functor type must have at least one parameter"
+    | [param] ->
+      let param_name = param.functor_param_name.Location.value in
+      let param_mty = check_module_type env param.functor_param_type in
+      let param_id = Module_types.fresh_module_ident param_name in
+      let param_binding = Module_types.{
+        mod_id = param_id;
+        mod_type = param_mty;
+        mod_alias = None;
+      } in
+      (* Add parameter to environment for checking result type *)
+      let result_env = Environment.add_module param_name param_binding env in
+      let result_mty = check_module_type result_env result in
+      let semantic_param = Module_types.{
+        param_name;
+        param_id;
+        param_type = param_mty;
+      } in
+      Module_types.ModTypeFunctor (semantic_param, result_mty)
+    | param :: rest ->
+      (* Multiple parameters - desugar to nested functor type *)
+      let inner_type = {
+        Location.value = ModuleTypeFunctor (rest, result);
+        location = loc;
+      } in
+      let single_param_type = {
+        Location.value = ModuleTypeFunctor ([param], inner_type);
+        location = loc;
+      } in
+      check_module_type env single_param_type
+    end
+
+  | ModuleTypeWith (base_mty, constraints) ->
+    (* Check the base module type *)
+    let base = check_module_type env base_mty in
+    (* Apply each constraint *)
+    List.fold_left (fun mty constraint_ ->
+      apply_with_constraint env mty constraint_ loc
+    ) base constraints
+
+(** Apply a single with-constraint to a module type *)
+and apply_with_constraint env mty (constraint_ : Parsing.Syntax_tree.with_constraint) loc =
+  match constraint_ with
+  | WithType (path, params, _type_expr) ->
+    apply_type_constraint env mty path params loc
+  | WithModule (_path, _target) ->
+    (* Module constraints (with module M = N) - not implemented yet *)
+    Compiler_error.type_error loc "With module constraints not yet implemented"
+
+(** Apply a type constraint: with type path = type_expr *)
+and apply_type_constraint env mty path params loc =
+  match mty with
+  | Module_types.ModTypeSig sig_ ->
+    let refined_sig = refine_type_in_sig env sig_ path params loc in
+    Module_types.ModTypeSig refined_sig
+  | Module_types.ModTypeFunctor _ ->
+    Compiler_error.type_error loc "Cannot apply with-constraint to functor type"
+  | Module_types.ModTypeIdent _ ->
+    Compiler_error.type_error loc "Cannot apply with-constraint to abstract module type"
+
+(** Refine a type in a signature by path *)
+and refine_type_in_sig env sig_ (path : Parsing.Syntax_tree.longident) params loc =
+  match path.Location.value with
+  | Lident name ->
+    (* Direct type: with type t = ... *)
+    let found = ref false in
+    let refined_sig = List.map (fun item ->
+      match item with
+      | Module_types.SigType (n, decl) when n = name ->
+        found := true;
+        (* Verify parameter count matches *)
+        if List.length params <> List.length decl.declaration_parameters then
+          Compiler_error.type_error loc
+            (Printf.sprintf "Type %s has %d parameters but constraint has %d"
+              name (List.length decl.declaration_parameters) (List.length params));
+        (* The declaration stays abstract but we record the constraint was applied *)
+        (* In a full implementation, we would store the manifest type *)
+        item
+      | _ -> item
+    ) sig_ in
+    if not !found then
+      Compiler_error.type_error loc (Printf.sprintf "Type %s not found in signature" name);
+    refined_sig
+  | Ldot (prefix, name) ->
+    (* Nested: with type M.t = ... - find module M, then refine type t inside *)
+    refine_type_in_nested_sig env sig_ prefix name params loc
+
+(** Refine a type in a nested module signature *)
+and refine_type_in_nested_sig env sig_ (prefix : Parsing.Syntax_tree.longident) type_name params loc =
+  (* Get the module name from the prefix *)
+  match prefix.Location.value with
+  | Lident mod_name ->
+    (* Simple module prefix: with type M.t = ... *)
+    let found = ref false in
+    let refined_sig = List.map (fun item ->
+      match item with
+      | Module_types.SigModule (n, inner_mty) when n = mod_name ->
+        found := true;
+        let type_path = { Location.value = Parsing.Syntax_tree.Lident type_name; location = loc } in
+        let refined_inner = apply_type_constraint env inner_mty type_path params loc in
+        Module_types.SigModule (n, refined_inner)
+      | _ -> item
+    ) sig_ in
+    if not !found then
+      Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" mod_name);
+    refined_sig
+  | Ldot (deeper_prefix, mod_name) ->
+    (* Deeper nesting: with type M.N.t = ... - recursively find M, then N.t *)
+    let found = ref false in
+    let refined_sig = List.map (fun item ->
+      match item with
+      | Module_types.SigModule (n, inner_mty) when n = mod_name ->
+        found := true;
+        let remaining_path = { Location.value = Parsing.Syntax_tree.Ldot (deeper_prefix, type_name); location = loc } in
+        let refined_inner = apply_type_constraint env inner_mty remaining_path params loc in
+        Module_types.SigModule (n, refined_inner)
+      | _ -> item
+    ) sig_ in
+    if not !found then
+      Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" mod_name);
+    refined_sig
+
+(** Check a syntax signature and convert to semantic signature *)
+and check_signature env (sig_items : signature) : Module_types.signature =
+  List.filter_map (fun item -> check_signature_item env item) sig_items
+
+(** Check a signature item *)
+and check_signature_item env (item : signature_item) : Module_types.signature_item option =
+  let loc = item.Location.location in
+  match item.Location.value with
+  | SignatureValue (name, type_expr) ->
+    let name_str = name.Location.value in
+    (* Convert syntax type to semantic type *)
+    let ty = check_type_expression env type_expr in
+    let scheme = generalize ty in
+    let val_desc = Module_types.{
+      val_type = scheme;
+      val_location = loc;
+    } in
+    Some (Module_types.SigValue (name_str, val_desc))
+
+  | SignatureType type_decls ->
+    (* For now, just record the type name - full type declaration processing
+       would require access to process_type_declaration which is defined later *)
+    begin match type_decls with
+    | decl :: _ ->
+      let name = decl.type_name.Location.value in
+      (* Create fresh type variables for each parameter *)
+      let type_params =
+        List.map (fun _ ->
+          match Types.new_type_variable () with
+          | Types.TypeVariable tv -> tv
+          | _ -> assert false
+        ) decl.type_parameters
+      in
+      (* Determine the kind based on the syntax *)
+      let kind = match decl.type_kind with
+        | Parsing.Syntax_tree.TypeAbstract -> Types.DeclarationAbstract
+        | Parsing.Syntax_tree.TypeVariant _ -> Types.DeclarationAbstract (* Simplified for signatures *)
+      in
+      (* Create a type declaration for the signature *)
+      let sig_decl = Types.{
+        declaration_name = name;
+        declaration_parameters = type_params;
+        declaration_kind = kind;
+      } in
+      Some (Module_types.SigType (name, sig_decl))
+    | [] -> None
+    end
+
+  | SignatureModule (name, mty) ->
+    let name_str = name.Location.value in
+    let semantic_mty = check_module_type env mty in
+    Some (Module_types.SigModule (name_str, semantic_mty))
+
+  | SignatureModuleType (name, mty_opt) ->
+    let name_str = name.Location.value in
+    let semantic_mty_opt = Option.map (check_module_type env) mty_opt in
+    Some (Module_types.SigModuleType (name_str, semantic_mty_opt))
+
+  | SignatureOpen _path ->
+    (* Open in signature - skip for now *)
+    None
+
+  | SignatureInclude _mty ->
+    (* Include in signature - skip for now *)
+    None
+
+(** Check a type expression from a signature and convert to semantic type *)
+and check_type_expression env (ty_expr : Parsing.Syntax_tree.type_expression) : type_expression =
+  let loc = ty_expr.Location.location in
+  match ty_expr.Location.value with
+  | TypeVariable name ->
+    (* For now, create a fresh type variable *)
+    let _ = name in
+    new_type_variable ()
+
+  | TypeConstructor (name, args) ->
+    let arg_types = List.map (check_type_expression env) args in
+    begin match name with
+    | "int" -> type_int
+    | "float" -> type_float
+    | "string" -> type_string
+    | "bool" -> type_bool
+    | "unit" -> type_unit
+    | _ ->
+      (* Look up the type in environment *)
+      begin match Environment.find_type name env with
+      | Some decl ->
+        TypeConstructor (PathUser decl.declaration_name, arg_types)
+      | None ->
+        Compiler_error.type_error loc (Printf.sprintf "Unbound type: %s" name)
+      end
+    end
+
+  | TypeArrow (arg_ty, ret_ty) ->
+    let arg = check_type_expression env arg_ty in
+    let ret = check_type_expression env ret_ty in
+    TypeArrow (arg, ret)
+
+  | TypeTuple tys ->
+    let types = List.map (check_type_expression env) tys in
+    TypeTuple types
+
+  | TypeRecord (fields, is_open) ->
+    let row_fields = List.map (fun field ->
+      (field.type_field_name, RowFieldPresent (check_type_expression env field.type_field_type))
+    ) fields in
+    let row_more = if is_open then new_type_variable () else TypeRowEmpty in
+    TypeRecord { row_fields; row_more }
+
 let rec infer_pattern env (pattern : pattern) =
   let loc = pattern.Location.location in
   match pattern.Location.value with
@@ -378,23 +722,82 @@ let rec infer_expression env (expr : expression) =
     }
 
   | ExpressionRecordAccess (record_expression, field_name) ->
-    (* Infer the record expression type *)
-    let typed_record_expression = infer_expression env record_expression in
-    (* The field type is a fresh variable *)
-    let field_type = new_type_variable () in
-    (* The row tail is a fresh variable (for row polymorphism) *)
-    let row_tail = new_type_variable () in
-    (* Expected record type: { field_name: field_type; .. } *)
-    let expected_record_type = TypeRecord {
-      row_fields = [(field_name, RowFieldPresent field_type)];
-      row_more = row_tail;
-    } in
-    Unification.unify loc expected_record_type typed_record_expression.expression_type;
-    {
-      expression_desc = TypedExpressionRecordAccess (typed_record_expression, field_name);
-      expression_type = field_type;
-      expression_location = loc;
-    }
+    (* Try to extract a module path from nested record accesses *)
+    let rec extract_module_path expr =
+      match expr.Location.value with
+      | ExpressionConstructor (name, None) ->
+        (* Check if this is a module *)
+        begin match Environment.find_module name env with
+        | Some _ -> Some [name]
+        | None -> None
+        end
+      | ExpressionRecordAccess (inner, component) ->
+        (* Recursively check if inner is a module path *)
+        begin match extract_module_path inner with
+        | Some path -> Some (path @ [component])
+        | None -> None
+        end
+      | _ -> None
+    in
+    (* Check if record_expression is a module path *)
+    begin match extract_module_path record_expression with
+    | Some path_components ->
+      (* This is module access: look up field in the module at path *)
+      let (base_binding, mod_binding) = lookup_module_path env path_components loc in
+      (* Build internal path from the ROOT module's id *)
+      let internal_path = module_path_to_internal_path base_binding.mod_id path_components in
+      begin match mod_binding.Module_types.mod_type with
+      | Module_types.ModTypeSig sig_ ->
+        (* First check if field_name is a submodule *)
+        begin match Module_types.find_module_in_sig field_name sig_ with
+        | Some _submod_type ->
+          (* field_name is a submodule - return a module access to it *)
+          let extended_path = Module_types.PathDot (internal_path, field_name) in
+          (* Return a module access expression *)
+          (* The type will be the submodule type, but we represent it as unit for now *)
+          (* since we don't have proper module values at the expression level *)
+          {
+            expression_desc = TypedExpressionModuleAccess (extended_path, field_name);
+            expression_type = TypeConstructor (PathBuiltin BuiltinUnit, []);
+            expression_location = loc;
+          }
+        | None ->
+          (* Check if field_name is a value *)
+          begin match Module_types.find_value_in_sig field_name sig_ with
+          | Some val_desc ->
+            let ty = Types.instantiate val_desc.val_type in
+            {
+              expression_desc = TypedExpressionModuleAccess (internal_path, field_name);
+              expression_type = ty;
+              expression_location = loc;
+            }
+          | None ->
+            let path_str = String.concat "." path_components in
+            Compiler_error.type_error loc
+              (Printf.sprintf "Value %s not found in module %s" field_name path_str)
+          end
+        end
+      | Module_types.ModTypeFunctor _ ->
+        Compiler_error.type_error loc "Cannot access value in a functor"
+      | Module_types.ModTypeIdent _ ->
+        Compiler_error.type_error loc "Cannot access value in an abstract module type"
+      end
+    | None ->
+      (* Normal record access *)
+      let typed_record_expression = infer_expression env record_expression in
+      let field_type = new_type_variable () in
+      let row_tail = new_type_variable () in
+      let expected_record_type = TypeRecord {
+        row_fields = [(field_name, RowFieldPresent field_type)];
+        row_more = row_tail;
+      } in
+      Unification.unify loc expected_record_type typed_record_expression.expression_type;
+      {
+        expression_desc = TypedExpressionRecordAccess (typed_record_expression, field_name);
+        expression_type = field_type;
+        expression_location = loc;
+      }
+    end
 
   | ExpressionRecordUpdate (base_expression, update_fields) ->
     (* Infer the base record expression type *)
@@ -464,6 +867,30 @@ let rec infer_expression env (expr : expression) =
       expression_type = result_type;
       expression_location = loc;
     }
+
+  | ExpressionModuleAccess (module_path, value_name) ->
+    let path_modules = module_path.Location.value in
+    let (base_binding, mod_binding) = lookup_module_path env path_modules loc in
+    begin match mod_binding.Module_types.mod_type with
+    | Module_types.ModTypeSig sig_ ->
+      begin match Module_types.find_value_in_sig value_name sig_ with
+      | Some val_desc ->
+        let ty = Types.instantiate val_desc.val_type in
+        let internal_path = module_path_to_internal_path base_binding.mod_id path_modules in
+        {
+          expression_desc = TypedExpressionModuleAccess (internal_path, value_name);
+          expression_type = ty;
+          expression_location = loc;
+        }
+      | None ->
+        Compiler_error.type_error loc
+          (Printf.sprintf "Value %s not found in module" value_name)
+      end
+    | Module_types.ModTypeFunctor _ ->
+      Compiler_error.type_error loc "Cannot access value in a functor"
+    | Module_types.ModTypeIdent _ ->
+      Compiler_error.type_error loc "Cannot access value in an abstract module type"
+    end
 
 and infer_bindings env rec_flag bindings =
   match rec_flag with
@@ -578,7 +1005,7 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
   in
   (type_declaration, env)
 
-let infer_structure_item env (item : structure_item) =
+let rec infer_structure_item env (item : structure_item) =
   match item.Location.value with
   | StructureValue (rec_flag, bindings) ->
     let typed_bindings, env = infer_bindings env rec_flag bindings in
@@ -601,7 +1028,280 @@ let infer_structure_item env (item : structure_item) =
     } in
     (typed_item, env)
 
-let infer_structure env structure =
+  | StructureModule module_binding ->
+    let module_name = module_binding.module_name.Location.value in
+    (* Desugar functor shorthand: module F(X : S) = ME becomes module F = functor (X : S) -> ME *)
+    let actual_expr = match module_binding.module_params with
+      | [] -> module_binding.module_expr
+      | params ->
+        let loc = module_binding.module_location in
+        { Location.value = ModuleFunctor (params, module_binding.module_expr); location = loc }
+    in
+    let typed_mexpr, env = infer_module_expression env actual_expr in
+    (* Check if there's a signature constraint *)
+    let final_mexpr, final_mty =
+      match module_binding.module_type with
+      | None ->
+        (* No constraint - use inferred type *)
+        (typed_mexpr, typed_mexpr.module_type)
+      | Some constraint_mty ->
+        (* Check the constraint and perform signature matching *)
+        let spec_mty = check_module_type env constraint_mty in
+        begin match Signature_match.match_module_type item.Location.location typed_mexpr.module_type spec_mty with
+        | Ok () ->
+          (* Matching succeeded - use the constrained type *)
+          let constrained_mexpr = {
+            Typed_tree.module_desc = TypedModuleConstraint (typed_mexpr, spec_mty);
+            module_type = spec_mty;
+            module_location = typed_mexpr.module_location;
+          } in
+          (constrained_mexpr, spec_mty)
+        | Error err ->
+          Compiler_error.type_error item.Location.location
+            (Printf.sprintf "Module %s does not match signature: %s"
+              module_name (Signature_match.format_match_error err))
+        end
+    in
+    (* Register the module in the environment *)
+    let mod_id = Module_types.fresh_module_ident module_name in
+    let mod_binding = Module_types.{
+      mod_id;
+      mod_type = final_mty;
+      mod_alias = None;
+    } in
+    let env = Environment.add_module module_name mod_binding env in
+    let module_id = Identifier.create_with_stamp module_name mod_id.Module_types.ident_stamp in
+    let typed_item = {
+      structure_item_desc = TypedStructureModule (module_id, final_mexpr);
+      structure_item_location = item.Location.location;
+    } in
+    (typed_item, env)
+
+  | StructureModuleType (name_loc, mty) ->
+    (* Check the module type expression *)
+    let name = name_loc.Location.value in
+    let resolved_mty = check_module_type env mty in
+    (* Add the module type to the environment *)
+    let env = Environment.add_module_type name (Some resolved_mty) env in
+    let typed_item = {
+      structure_item_desc = TypedStructureModuleType (name, resolved_mty);
+      structure_item_location = item.Location.location;
+    } in
+    (typed_item, env)
+
+  | StructureOpen module_path ->
+    let path_modules = module_path.Location.value in
+    let (base_binding, mod_binding) = lookup_module_path env path_modules item.Location.location in
+    begin match mod_binding.Module_types.mod_type with
+    | Module_types.ModTypeSig sig_ ->
+      let (env, opened_bindings) = Environment.open_module sig_ env in
+      let path = module_path_to_internal_path base_binding.mod_id path_modules in
+      let typed_item = {
+        structure_item_desc = TypedStructureOpen (path, opened_bindings);
+        structure_item_location = item.Location.location;
+      } in
+      (typed_item, env)
+    | Module_types.ModTypeFunctor _ ->
+      Compiler_error.type_error item.Location.location "Cannot open a functor"
+    | Module_types.ModTypeIdent _ ->
+      Compiler_error.type_error item.Location.location "Cannot open an abstract module type"
+    end
+
+  | StructureInclude mexpr ->
+    (* Type-check the included module expression *)
+    let (typed_mexpr, env) = infer_module_expression env mexpr in
+    begin match typed_mexpr.module_type with
+    | Module_types.ModTypeSig sig_ ->
+      (* Bring all signature contents into scope (like open) *)
+      let (env, included_bindings) = Environment.open_module sig_ env in
+      let typed_item = {
+        structure_item_desc = TypedStructureInclude (typed_mexpr, included_bindings);
+        structure_item_location = item.Location.location;
+      } in
+      (typed_item, env)
+    | Module_types.ModTypeFunctor _ ->
+      Compiler_error.type_error item.Location.location "Cannot include a functor"
+    | Module_types.ModTypeIdent _ ->
+      Compiler_error.type_error item.Location.location "Cannot include an abstract module type"
+    end
+
+(** Infer the type of a module expression *)
+and infer_module_expression env (mexpr : module_expression) =
+  let loc = mexpr.Location.location in
+  match mexpr.Location.value with
+  | ModuleStructure structure ->
+    (* Type-check the structure and infer its signature *)
+    let typed_structure, _inner_env = infer_structure env structure in
+    let sig_ = signature_of_typed_structure typed_structure in
+    let module_type = Module_types.ModTypeSig sig_ in
+    let typed_mexpr = {
+      Typed_tree.module_desc = TypedModuleStructure typed_structure;
+      module_type;
+      module_location = loc;
+    } in
+    (typed_mexpr, env)
+
+  | ModulePath module_path ->
+    let path_modules = module_path.Location.value in
+    let (base_binding, mod_binding) = lookup_module_path env path_modules loc in
+    let internal_path = module_path_to_internal_path base_binding.mod_id path_modules in
+    let typed_mexpr = {
+      Typed_tree.module_desc = TypedModulePath internal_path;
+      module_type = mod_binding.mod_type;
+      module_location = loc;
+    } in
+    (typed_mexpr, env)
+
+  | ModuleFunctor (params, body) ->
+    (* Type-check functor: functor (X : S) -> ME *)
+    begin match params with
+    | [] ->
+      Compiler_error.type_error loc "Functor must have at least one parameter"
+    | [param] ->
+      (* Single parameter functor *)
+      let param_name = param.functor_param_name.Location.value in
+      let param_mty = check_module_type env param.functor_param_type in
+      (* Create a module identity for the parameter *)
+      let param_id = Module_types.fresh_module_ident param_name in
+      let param_binding = Module_types.{
+        mod_id = param_id;
+        mod_type = param_mty;
+        mod_alias = None;
+      } in
+      (* Add parameter to environment for checking body *)
+      let body_env = Environment.add_module param_name param_binding env in
+      (* Type-check the body *)
+      let (typed_body, _body_env) = infer_module_expression body_env body in
+      (* Build the functor parameter *)
+      let semantic_param = Module_types.{
+        param_name;
+        param_id;
+        param_type = param_mty;
+      } in
+      (* Build functor type *)
+      let functor_type = Module_types.ModTypeFunctor (semantic_param, typed_body.module_type) in
+      let typed_mexpr = {
+        Typed_tree.module_desc = TypedModuleFunctor (semantic_param, typed_body);
+        module_type = functor_type;
+        module_location = loc;
+      } in
+      (typed_mexpr, env)
+    | param :: rest ->
+      (* Multiple parameters - desugar to nested functors *)
+      let inner_functor = {
+        Location.value = ModuleFunctor (rest, body);
+        location = loc;
+      } in
+      let single_param_functor = {
+        Location.value = ModuleFunctor ([param], inner_functor);
+        location = loc;
+      } in
+      infer_module_expression env single_param_functor
+    end
+
+  | ModuleApply (func_expr, arg_expr) ->
+    (* Type-check functor application: F(M) *)
+    let (typed_func, env) = infer_module_expression env func_expr in
+    let (typed_arg, env) = infer_module_expression env arg_expr in
+    (* Check that func has functor type *)
+    begin match typed_func.module_type with
+    | Module_types.ModTypeFunctor (param, result_mty) ->
+      (* Check that argument matches parameter type *)
+      begin match typed_arg.module_type, param.param_type with
+      | Module_types.ModTypeSig arg_sig, Module_types.ModTypeSig param_sig ->
+        begin match Signature_match.match_signature loc arg_sig param_sig with
+        | Ok () ->
+          (* Matching succeeded - return result type *)
+          (* For applicative semantics, we'd substitute the argument path into result_mty *)
+          (* For now, just use the result type directly *)
+          let typed_mexpr = {
+            Typed_tree.module_desc = TypedModuleApply (typed_func, typed_arg);
+            module_type = result_mty;
+            module_location = loc;
+          } in
+          (typed_mexpr, env)
+        | Error err ->
+          Compiler_error.type_error loc
+            (Printf.sprintf "Functor argument does not match parameter: %s"
+              (Signature_match.format_match_error err))
+        end
+      | _ ->
+        (* Non-signature types - just pass through *)
+        let typed_mexpr = {
+          Typed_tree.module_desc = TypedModuleApply (typed_func, typed_arg);
+          module_type = result_mty;
+          module_location = loc;
+        } in
+        (typed_mexpr, env)
+      end
+    | _ ->
+      Compiler_error.type_error loc "Cannot apply non-functor module"
+    end
+
+  | ModuleConstraint (inner_mexpr, constraint_mty) ->
+    (* Type-check the inner expression *)
+    let (typed_inner, env) = infer_module_expression env inner_mexpr in
+    (* Check the constraint module type *)
+    let spec_mty = check_module_type env constraint_mty in
+    (* Match implementation against specification *)
+    begin match Signature_match.match_module_type loc typed_inner.module_type spec_mty with
+    | Ok () ->
+      (* Matching succeeded - return with the constrained (more restrictive) type *)
+      let typed_mexpr = {
+        Typed_tree.module_desc = TypedModuleConstraint (typed_inner, spec_mty);
+        module_type = spec_mty;  (* Use spec type to hide implementation details *)
+        module_location = loc;
+      } in
+      (typed_mexpr, env)
+    | Error err ->
+      Compiler_error.type_error loc (Signature_match.format_match_error err)
+    end
+
+(** Extract a signature from a typed structure *)
+and signature_of_typed_structure (structure : typed_structure) : Module_types.signature =
+  List.concat_map signature_items_of_typed_structure_item structure
+
+(** Extract signature items from a single structure item (may return multiple items) *)
+and signature_items_of_typed_structure_item (item : typed_structure_item) : Module_types.signature_item list =
+  match item.structure_item_desc with
+  | TypedStructureValue (_rec_flag, bindings) ->
+    (* Extract signature items for ALL bindings (including mutual recursion) *)
+    List.filter_map (fun (binding : typed_binding) ->
+      match binding.binding_pattern.pattern_desc with
+      | TypedPatternVariable id ->
+        let name = Identifier.name id in
+        let scheme = Types.generalize binding.binding_expression.expression_type in
+        let val_desc = Module_types.{
+          val_type = scheme;
+          val_location = item.structure_item_location;
+        } in
+        Some (Module_types.SigValue (name, val_desc))
+      | _ -> None
+    ) bindings
+
+  | TypedStructureType type_decls ->
+    (* Return ALL type declarations as signature items *)
+    List.map (fun decl ->
+      Module_types.SigType (decl.declaration_name, decl)
+    ) type_decls
+
+  | TypedStructureModule (name_id, typed_mexpr) ->
+    [Module_types.SigModule (Identifier.name name_id, typed_mexpr.module_type)]
+
+  | TypedStructureModuleType (name, mty) ->
+    [Module_types.SigModuleType (name, Some mty)]
+
+  | TypedStructureOpen _ ->
+    []  (* Open doesn't contribute to the signature *)
+
+  | TypedStructureInclude (mexpr, _included_bindings) ->
+    (* Include contributes all items from the included module's signature *)
+    begin match mexpr.module_type with
+    | Module_types.ModTypeSig included_sig -> included_sig
+    | _ -> []
+    end
+
+and infer_structure env structure =
   let typed_items, env =
     List.fold_left (fun (items, env) item ->
       let typed_item, env = infer_structure_item env item in

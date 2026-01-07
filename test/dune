@@ -49,3 +49,11 @@
  (modules test_codegen)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Module system integration tests
+(library
+ (name test_modules)
+ (libraries parsing typing lambda lua driver common unix)
+ (modules test_modules)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
