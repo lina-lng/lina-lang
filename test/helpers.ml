@@ -155,6 +155,7 @@ let strip_structure_item_locations (item : Syntax_tree.structure_item) :
     | Syntax_tree.StructureModuleType _ -> failwith "Module type support not yet implemented"
     | Syntax_tree.StructureOpen _ -> failwith "Open support not yet implemented"
     | Syntax_tree.StructureInclude _ -> failwith "Include support not yet implemented"
+    | Syntax_tree.StructureExternal _ -> failwith "External support not yet implemented"
   in
   { value = desc; location = Location.none }
 

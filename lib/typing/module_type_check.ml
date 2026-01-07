@@ -433,3 +433,15 @@ and check_signature_item env (item : signature_item) : Module_types.signature_it
   | SignatureInclude _mty ->
     (* Include in signature - skip for now *)
     None
+
+  | SignatureExternal ext_decl ->
+    (* External declarations in signatures contribute value bindings *)
+    let name = ext_decl.external_name.Location.value in
+    let ty = check_type_expression env ext_decl.external_type in
+    (* For signatures, we don't validate FFI attributes - just record the type *)
+    let scheme = Types.generalize ty in
+    let val_desc = Module_types.{
+      val_type = scheme;
+      val_location = loc;
+    } in
+    Some (Module_types.SigValue (name, val_desc))

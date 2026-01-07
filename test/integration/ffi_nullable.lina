@@ -1,0 +1,46 @@
+-- FFI Nullable Return Tests
+-- Tests @return(nullable) attribute compiles correctly
+
+type 'a option = None | Some of 'a
+
+-- Simulated lookup that returns nullable value
+-- In real usage, this would call a Lua function that can return nil
+
+@send @return(nullable)
+external lookup : { get : string -> int } -> string -> int option = "get"
+
+-- Helper to test nullable return with pattern matching
+let safe_get obj key =
+  match lookup obj key with
+  | None -> 0
+  | Some n -> n
+
+-- Test the handling function compiles correctly with option type
+let handle_nullable opt_val =
+  match opt_val with
+  | None -> 0 - 1
+  | Some x -> x + 1
+
+-- Create an option manually to test the function
+let test_none = None
+let test_some = Some 42
+
+let result1 = handle_nullable test_none
+let result2 = handle_nullable test_some
+
+let _ = print result1
+let _ = print result2
+
+-- @return(nullable) with @val - compiles correctly
+@val @return(nullable)
+external find_global : string -> int option = "rawget"
+
+-- @return(nullable) with @module - compiles correctly
+@module("table") @return(nullable)
+external table_remove : { x : int } -> int -> int option = "remove"
+
+-- The important test: @return(nullable) generates correct wrapper code
+-- that converts nil to None and values to Some
+-- (This is verified by the codegen tests in test_ffi.ml)
+
+let _ = print 42

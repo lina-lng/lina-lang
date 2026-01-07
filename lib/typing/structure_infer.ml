@@ -62,6 +62,16 @@ let make_module_type_lookup env =
 let setup_signature_matching env =
   Signature_match.set_module_type_lookup (make_module_type_lookup env)
 
+(** Wrap the return type of a function in option for @return(nullable).
+    For example: (int -> string) becomes (int -> string option) *)
+let rec wrap_return_in_option ty =
+  match ty with
+  | Types.TypeArrow (arg, ret) ->
+    Types.TypeArrow (arg, wrap_return_in_option ret)
+  | _ ->
+    (* Wrap the final return type in option *)
+    Types.TypeConstructor (Types.PathLocal "option", [ty])
+
 (** Process a type declaration and add it to the environment *)
 let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declaration) =
   let type_params =
@@ -242,6 +252,55 @@ let rec infer_structure_item env (item : structure_item) =
     | Module_types.ModTypeIdent _ ->
       Compiler_error.type_error item.Location.location "Cannot include an abstract module type"
     end
+
+  | StructureExternal ext_decl ->
+    (* Type-check the external declaration *)
+    let name = ext_decl.external_name.Location.value in
+    let location = ext_decl.external_location in
+    (* Check the type expression *)
+    let external_type = Module_type_check.check_type_expression env ext_decl.external_type in
+    (* Compute arity from type (count function arrows) *)
+    let rec compute_arity ty =
+      match ty with
+      | Types.TypeArrow (_, ret) -> 1 + compute_arity ret
+      | _ -> 0
+    in
+    let arity = compute_arity external_type in
+    (* Build and validate the FFI spec *)
+    let ffi_spec = match Typing_ffi.Check.build_ffi_spec
+      ~attrs:ext_decl.external_attributes
+      ~primitive:ext_decl.external_primitive
+      ~arity
+      ~location
+    with
+    | Ok spec -> spec
+    | Error err ->
+      Compiler_error.type_error location (Typing_ffi.Check.error_message err)
+    in
+    (* If @return(nullable), wrap the return type in option *)
+    let final_type =
+      if ffi_spec.Typing_ffi.Types.ffi_return_nullable then
+        wrap_return_in_option external_type
+      else
+        external_type
+    in
+    (* Create identifier for this external *)
+    let external_id = Identifier.create name in
+    (* Add to environment as a value binding *)
+    let scheme = Types.generalize final_type in
+    let env = Environment.add_value name external_id scheme env in
+    (* Create the typed external *)
+    let typed_ext = {
+      Typed_tree.external_id;
+      external_type = final_type;
+      external_spec = ffi_spec;
+      external_location = location;
+    } in
+    let typed_item = {
+      structure_item_desc = TypedStructureExternal typed_ext;
+      structure_item_location = item.Location.location;
+    } in
+    (typed_item, env)
 
 (** [infer_module_expression env mexpr] infers the type of a module expression.
 
@@ -443,6 +502,16 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
     | Module_types.ModTypeSig included_sig -> included_sig
     | _ -> []
     end
+
+  | TypedStructureExternal ext ->
+    (* External contributes a value to the signature *)
+    let name = Identifier.name ext.external_id in
+    let scheme = Types.generalize ext.external_type in
+    let val_desc = Module_types.{
+      val_type = scheme;
+      val_location = ext.external_location;
+    } in
+    [Module_types.SigValue (name, val_desc)]
 
 (** [infer_structure env structure] infers types for a complete structure.
 

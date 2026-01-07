@@ -1,5 +1,5 @@
 (library
  (name typing)
  (public_name lina.typing)
- (libraries common parsing)
+ (libraries common parsing typing_ffi)
  (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

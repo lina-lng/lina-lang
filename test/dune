@@ -137,3 +137,11 @@
  (modules test_map_row_types)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; FFI attribute and code generation tests
+(library
+ (name test_ffi)
+ (libraries parsing typing lua driver common)
+ (modules test_ffi)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

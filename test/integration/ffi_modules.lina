@@ -1,0 +1,79 @@
+-- FFI Modules Tests
+-- Tests FFI externals within module definitions
+
+-- FFI in a module structure
+module Socket = struct
+  type t
+
+  @module("socket")
+  external tcp : unit -> t = "tcp"
+
+  @send
+  external close : t -> unit = "close"
+
+  @send
+  external connect : t -> string -> int -> unit = "connect"
+end
+
+-- FFI in a module signature
+module type MATH = sig
+  external sin : float -> float = "sin"
+  external cos : float -> float = "cos"
+  external floor : float -> int = "floor"
+end
+
+-- Implementing a signature with FFI
+module Math : MATH = struct
+  @val @scope("math")
+  external sin : float -> float = "sin"
+
+  @val @scope("math")
+  external cos : float -> float = "cos"
+
+  @val @scope("math")
+  external floor : float -> int = "floor"
+end
+
+-- Using module-scoped FFI
+let angle = 3.14
+let sin_val = Math.sin angle
+let cos_val = Math.cos angle
+
+let _ = print (Math.floor sin_val)
+
+-- Nested module with FFI
+module OS = struct
+  module Time = struct
+    @val @scope("os")
+    external now : unit -> int = "time"
+
+    @val @scope("os")
+    external clock : unit -> float = "clock"
+  end
+
+  module Env = struct
+    type 'a option = None | Some of 'a
+
+    @val @scope("os") @return(nullable)
+    external getenv : string -> string option = "getenv"
+  end
+end
+
+let current_time = OS.Time.now ()
+let _ = print current_time
+
+-- FFI with abstract type across modules
+module Buffer = struct
+  type t
+
+  @module("string")
+  external create : string -> int -> t = "rep"
+
+  @send
+  external length : t -> int = "len"
+end
+
+-- Using the buffer module
+let buf = Buffer.create "x" 5
+let buf_len = Buffer.length buf
+let _ = print buf_len

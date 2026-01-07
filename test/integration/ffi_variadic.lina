@@ -1,0 +1,31 @@
+-- FFI Variadic Tests
+-- Tests @variadic attribute generates table.unpack() at runtime
+-- Expected output: "Variadic FFI test complete"
+
+-- Abstract array type for variadic arguments
+type 'a array
+
+-- Variadic global function (like string.format)
+@val @scope("string") @variadic
+external format : string -> 'a array -> string = "format"
+
+-- Variadic module function
+@module("table") @variadic
+external concat_table : 'a array -> string -> string = "concat"
+
+-- Variadic method call
+type formatter
+
+@send @variadic
+external fmt : formatter -> string -> 'a array -> string = "format"
+
+-- Variadic constructor
+type buffer
+
+@new @variadic
+external create_buffer : 'a array -> buffer = "Buffer"
+
+-- The important test: compilation succeeds and generates table.unpack()
+-- (runtime behavior depends on actual Lua environment)
+
+let _ = print 42

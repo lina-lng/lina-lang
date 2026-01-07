@@ -65,6 +65,107 @@ let translate_primitive prim args =
   | _ ->
     ExpressionNil
 
+(** Wrap the last argument with table.unpack() for variadic FFI calls.
+
+    When a function is marked @variadic, the last argument is expected to be
+    an array/table that should be spread as multiple arguments to the Lua
+    function using table.unpack().
+
+    @param args The translated Lua expressions for arguments
+    @param is_variadic Whether this is a variadic call
+    @return Arguments with last argument wrapped in table.unpack() if variadic *)
+let wrap_variadic_args (args : expression list) (is_variadic : bool) : expression list =
+  if not is_variadic then args
+  else
+    match List.rev args with
+    | [] -> args  (* No arguments to unpack *)
+    | last :: preceding ->
+      let unpack_call = ExpressionCall (
+        ExpressionField (ExpressionVariable "table", "unpack"),
+        [last]
+      ) in
+      List.rev (unpack_call :: preceding)
+
+(** Generate FFI call expression based on the spec and translated arguments.
+
+    @param spec The FFI specification with kind, lua name, etc.
+    @param args The translated Lua expressions for arguments *)
+let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list) : expression =
+  let open Typing_ffi.Types in
+  let lua_name = spec.ffi_lua_name in
+  let is_variadic = spec.ffi_is_variadic in
+  match spec.ffi_kind with
+  | FFIKindModule module_path ->
+    (* require("module").name(args) - with variadic support *)
+    let wrapped_args = wrap_variadic_args args is_variadic in
+    let require_call = ExpressionCall (ExpressionVariable "require", [ExpressionString module_path]) in
+    let func = ExpressionField (require_call, lua_name) in
+    ExpressionCall (func, wrapped_args)
+
+  | FFIKindGlobal scope_path ->
+    (* Global with optional scope: name(args) or scope.name(args) - with variadic support *)
+    let wrapped_args = wrap_variadic_args args is_variadic in
+    let func = match scope_path with
+      | [] -> ExpressionVariable lua_name
+      | path ->
+        let base = ExpressionVariable (List.hd path) in
+        let scoped = List.fold_left (fun acc name -> ExpressionField (acc, name)) base (List.tl path) in
+        ExpressionField (scoped, lua_name)
+    in
+    ExpressionCall (func, wrapped_args)
+
+  | FFIKindMethod ->
+    (* Method call: receiver:name(rest_args) - with variadic support for rest_args *)
+    begin match args with
+    | receiver :: rest_args ->
+      let wrapped_rest = wrap_variadic_args rest_args is_variadic in
+      ExpressionMethodCall (receiver, lua_name, wrapped_rest)
+    | [] ->
+      (* Should not happen - validation ensures arity >= 1 *)
+      ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI method call with no receiver"])
+    end
+
+  | FFIKindGetter ->
+    (* Property getter: obj.field - fixed arity, no variadic *)
+    begin match args with
+    | [obj] -> ExpressionField (obj, lua_name)
+    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI getter with wrong arity"])
+    end
+
+  | FFIKindSetter ->
+    (* Property setter: obj.field = value (returns nil) - fixed arity, no variadic *)
+    (* We need to generate an IIFE: (function() obj.field = value; return nil end)() *)
+    begin match args with
+    | [obj; value] ->
+      let assign = StatementAssign ([LvalueField (obj, lua_name)], [value]) in
+      let return_nil = StatementReturn [ExpressionNil] in
+      ExpressionCall (ExpressionFunction ([], [assign; return_nil]), [])
+    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI setter with wrong arity"])
+    end
+
+  | FFIKindIndexGetter ->
+    (* Index getter: obj[key] - fixed arity, no variadic *)
+    begin match args with
+    | [obj; key] -> ExpressionIndex (obj, key)
+    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI index getter with wrong arity"])
+    end
+
+  | FFIKindIndexSetter ->
+    (* Index setter: obj[key] = value (returns nil) - fixed arity, no variadic *)
+    begin match args with
+    | [obj; key; value] ->
+      let assign = StatementAssign ([LvalueIndex (obj, key)], [value]) in
+      let return_nil = StatementReturn [ExpressionNil] in
+      ExpressionCall (ExpressionFunction ([], [assign; return_nil]), [])
+    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI index setter with wrong arity"])
+    end
+
+  | FFIKindConstructor ->
+    (* Constructor: Class.new(args) - with variadic support *)
+    let wrapped_args = wrap_variadic_args args is_variadic in
+    let constructor = ExpressionField (ExpressionVariable lua_name, "new") in
+    ExpressionCall (constructor, wrapped_args)
+
 (** Translate a lambda expression to a Lua expression, threading context.
     Returns (expression, updated_context). *)
 let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context =
@@ -171,6 +272,40 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let translated_func, ctx = translate_expression ctx func_expr in
     let translated_arg, ctx = translate_expression ctx arg_expr in
     (ExpressionCall (translated_func, [translated_arg]), ctx)
+
+  | Lambda.LambdaExternalCall (spec, args) ->
+    (* Translate arguments first *)
+    let translated_args, ctx = translate_expression_list ctx args in
+    (* Generate the FFI call based on the spec *)
+    let call_expr = generate_ffi_call spec translated_args in
+    (* Wrap result if @return(nullable) is specified *)
+    if spec.Typing_ffi.Types.ffi_return_nullable then
+      (* Generate:
+         (function()
+           local _result = ffi_call()
+           if _result == nil then
+             return {_tag = 0}  -- None
+           else
+             return {_tag = 1, _0 = _result}  -- Some
+           end
+         end)() *)
+      let result_name = "_ffi_result" in
+      let result_var = ExpressionVariable result_name in
+      let none_expr = ExpressionTable [FieldNamed ("_tag", ExpressionNumber 0.0)] in
+      let some_expr = ExpressionTable [
+        FieldNamed ("_tag", ExpressionNumber 1.0);
+        FieldNamed ("_0", result_var)
+      ] in
+      let result_decl = StatementLocal ([result_name], [call_expr]) in
+      let nil_check = ExpressionBinaryOp (OpEqual, result_var, ExpressionNil) in
+      let if_stmt = StatementIf (
+        [(nil_check, [StatementReturn [none_expr]])],
+        Some [StatementReturn [some_expr]]
+      ) in
+      let iife = ExpressionCall (ExpressionFunction ([], [result_decl; if_stmt]), []) in
+      (iife, ctx)
+    else
+      (call_expr, ctx)
 
 (** Helper to translate a list of expressions.
     Uses cons + reverse for O(n) instead of O(n²) list append. *)

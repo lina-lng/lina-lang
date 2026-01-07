@@ -1,6 +1,6 @@
 (library
  (name lambda)
  (public_name lina.lambda)
- (libraries common typing parsing)
+ (libraries common typing parsing typing_ffi)
  (wrapped false)
  (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

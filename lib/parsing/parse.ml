@@ -32,6 +32,9 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.OPEN -> Parser.OPEN
   | Lexer.INCLUDE -> Parser.INCLUDE
   | Lexer.VAL -> Parser.VAL
+  (* FFI tokens *)
+  | Lexer.EXTERNAL -> Parser.EXTERNAL
+  | Lexer.AT -> Parser.AT
   | Lexer.LPAREN -> Parser.LPAREN
   | Lexer.RPAREN -> Parser.RPAREN
   | Lexer.LBRACKET -> Parser.LBRACKET

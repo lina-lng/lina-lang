@@ -64,6 +64,18 @@ type typed_structure_item = {
   structure_item_location : Location.t;
 }
 
+(** Typed external declaration for FFI *)
+and typed_external = {
+  external_id : Common.Identifier.t;
+    (** Unique identifier for this external binding *)
+  external_type : Types.type_expression;
+    (** The type of the external value *)
+  external_spec : Typing_ffi.Types.ffi_spec;
+    (** The validated FFI specification *)
+  external_location : Location.t;
+    (** Source location for error reporting *)
+}
+
 and typed_structure_item_desc =
   | TypedStructureValue of Parsing.Syntax_tree.recursion_flag * typed_binding list
   | TypedStructureType of Types.type_declaration list
@@ -71,6 +83,7 @@ and typed_structure_item_desc =
   | TypedStructureModuleType of string * Module_types.module_type  (** module type S = MT *)
   | TypedStructureOpen of Module_types.path * (string * Common.Identifier.t) list  (** path, opened value bindings *)
   | TypedStructureInclude of typed_module_expression * (string * Common.Identifier.t) list  (** module expr, included value bindings *)
+  | TypedStructureExternal of typed_external  (** FFI external declaration *)
 
 (** Typed module expression *)
 and typed_module_expression = {

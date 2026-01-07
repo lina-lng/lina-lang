@@ -1,0 +1,5 @@
+(library
+ (name parsing_ffi)
+ (public_name lina.parsing.ffi)
+ (libraries common)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

@@ -1,0 +1,34 @@
+-- FFI Basic Tests
+-- Tests @module, @val, @scope, @send attributes
+
+-- @module: Import from a Lua module
+@module("math")
+external floor : float -> int = "floor"
+
+-- @val: Global function
+@val
+external print_val : string -> unit = "print"
+
+-- @val @scope: Scoped global
+@val @scope("math")
+external sin : float -> float = "sin"
+
+@val @scope("math")
+external cos : float -> float = "cos"
+
+-- @send: Method call
+@send
+external upper : string -> string = "upper"
+
+@send
+external len : string -> int = "len"
+
+-- Test using the externals
+let floored = floor 3.7
+let sine = sin 0.0
+let cosine = cos 0.0
+let greeting = upper "hello"
+let length = len "test"
+
+-- Print a result to verify it works
+let _ = print floored

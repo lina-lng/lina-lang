@@ -111,6 +111,8 @@ type lambda =
       (** Functor: [functor (X) -> body] *)
   | LambdaFunctorApply of lambda * lambda
       (** Functor application: [F(A)] *)
+  | LambdaExternalCall of Typing_ffi.Types.ffi_spec * lambda list
+      (** FFI external call with arguments (translated to inline Lua) *)
 
 (** Module binding in a module expression. *)
 and module_binding = {

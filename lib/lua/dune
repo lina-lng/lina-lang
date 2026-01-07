@@ -1,5 +1,5 @@
 (library
  (name lua)
  (public_name lina.lua)
- (libraries common lambda)
+ (libraries common lambda typing_ffi)
  (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

@@ -32,6 +32,9 @@ type token =
   | OPEN
   | INCLUDE
   | VAL
+  (* FFI tokens *)
+  | EXTERNAL
+  | AT
   | LPAREN
   | RPAREN
   | LBRACKET
@@ -102,6 +105,8 @@ let keywords =
     ("open", OPEN);
     ("include", INCLUDE);
     ("val", VAL);
+    (* FFI keywords *)
+    ("external", EXTERNAL);
   ]
 
 let keyword_or_identifier str =
@@ -328,9 +333,6 @@ let rec next_token state =
     update_location state;
     skip_block_comment 0 lexbuf state.current_location;
     next_token state
-  | "()" ->
-    update_location state;
-    (LPAREN, state.current_location)
   | '(' ->
     update_location state;
     (LPAREN, state.current_location)
@@ -385,6 +387,9 @@ let rec next_token state =
   | '|' ->
     update_location state;
     (BAR, state.current_location)
+  | '@' ->
+    update_location state;
+    (AT, state.current_location)
   | '_' ->
     update_location state;
     (UNDERSCORE, state.current_location)

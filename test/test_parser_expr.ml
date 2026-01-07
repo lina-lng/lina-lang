@@ -58,8 +58,12 @@ let%expect_test "unit literal" =
   print_endline (show_parsed_expr "()");
   [%expect
     {|
-    File "<string>", line 1, characters 2-2:
-    Parse error: Syntax error
+    { Location.value = (Syntax_tree.ExpressionConstant Syntax_tree.ConstantUnit);
+      location =
+      { Location.start_pos =
+        { Location.filename = ""; line = 0; column = 0; offset = 0 };
+        end_pos = { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+      }
     |}]
 
 (* Variables *)
@@ -453,8 +457,30 @@ let%expect_test "if without else" =
   print_endline (show_parsed_expr "if true then ()");
   [%expect
     {|
-    File "<string>", line 1, characters 15-15:
-    Parse error: Syntax error
+    { Location.value =
+      (Syntax_tree.ExpressionIf (
+         { Location.value =
+           (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantBoolean true));
+           location =
+           { Location.start_pos =
+             { Location.filename = ""; line = 0; column = 0; offset = 0 };
+             end_pos =
+             { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+           },
+         { Location.value =
+           (Syntax_tree.ExpressionConstant Syntax_tree.ConstantUnit);
+           location =
+           { Location.start_pos =
+             { Location.filename = ""; line = 0; column = 0; offset = 0 };
+             end_pos =
+             { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+           },
+         None));
+      location =
+      { Location.start_pos =
+        { Location.filename = ""; line = 0; column = 0; offset = 0 };
+        end_pos = { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+      }
     |}]
 
 (* Functions *)

@@ -1,0 +1,69 @@
+-- FFI Comprehensive Tests
+-- Tests abstract types and various FFI attributes
+
+-- Abstract types for FFI handles
+type socket
+type 'a handle
+
+-- @module: Import from a Lua module
+@module("socket")
+external tcp : unit -> socket = "tcp"
+
+@module("io")
+external open_file : string -> handle = "open"
+
+-- @val: Global function
+@val
+external print_val : string -> unit = "print"
+
+-- @val @scope: Scoped global
+@val @scope("math")
+external sin : float -> float = "sin"
+
+@val @scope("math")
+external cos : float -> float = "cos"
+
+@val @scope("os")
+external time : unit -> int = "time"
+
+-- @send: Method call
+@send
+external connect : socket -> string -> int -> unit = "connect"
+
+@send
+external upper : string -> string = "upper"
+
+@send
+external len : string -> int = "len"
+
+-- @get: Property getter
+@get
+external get_x : { x : int; y : int } -> int = "x"
+
+-- @set: Property setter
+@set
+external set_x : { x : int; y : int } -> int -> unit = "x"
+
+-- @get_index: Index getter
+@get_index
+external arr_get : { x : int } -> string -> int = ""
+
+-- @set_index: Index setter
+@set_index
+external arr_set : { x : int } -> string -> int -> unit = ""
+
+-- @new: Constructor
+@new
+external create_array : int -> { x : int } = "Array"
+
+-- @as: Override Lua name
+@val @as("print")
+external log : string -> unit = "ignored"
+
+-- Test usage
+let greeting = upper "hello"
+let length = len "test"
+let point = { x = 10; y = 20 }
+let x_val = get_x point
+
+let _ = print x_val

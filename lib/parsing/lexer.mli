@@ -52,6 +52,8 @@ type token =
   | OPEN                  (** [open] keyword *)
   | INCLUDE               (** [include] keyword *)
   | VAL                   (** [val] keyword *)
+  | EXTERNAL              (** [external] keyword for FFI declarations *)
+  | AT                    (** [@] for FFI attributes *)
   | LPAREN                (** [(] or [()] *)
   | RPAREN                (** [)] *)
   | LBRACKET              (** [\[] *)

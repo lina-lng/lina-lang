@@ -1,0 +1,16 @@
+-- FFI Property Access Tests
+-- Tests @get attribute
+
+-- @get: Property getter (obj.field)
+-- Using a table created via a simple function
+
+-- Create a record type and access its field via FFI
+let point = { x = 10; y = 20 }
+
+-- Use @get to access x field
+@get
+external get_x : { x : int; y : int } -> int = "x"
+
+let x_val = get_x point
+
+let _ = print x_val

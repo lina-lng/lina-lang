@@ -20,6 +20,7 @@ let make_binding pattern expression loc =
 %token TRUE FALSE
 %token LET REC IN FUN IF THEN ELSE TYPE OF AND AS MATCH WITH WHEN
 %token MODULE STRUCT END SIG FUNCTOR OPEN INCLUDE VAL
+%token EXTERNAL AT
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
 %token STAR PLUS MINUS SLASH
@@ -75,6 +76,8 @@ structure_item:
     { make_located (StructureOpen path) $loc }
   | INCLUDE; me = module_expression
     { make_located (StructureInclude me) $loc }
+  | ext = external_declaration
+    { make_located (StructureExternal ext) $loc }
 
 rec_flag:
   | { Nonrecursive }
@@ -96,6 +99,13 @@ type_declaration:
       { type_name = make_located name $loc(name);
         type_parameters = params;
         type_kind = kind;
+        type_location = make_loc $loc }
+    }
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER
+    {
+      { type_name = make_located name $loc(name);
+        type_parameters = params;
+        type_kind = TypeAbstract;
         type_location = make_loc $loc }
     }
 
@@ -438,6 +448,8 @@ signature_item:
     { make_located (SignatureOpen path) $loc }
   | INCLUDE; mt = module_type
     { make_located (SignatureInclude mt) $loc }
+  | ext = external_declaration
+    { make_located (SignatureExternal ext) $loc }
 
 (* With constraints *)
 with_constraint:
@@ -465,3 +477,50 @@ longident_type:
             make_located (Ldot (inner, m)) $loc(path)
       in
       make_located (Ldot (build_longident (List.rev path.value), name)) $loc }
+
+(* ==================== FFI External Declarations ==================== *)
+
+(* Attribute names - allow keywords that are used as FFI attributes *)
+%inline attribute_name:
+  | name = LOWERCASE_IDENTIFIER { name }
+  | MODULE { "module" }
+  | VAL { "val" }
+  | AS { "as" }
+
+(* Attribute: @name or @name("arg") or @name(ident) or @name(("a", "b")) *)
+attribute:
+  | AT; name = attribute_name
+    { Parsing_ffi.Attributes.{
+        attribute_name = name;
+        attribute_payload = None;
+        attribute_location = make_loc $loc
+      } }
+  | AT; name = attribute_name; LPAREN; arg = STRING; RPAREN
+    { Parsing_ffi.Attributes.{
+        attribute_name = name;
+        attribute_payload = Some (PayloadString arg);
+        attribute_location = make_loc $loc
+      } }
+  | AT; name = attribute_name; LPAREN; ident = LOWERCASE_IDENTIFIER; RPAREN
+    { Parsing_ffi.Attributes.{
+        attribute_name = name;
+        attribute_payload = Some (PayloadIdent ident);
+        attribute_location = make_loc $loc
+      } }
+  | AT; name = attribute_name; LPAREN; LPAREN; args = separated_nonempty_list(COMMA, STRING); RPAREN; RPAREN
+    { Parsing_ffi.Attributes.{
+        attribute_name = name;
+        attribute_payload = Some (PayloadStringList args);
+        attribute_location = make_loc $loc
+      } }
+
+(* External declaration: [attrs] external name : type = "primitive" *)
+external_declaration:
+  | attrs = list(attribute); EXTERNAL; name = LOWERCASE_IDENTIFIER; COLON; ty = type_expression; EQUAL; prim = STRING
+    { {
+        external_attributes = attrs;
+        external_name = make_located name $loc(name);
+        external_type = ty;
+        external_primitive = prim;
+        external_location = make_loc $loc
+      } }

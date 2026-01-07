@@ -67,6 +67,10 @@ let rec print_expression_prec prec expr =
     in
     let arg_strs = List.map print_expression args in
     Printf.sprintf "%s(%s)" func_str (String.concat ", " arg_strs)
+  | ExpressionMethodCall (obj, method_name, args) ->
+    let obj_str = print_expression_prec 100 obj in
+    let arg_strs = List.map print_expression args in
+    Printf.sprintf "%s:%s(%s)" obj_str method_name (String.concat ", " arg_strs)
   | ExpressionBinaryOp (op, left, right) ->
     let op_prec = operator_precedence op in
     let left_str = print_expression_prec op_prec left in

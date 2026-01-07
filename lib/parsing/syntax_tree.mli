@@ -125,6 +125,18 @@ and type_declaration_kind =
   | TypeAlias of type_expression
 [@@deriving show, eq]
 
+(** External declaration for FFI.
+
+    Syntax: [attributes] external name : type = "lua_name" *)
+type external_declaration = {
+  external_attributes : Parsing_ffi.Attributes.attribute list;
+  external_name : string Location.located;
+  external_type : type_expression;
+  external_primitive : string;
+  external_location : Location.t;
+}
+[@@deriving show, eq]
+
 (* Structure and module types - mutually recursive *)
 type structure_item = structure_item_desc Location.located
 [@@deriving show, eq]
@@ -136,6 +148,7 @@ and structure_item_desc =
   | StructureModuleType of string Location.located * module_type
   | StructureOpen of module_path
   | StructureInclude of module_expression
+  | StructureExternal of external_declaration
 [@@deriving show, eq]
 
 and structure = structure_item list
@@ -182,6 +195,7 @@ and signature_item_desc =
   | SignatureModuleType of string Location.located * module_type option  (* module type S [= MT] *)
   | SignatureOpen of module_path               (* open M *)
   | SignatureInclude of module_type            (* include S *)
+  | SignatureExternal of external_declaration  (* external x : t = "name" *)
 [@@deriving show, eq]
 
 and with_constraint =

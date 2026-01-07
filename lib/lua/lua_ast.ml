@@ -10,6 +10,7 @@ type expression =
   | ExpressionIndex of expression * expression
   | ExpressionField of expression * identifier
   | ExpressionCall of expression * expression list
+  | ExpressionMethodCall of expression * identifier * expression list  (** obj:method(args) *)
   | ExpressionBinaryOp of binary_operator * expression * expression
   | ExpressionUnaryOp of unary_operator * expression
   | ExpressionFunction of identifier list * block

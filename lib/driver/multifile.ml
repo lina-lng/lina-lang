@@ -33,6 +33,9 @@ and extract_from_item defined referenced (item : Parsing.Syntax_tree.structure_i
     end
   | StructureInclude mexpr ->
     extract_from_module_expr referenced mexpr
+  | StructureExternal _ ->
+    (* External declarations don't reference other modules *)
+    ()
 
 and extract_from_module_expr referenced (mexpr : Parsing.Syntax_tree.module_expression) =
   let open Parsing.Syntax_tree in
