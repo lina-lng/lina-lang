@@ -1,0 +1,38 @@
+(* Test: Module strengthening for type equality *)
+
+(* Module with abstract type made concrete through strengthening *)
+module M = struct
+  type t = int
+  let value = 42
+  let create x = x
+end
+
+(* Module alias - strengthening should make N.t = M.t *)
+module N = M
+
+(* Can use M.value where N.t is expected because of strengthening *)
+let x = M.value
+let y = N.value
+
+(* Functions that work across aliased modules *)
+let use_m v = v + 1
+let result1 = use_m M.value
+let result2 = use_m N.value
+
+(* Nested module strengthening *)
+module Outer = struct
+  module Inner = struct
+    type t = int
+    let v = 100
+  end
+end
+
+module OuterAlias = Outer
+
+let inner_val = OuterAlias.Inner.v
+
+let _ = print x           (* Expected: 42 *)
+let _ = print y           (* Expected: 42 *)
+let _ = print result1     (* Expected: 43 *)
+let _ = print result2     (* Expected: 43 *)
+let _ = print inner_val   (* Expected: 100 *)

@@ -131,6 +131,8 @@ and strip_type_kind_locations (k : Syntax_tree.type_declaration_kind) :
   | Syntax_tree.TypeAbstract -> k
   | Syntax_tree.TypeVariant constrs ->
       Syntax_tree.TypeVariant (List.map strip_constructor_locations constrs)
+  | Syntax_tree.TypeAlias ty ->
+      Syntax_tree.TypeAlias (strip_type_locations ty)
 
 and strip_constructor_locations (c : Syntax_tree.constructor_declaration) :
     Syntax_tree.constructor_declaration =

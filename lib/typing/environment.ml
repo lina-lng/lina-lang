@@ -45,6 +45,7 @@ let find_type_constructors type_name env =
     match decl.declaration_kind with
     | DeclarationAbstract -> None
     | DeclarationVariant constructors -> Some constructors
+    | DeclarationRecord _ -> None
 
 let binary_int_op_type =
   trivial_scheme (TypeArrow (type_int, TypeArrow (type_int, type_int)))
@@ -81,13 +82,70 @@ let open_module (sig_ : Module_types.signature) env =
     | Module_types.SigType (name, decl) ->
       (add_type name decl env, bindings)
     | Module_types.SigModule (name, mty) ->
-      let id = Module_types.fresh_module_ident name in
-      let binding = Module_types.{ mod_id = id; mod_type = mty; mod_alias = None } in
+      let id = Identifier.create name in
+      let binding = Module_types.{ mod_name = name; mod_id = id; mod_type = mty; mod_alias = None } in
       (add_module name binding env, bindings)
     | Module_types.SigModuleType (name, mty_opt) ->
       (add_module_type name mty_opt env, bindings)
   ) (env, []) sig_ in
   (env, List.rev value_bindings)
+
+(** Look up a type declaration by path *)
+let rec find_type_by_path path env =
+  match path with
+  | Types.PathBuiltin _ ->
+    (* Builtins like int, bool don't have declarations *)
+    None
+  | Types.PathLocal name ->
+    find_type name env
+  | Types.PathIdent _ ->
+    (* Module identifiers don't have type declarations directly *)
+    None
+  | Types.PathDot (parent_path, name) ->
+    (* Look up module at parent_path, then find type in its signature *)
+    begin match find_module_by_path parent_path env with
+    | None -> None
+    | Some binding ->
+      find_type_in_module_type name binding.Module_types.mod_type
+    end
+  | Types.PathApply _ ->
+    (* Functor application - not supported yet *)
+    None
+
+and find_module_by_path path env =
+  match path with
+  | Types.PathIdent id ->
+    (* Look up by identifier name in modules *)
+    find_module (Identifier.name id) env
+  | Types.PathLocal name ->
+    find_module name env
+  | Types.PathDot (parent_path, name) ->
+    begin match find_module_by_path parent_path env with
+    | None -> None
+    | Some binding ->
+      find_module_in_module_type name binding.Module_types.mod_type
+    end
+  | Types.PathBuiltin _ | Types.PathApply _ ->
+    None
+
+and find_type_in_module_type name mty =
+  match mty with
+  | Module_types.ModTypeSig sig_ ->
+    Module_types.find_type_in_sig name sig_
+  | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
+    None
+
+and find_module_in_module_type name mty =
+  match mty with
+  | Module_types.ModTypeSig sig_ ->
+    begin match Module_types.find_module_in_sig name sig_ with
+    | Some inner_mty ->
+      let id = Identifier.create name in
+      Some Module_types.{ mod_name = name; mod_id = id; mod_type = inner_mty; mod_alias = None }
+    | None -> None
+    end
+  | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
+    None
 
 let initial =
   let env = empty in

@@ -1,0 +1,49 @@
+(* Test: Type declaration compatibility in signatures *)
+
+(* Abstract type in signature - impl can use any definition *)
+module type ABSTRACT = sig
+  type t
+end
+
+module Concrete : ABSTRACT = struct
+  type t = int
+end
+
+(* Module with type and value *)
+module type BOX = sig
+  type t
+  val make : int -> int
+  val get : int -> int
+end
+
+module IntBox : BOX = struct
+  type t = int
+  let make x = x
+  let get x = x
+end
+
+(* Type with type alias manifest *)
+type my_int = int
+
+module type WITH_ALIAS = sig
+  type t
+end
+
+module AliasImpl : WITH_ALIAS = struct
+  type t = my_int
+end
+
+(* Test parametric types in signatures *)
+module type WRAPPER = sig
+  type 'a t
+end
+
+module ListWrapper : WRAPPER = struct
+  type 'a t = Nil | Cons of 'a
+end
+
+(* Verify modules work correctly *)
+let v1 = IntBox.make 99
+let v2 = IntBox.get v1
+
+let _ = print v2          (* Expected: 99 *)

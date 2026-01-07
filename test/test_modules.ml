@@ -28,7 +28,7 @@ module M = struct
   let x = 42
 end
 |});
-  [%expect{| local M = {x = 42} |}]
+  [%expect{| local M_12 = {x = 42} |}]
 
 let%expect_test "module with multiple bindings" =
   print_endline (compile {|
@@ -38,13 +38,13 @@ module Math = struct
 end
 |});
   [%expect{|
-    local function add_14(x_12, y_13)
-      return x_12 + y_13
+    local function add_15(x_13, y_14)
+      return x_13 + y_14
     end
-    local function sub_17(x_15, y_16)
-      return x_15 - y_16
+    local function sub_18(x_16, y_17)
+      return x_16 - y_17
     end
-    local Math_1 = {add = add_14, sub = sub_17}
+    local Math_19 = {add = add_15, sub = sub_18}
     |}]
 
 let%expect_test "module value access" =
@@ -55,8 +55,8 @@ end
 let y = M.x
 |});
   [%expect{|
-    local M_2 = {x = 42}
-    local y_19 = M_2.x
+    local M_21 = {x = 42}
+    local y_22 = M_21.x
     |}]
 
 let%expect_test "module function access and call" =
@@ -79,7 +79,7 @@ module Outer = struct
   end
 end
 |});
-  [%expect{| local Outer_5 = {Inner = {x = 42}} |}]
+  [%expect{| local Outer_31 = {Inner = {x = 42}} |}]
 
 let%expect_test "nested module access" =
   print_endline (compile_and_run {|
@@ -104,7 +104,7 @@ end = struct
   let hidden = 99
 end
 |});
-  [%expect{| local M_9 = {x = 42, hidden = 99} |}]
+  [%expect{| local M_40 = {x = 42, hidden = 99} |}]
 
 let%expect_test "signature hides value" =
   print_endline (compile {|
@@ -117,8 +117,8 @@ end
 let y = M.x
 |});
   [%expect{|
-    local M_10 = {x = 42, hidden = 99}
-    local y_33 = M_10.x
+    local M_43 = {x = 42, hidden = 99}
+    local y_44 = M_43.x
     |}]
 
 let%expect_test "signature mismatch - missing value" =
@@ -156,8 +156,8 @@ module MakeDouble = functor (X : sig val x : int end) -> struct
 end
 |});
   [%expect{|
-    local MakeDouble_13 = function(X_12)
-      return {doubled = X_12.x + X_12.x}
+    local MakeDouble_54 = function(X_52)
+      return {doubled = X_52.x + X_52.x}
     end
     |}]
 
@@ -228,10 +228,10 @@ open M
 let z = x + y
 |});
   [%expect{|
-    local M_29 = {x = 10, y = 20}
-    local x_57 = M_29.x
-    local y_58 = M_29.y
-    local z_59 = x_57 + y_58
+    local M_86 = {x = 10, y = 20}
+    local x_87 = M_86.x
+    local y_88 = M_86.y
+    local z_89 = x_87 + y_88
     |}]
 
 let%expect_test "open module - runtime" =
@@ -466,8 +466,8 @@ module Empty = struct end
 let _ = print 1
 |});
   [%expect{|
-    local Empty_61 = {}
-    local _top_121 = print(1)
+    local Empty_182 = {}
+    local _top_183 = print(1)
     |}]
 
 let%expect_test "single value module" =

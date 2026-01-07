@@ -1,0 +1,43 @@
+(* Test: with type constraints on module types *)
+
+(* Abstract signature *)
+module type CONTAINER = sig
+  type t
+end
+
+(* Constrained signature - t becomes int *)
+module type INT_CONTAINER = CONTAINER with type t = int
+
+(* Implementation matching constrained signature *)
+module IntBox : INT_CONTAINER = struct
+  type t = int
+end
+
+(* Test with multiple type constraints *)
+module type PAIR = sig
+  type a
+  type b
+end
+
+module type INT_PAIR = PAIR with type a = int with type b = int
+
+module MyPair : INT_PAIR = struct
+  type a = int
+  type b = int
+end
+
+(* Test that module type expansion works with with-constraints *)
+module type BASE = sig
+  type t
+end
+
+module type DERIVED = BASE with type t = int
+
+module Impl : DERIVED = struct
+  type t = int
+end
+
+(* Simple value to verify compilation *)
+let result = 42
+
+let _ = print result      (* Expected: 42 *)

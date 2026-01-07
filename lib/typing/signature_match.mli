@@ -1,5 +1,18 @@
 (** Signature matching for modules. *)
 
+(** Set the module type lookup function for expanding ModTypeIdent.
+    This should be set before calling match functions. *)
+val set_module_type_lookup : (Types.path -> Module_types.module_type option) -> unit
+
+(** Module strengthening: Makes abstract types concrete by binding them
+    to their path. Call this when binding a module to ensure type equality. *)
+val strengthen_signature : Types.path -> Module_types.signature -> Module_types.signature
+val strengthen_module_type : Types.path -> Module_types.module_type -> Module_types.module_type
+
+(** Path substitution: Replace occurrences of old_path with new_path in module types.
+    Used when applying functors to substitute parameter paths with argument paths. *)
+val substitute_path_in_module_type : Types.path -> Types.path -> Module_types.module_type -> Module_types.module_type
+
 type match_error =
   | MissingValue of string
   | MissingType of string

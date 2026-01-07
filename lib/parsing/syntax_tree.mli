@@ -122,6 +122,7 @@ type type_declaration = {
 and type_declaration_kind =
   | TypeAbstract
   | TypeVariant of constructor_declaration list
+  | TypeAlias of type_expression
 [@@deriving show, eq]
 
 (* Structure and module types - mutually recursive *)

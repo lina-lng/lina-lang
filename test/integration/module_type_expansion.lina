@@ -1,0 +1,47 @@
+(* Test: Named module type expansion *)
+
+(* Define a named module type *)
+module type ADDER = sig
+  val add : int -> int -> int
+end
+
+(* Implementation against named type *)
+module SimpleAdder : ADDER = struct
+  let add x y = x + y
+end
+
+(* Functor using named module type *)
+module MakeCalculator (Base : ADDER) = struct
+  let double x = Base.add x x
+  let quadruple x = Base.add (Base.add x x) (Base.add x x)
+end
+
+module MyCalc = MakeCalculator(SimpleAdder)
+
+(* Test nested module type usage *)
+module type MULTIPLIER = sig
+  val mul : int -> int -> int
+end
+
+module SimpleMul : MULTIPLIER = struct
+  let mul x y = x * y
+end
+
+module MakePower (M : MULTIPLIER) = struct
+  let square x = M.mul x x
+  let cube x = M.mul x (M.mul x x)
+end
+
+module Power = MakePower(SimpleMul)
+
+let sum = SimpleAdder.add 10 5
+let doubled = MyCalc.double 21
+let quad = MyCalc.quadruple 10
+let squared = Power.square 5
+let cubed = Power.cube 3
+
+let _ = print sum         (* Expected: 15 *)
+let _ = print doubled     (* Expected: 42 *)
+let _ = print quad        (* Expected: 40 *)
+let _ = print squared     (* Expected: 25 *)
+let _ = print cubed       (* Expected: 27 *)

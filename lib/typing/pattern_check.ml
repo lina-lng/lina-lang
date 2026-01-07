@@ -86,7 +86,7 @@ let get_signature env (ty : Types.type_expression) : constructor_signature =
     SigBool
   | Types.TypeConstructor (Types.PathBuiltin _, _) ->
     SigInfinite  (* int, float, string, unit *)
-  | Types.TypeConstructor (Types.PathUser name, _) ->
+  | Types.TypeConstructor (Types.PathLocal name, _) ->
     begin match Environment.find_type_constructors name env with
     | Some ctors ->
       let ctor_info = List.map (fun (c : Types.constructor_info) ->

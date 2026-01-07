@@ -1,0 +1,56 @@
+(* Test: Signature matching - impl must satisfy spec *)
+
+(* Signature with value declarations *)
+module type CALCULATOR = sig
+  val add : int -> int -> int
+  val mul : int -> int -> int
+end
+
+(* Implementation provides exactly what signature requires *)
+module BasicCalc : CALCULATOR = struct
+  let add x y = x + y
+  let mul x y = x * y
+end
+
+(* Implementation can have MORE than signature requires *)
+module type MINIMAL = sig
+  val x : int
+end
+
+module Rich : MINIMAL = struct
+  let x = 10
+  let y = 20      (* Extra - allowed *)
+  let z = 30      (* Extra - allowed *)
+end
+
+(* Only x is visible through signature *)
+let val_x = Rich.x
+
+(* Signature with type declaration *)
+module type WITH_TYPE = sig
+  type t
+end
+
+module HasType : WITH_TYPE = struct
+  type t = int
+end
+
+(* Test signature constraint on functor parameter *)
+module type CONFIG = sig
+  val factor : int
+end
+
+module MakeMultiplier (C : CONFIG) = struct
+  let multiply x = x * C.factor
+end
+
+module Times3 = MakeMultiplier(struct let factor = 3 end)
+
+let sum = BasicCalc.add 10 5
+let product = BasicCalc.mul 10 5
+let mult_result = Times3.multiply 7
+
+let _ = print sum           (* Expected: 15 *)
+let _ = print product       (* Expected: 50 *)
+let _ = print val_x         (* Expected: 10 *)
+let _ = print mult_result   (* Expected: 21 *)

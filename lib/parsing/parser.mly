@@ -126,6 +126,8 @@ type_declaration_kind:
     { TypeVariant constructors }
   | BAR; constructors = separated_nonempty_list(BAR, constructor_declaration)
     { TypeVariant constructors }
+  | ty = type_expression
+    { TypeAlias ty }
 
 constructor_declaration:
   | name = UPPERCASE_IDENTIFIER

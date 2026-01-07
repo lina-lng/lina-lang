@@ -243,16 +243,22 @@ let rec translate_pattern_binding pattern value body =
     LambdaLet (temp_id, value, inner)
 
 (** Translate a module path to a lambda expression *)
-let rec translate_module_path (path : Typing.Module_types.path) : lambda =
+let rec translate_module_path (path : Typing.Types.path) : lambda =
   match path with
-  | Typing.Module_types.PathIdent id ->
-    (* Module identifier - use the same stamp from typing *)
-    LambdaVariable (Identifier.create_with_stamp id.ident_name id.ident_stamp)
-  | Typing.Module_types.PathDot (parent, name) ->
+  | Typing.Types.PathBuiltin _ ->
+    (* Builtin types don't have runtime representation *)
+    failwith "Cannot translate builtin path to lambda"
+  | Typing.Types.PathLocal name ->
+    (* Local type reference - shouldn't be used for module access *)
+    LambdaVariable (Identifier.create name)
+  | Typing.Types.PathIdent id ->
+    (* Runtime module reference with tracked identity *)
+    LambdaVariable id
+  | Typing.Types.PathDot (parent, name) ->
     (* Nested module access: M.N *)
     let parent_expr = translate_module_path parent in
     LambdaModuleAccess (parent_expr, name)
-  | Typing.Module_types.PathApply (func_path, arg_path) ->
+  | Typing.Types.PathApply (func_path, arg_path) ->
     (* Functor application path: F(X) *)
     let func_expr = translate_module_path func_path in
     let arg_expr = translate_module_path arg_path in
@@ -385,9 +391,8 @@ and translate_module_expression (mexpr : Typing.Typed_tree.typed_module_expressi
     translate_module_path path
   | TypedModuleFunctor (param, body) ->
     (* Functor becomes a function taking a module and returning a module *)
-    let param_id = Identifier.create_with_stamp param.Typing.Module_types.param_name param.param_id.ident_stamp in
     let translated_body = translate_module_expression body in
-    LambdaFunctor (param_id, translated_body)
+    LambdaFunctor (param.Typing.Module_types.param_id, translated_body)
   | TypedModuleApply (func_mexpr, arg_mexpr) ->
     (* Functor application becomes function application *)
     let translated_func = translate_module_expression func_mexpr in

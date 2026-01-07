@@ -23,7 +23,7 @@ type type_variable = {
 
 and type_expression =
   | TypeVariable of type_variable
-  | TypeConstructor of type_path * type_expression list
+  | TypeConstructor of path * type_expression list
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
   | TypeRecord of row
@@ -37,10 +37,13 @@ and row = {
 and row_field =
   | RowFieldPresent of type_expression
 
-and type_path =
-  | PathBuiltin of builtin_type
-  | PathUser of string                    (* Local type: t *)
-  | PathDot of string list * string       (* Module type: M.t, M.N.t *)
+(* Unified path type for both types and modules *)
+and path =
+  | PathBuiltin of builtin_type           (* int, bool, string, etc. *)
+  | PathLocal of string                   (* Local name for types: t *)
+  | PathIdent of Common.Identifier.t      (* Runtime module reference: M *)
+  | PathDot of path * string              (* Qualified: M.t, M.N.t *)
+  | PathApply of path * path              (* Functor application: F(M).t *)
 
 and builtin_type =
   | BuiltinInt
@@ -170,25 +173,27 @@ type constructor_info = {
 type type_declaration = {
   declaration_name : string;
   declaration_parameters : type_variable list;
+  declaration_manifest : type_expression option;  (* Type alias: type t = int *)
   declaration_kind : type_declaration_kind;
 }
 
 and type_declaration_kind =
   | DeclarationAbstract
   | DeclarationVariant of constructor_info list
+  | DeclarationRecord of (string * type_expression) list  (* Record types *)
 
 let rec pp_type_expression fmt ty =
   match representative ty with
   | TypeVariable tv ->
     Format.fprintf fmt "'t%d" tv.id
   | TypeConstructor (path, []) ->
-    pp_type_path fmt path
+    pp_path fmt path
   | TypeConstructor (path, [arg]) ->
-    Format.fprintf fmt "%a %a" pp_type_expression arg pp_type_path path
+    Format.fprintf fmt "%a %a" pp_type_expression arg pp_path path
   | TypeConstructor (path, args) ->
     Format.fprintf fmt "(%a) %a"
       (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ") pp_type_expression) args
-      pp_type_path path
+      pp_path path
   | TypeTuple elements ->
     Format.fprintf fmt "(%a)"
       (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") pp_type_expression) elements
@@ -218,15 +223,43 @@ and pp_row fmt row =
     else Format.fprintf fmt ".. }"
   end
 
-and pp_type_path fmt = function
+and pp_path fmt = function
   | PathBuiltin BuiltinInt -> Format.fprintf fmt "int"
   | PathBuiltin BuiltinFloat -> Format.fprintf fmt "float"
   | PathBuiltin BuiltinString -> Format.fprintf fmt "string"
   | PathBuiltin BuiltinBool -> Format.fprintf fmt "bool"
   | PathBuiltin BuiltinUnit -> Format.fprintf fmt "unit"
-  | PathUser name -> Format.fprintf fmt "%s" name
-  | PathDot (modules, name) ->
-    Format.fprintf fmt "%s.%s" (String.concat "." modules) name
+  | PathLocal name -> Format.fprintf fmt "%s" name
+  | PathIdent id -> Format.fprintf fmt "%s" (Common.Identifier.name id)
+  | PathDot (parent, name) ->
+    Format.fprintf fmt "%a.%s" pp_path parent name
+  | PathApply (func, arg) ->
+    Format.fprintf fmt "%a(%a)" pp_path func pp_path arg
+
+(* Path equality *)
+let rec path_equal p1 p2 =
+  match p1, p2 with
+  | PathBuiltin b1, PathBuiltin b2 -> b1 = b2
+  | PathLocal n1, PathLocal n2 -> String.equal n1 n2
+  | PathIdent id1, PathIdent id2 -> Common.Identifier.equal id1 id2
+  | PathDot (p1, n1), PathDot (p2, n2) -> String.equal n1 n2 && path_equal p1 p2
+  | PathApply (f1, a1), PathApply (f2, a2) -> path_equal f1 f2 && path_equal a1 a2
+  | _ -> false
+
+(* Path to string *)
+let rec path_to_string = function
+  | PathBuiltin BuiltinInt -> "int"
+  | PathBuiltin BuiltinFloat -> "float"
+  | PathBuiltin BuiltinString -> "string"
+  | PathBuiltin BuiltinBool -> "bool"
+  | PathBuiltin BuiltinUnit -> "unit"
+  | PathLocal name -> name
+  | PathIdent id -> Common.Identifier.name id
+  | PathDot (parent, name) -> path_to_string parent ^ "." ^ name
+  | PathApply (func, arg) -> path_to_string func ^ "(" ^ path_to_string arg ^ ")"
+
+(* For backward compatibility *)
+let pp_type_path = pp_path
 
 let pp_type_scheme fmt scheme =
   if scheme.quantified_variables = [] then

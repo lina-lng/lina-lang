@@ -6,33 +6,11 @@
 
 open Common
 
-(** Module identity for applicative functor semantics.
-    Each module binding gets a unique stamp. *)
-type module_ident = {
-  ident_name : string;
-  ident_stamp : int;
-}
+(** Use unified path type from Types *)
+type path = Types.path
 
-let next_module_stamp = ref 0
-
-let fresh_module_ident name =
-  let stamp = !next_module_stamp in
-  incr next_module_stamp;
-  { ident_name = name; ident_stamp = stamp }
-
-let reset_module_stamps () =
-  next_module_stamp := 0
-
-(** Paths to modules, used for tracking type identity across module boundaries. *)
-type path =
-  | PathIdent of module_ident              (** Simple module: M *)
-  | PathDot of path * string               (** Module member: M.N *)
-  | PathApply of path * path               (** Functor application: F(A) *)
-
-let rec path_to_string = function
-  | PathIdent id -> id.ident_name
-  | PathDot (p, name) -> path_to_string p ^ "." ^ name
-  | PathApply (p1, p2) -> path_to_string p1 ^ "(" ^ path_to_string p2 ^ ")"
+let path_to_string = Types.path_to_string
+let path_equal = Types.path_equal
 
 (** Value description in a signature *)
 type value_description = {
@@ -43,7 +21,7 @@ type value_description = {
 (** Functor parameter *)
 type functor_parameter = {
   param_name : string;
-  param_id : module_ident;
+  param_id : Common.Identifier.t;  (** Runtime identifier for this parameter *)
   param_type : module_type;
 }
 
@@ -77,7 +55,8 @@ type module_expr =
 
 (** Module binding in the environment *)
 type module_binding = {
-  mod_id : module_ident;
+  mod_name : string;
+  mod_id : Common.Identifier.t;  (** Runtime identifier for this module *)
   mod_type : module_type;
   mod_alias : path option;  (** If this is an alias, the original path *)
 }

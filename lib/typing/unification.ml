@@ -11,6 +11,112 @@ exception Unification_error of {
 let unification_error location expected actual message =
   raise (Unification_error { expected; actual; location; message })
 
+(** Type expansion: expand type aliases to their definitions *)
+
+(* Global reference for type lookup function - set by inference *)
+let type_lookup_ref : (path -> type_declaration option) ref = ref (fun _ -> None)
+
+let set_type_lookup f = type_lookup_ref := f
+
+(* Substitute type parameters in a manifest type *)
+let substitute_params params args body =
+  if params = [] then body
+  else
+    let substitution = List.map2 (fun tv arg -> (tv.id, arg)) params args in
+    let rec subst ty =
+      match representative ty with
+      | TypeVariable tv ->
+        begin match List.assoc_opt tv.id substitution with
+        | Some replacement -> replacement
+        | None -> ty
+        end
+      | TypeConstructor (path, type_args) ->
+        TypeConstructor (path, List.map subst type_args)
+      | TypeTuple elements ->
+        TypeTuple (List.map subst elements)
+      | TypeArrow (arg, result) ->
+        TypeArrow (subst arg, subst result)
+      | TypeRecord row ->
+        TypeRecord (subst_row row)
+      | TypeRowEmpty -> TypeRowEmpty
+    and subst_row row = {
+      row_fields = List.map (fun (name, field) ->
+        (name, match field with RowFieldPresent ty -> RowFieldPresent (subst ty))
+      ) row.row_fields;
+      row_more = subst row.row_more;
+    }
+    in
+    subst body
+
+(** Set of paths, used for cycle detection during type alias expansion *)
+module PathSet = Set.Make(struct
+  type t = path
+  let compare = compare  (* Use structural comparison for paths *)
+end)
+
+exception Cyclic_type_alias of path
+
+(* Expand a type by following aliases. Returns (expanded_ty, did_expand).
+   The 'visiting' parameter tracks paths being expanded to detect cycles. *)
+let rec expand_type_aux visiting ty =
+  match representative ty with
+  | TypeConstructor (path, args) ->
+    begin match !type_lookup_ref path with
+    | Some decl when Option.is_some decl.declaration_manifest ->
+      (* Check for cycle: if we're already expanding this path, it's cyclic *)
+      if PathSet.mem path visiting then
+        raise (Cyclic_type_alias path)
+      else begin
+        let visiting' = PathSet.add path visiting in
+        let manifest = Option.get decl.declaration_manifest in
+        let expanded = substitute_params decl.declaration_parameters args manifest in
+        let (final, _) = expand_type_aux visiting' expanded in  (* Recursively expand with cycle check *)
+        (final, true)
+      end
+    | _ ->
+      (* Not an alias - recursively expand type arguments *)
+      let results = List.map (expand_type_aux visiting) args in
+      let any_expanded = List.exists snd results in
+      if any_expanded then
+        (TypeConstructor (path, List.map fst results), true)
+      else
+        (ty, false)
+    end
+  | TypeArrow (arg, result) ->
+    let (arg', arg_exp) = expand_type_aux visiting arg in
+    let (result', result_exp) = expand_type_aux visiting result in
+    if arg_exp || result_exp then
+      (TypeArrow (arg', result'), true)
+    else
+      (ty, false)
+  | TypeTuple elements ->
+    let results = List.map (expand_type_aux visiting) elements in
+    let any_expanded = List.exists snd results in
+    if any_expanded then
+      (TypeTuple (List.map fst results), true)
+    else
+      (ty, false)
+  | TypeRecord row ->
+    let (row', expanded) = expand_row_aux visiting row in
+    if expanded then (TypeRecord row', true) else (ty, false)
+  | ty -> (ty, false)
+
+and expand_row_aux visiting row =
+  let results = List.map (fun (name, field) ->
+    match field with
+    | RowFieldPresent ty ->
+      let (ty', exp) = expand_type_aux visiting ty in
+      ((name, RowFieldPresent ty'), exp)
+  ) row.row_fields in
+  let (row_more', more_exp) = expand_type_aux visiting row.row_more in
+  let any_expanded = List.exists snd results || more_exp in
+  if any_expanded then
+    ({ row_fields = List.map fst results; row_more = row_more' }, true)
+  else
+    (row, false)
+
+let expand_type ty = fst (expand_type_aux PathSet.empty ty)
+
 let rec occurs_check location tv ty =
   match representative ty with
   | TypeVariable tv' ->
@@ -55,15 +161,29 @@ let rec unify location ty1 ty2 =
     tv.link <- Some ty
 
   | TypeConstructor (path1, args1), TypeConstructor (path2, args2) ->
-    if path1 <> path2 then
-      unification_error location ty1 ty2
-        (Printf.sprintf "Type mismatch: expected %s, got %s"
-          (type_expression_to_string ty1)
-          (type_expression_to_string ty2));
-    if List.length args1 <> List.length args2 then
-      unification_error location ty1 ty2
-        "Type constructor arity mismatch";
-    List.iter2 (unify location) args1 args2
+    if path_equal path1 path2 then begin
+      (* Same type constructor - unify arguments *)
+      if List.length args1 <> List.length args2 then
+        unification_error location ty1 ty2
+          "Type constructor arity mismatch";
+      List.iter2 (unify location) args1 args2
+    end else begin
+      (* Different constructors - try expanding aliases *)
+      try
+        let (expanded1, did_expand1) = expand_type_aux PathSet.empty ty1 in
+        let (expanded2, did_expand2) = expand_type_aux PathSet.empty ty2 in
+        (* Only retry if expansion changed something *)
+        if did_expand1 || did_expand2 then
+          unify location expanded1 expanded2
+        else
+          unification_error location ty1 ty2
+            (Printf.sprintf "Type mismatch: expected %s, got %s"
+              (type_expression_to_string ty1)
+              (type_expression_to_string ty2))
+      with Cyclic_type_alias path ->
+        unification_error location ty1 ty2
+          (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
+    end
 
   | TypeTuple elems1, TypeTuple elems2 ->
     if List.length elems1 <> List.length elems2 then

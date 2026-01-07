@@ -14,7 +14,7 @@ type type_variable = {
 
 and type_expression =
   | TypeVariable of type_variable
-  | TypeConstructor of type_path * type_expression list
+  | TypeConstructor of path * type_expression list
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
   | TypeRecord of row
@@ -28,10 +28,13 @@ and row = {
 and row_field =
   | RowFieldPresent of type_expression
 
-and type_path =
-  | PathBuiltin of builtin_type
-  | PathUser of string                    (* Local type: t *)
-  | PathDot of string list * string       (* Module type: M.t, M.N.t *)
+(* Unified path type for both types and modules *)
+and path =
+  | PathBuiltin of builtin_type           (* int, bool, string, etc. *)
+  | PathLocal of string                   (* Local name for types: t *)
+  | PathIdent of Common.Identifier.t      (* Runtime module reference: M *)
+  | PathDot of path * string              (* Qualified: M.t, M.N.t *)
+  | PathApply of path * path              (* Functor application: F(M).t *)
 
 and builtin_type =
   | BuiltinInt
@@ -75,12 +78,22 @@ type constructor_info = {
 type type_declaration = {
   declaration_name : string;
   declaration_parameters : type_variable list;
+  declaration_manifest : type_expression option;  (* Type alias: type t = int *)
   declaration_kind : type_declaration_kind;
 }
 
 and type_declaration_kind =
   | DeclarationAbstract
   | DeclarationVariant of constructor_info list
+  | DeclarationRecord of (string * type_expression) list  (* Record types *)
+
+(* Path operations *)
+val path_equal : path -> path -> bool
+val path_to_string : path -> string
+val pp_path : Format.formatter -> path -> unit
+
+(* For backward compatibility *)
+val pp_type_path : Format.formatter -> path -> unit
 
 val pp_type_expression : Format.formatter -> type_expression -> unit
 val pp_type_scheme : Format.formatter -> type_scheme -> unit

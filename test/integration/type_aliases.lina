@@ -1,0 +1,31 @@
+(* Test: Type aliases and unification *)
+
+(* Simple type alias *)
+type int_alias = int
+
+let x = (42 : int_alias)
+let y = (x : int)
+
+(* Chained aliases *)
+type my_int = int
+type another_int = my_int
+
+let a = (10 : another_int)
+let b = (a : int)
+
+(* Parametric alias *)
+type 'a wrapper = 'a
+
+let wrapped = (99 : int wrapper)
+let unwrapped = (wrapped : int)
+
+(* Alias in function types *)
+type num = int
+
+let add_nums x y = x + y
+let result = add_nums (1 : num) (2 : num)
+
+let _ = print y           (* Expected: 42 *)
+let _ = print b           (* Expected: 10 *)
+let _ = print unwrapped   (* Expected: 99 *)
+let _ = print result      (* Expected: 3 *)

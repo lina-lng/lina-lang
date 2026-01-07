@@ -1,0 +1,53 @@
+(* Test: Applicative functor semantics and path substitution *)
+
+(* Functor that references parameter's values *)
+module type ELEMENT = sig
+  val default : int
+end
+
+module MakeContainer (E : ELEMENT) = struct
+  let get_default x = E.default + x
+  let wrap x = x
+end
+
+(* Apply functor to same module twice - types should be compatible *)
+module IntElem = struct
+  let default = 0
+end
+
+module C1 = MakeContainer(IntElem)
+module C2 = MakeContainer(IntElem)
+
+(* Values from C1 and C2 should be compatible *)
+let v1 = C1.wrap 100
+let v2 = C2.wrap 200
+let d1 = C1.get_default 10
+let d2 = C2.get_default 20
+
+(* Test nested functor application *)
+module MakeOps (X : sig val base : int end) = struct
+  let double x = X.base * 2 + x
+  let triple x = X.base * 3 + x
+end
+
+module Ops5 = MakeOps(struct let base = 5 end)
+module Ops7 = MakeOps(struct let base = 7 end)
+
+let doubled = Ops5.double 0
+let tripled = Ops7.triple 0
+
+(* Test functor with curried parameters *)
+module MakeAdder (A : sig val a : int end) (B : sig val b : int end) = struct
+  let sum x = A.a + B.b + x
+end
+
+module Add = MakeAdder(struct let a = 10 end)(struct let b = 5 end)
+let add_result = Add.sum 0
+
+let _ = print v1          (* Expected: 100 *)
+let _ = print v2          (* Expected: 200 *)
+let _ = print d1          (* Expected: 10 *)
+let _ = print d2          (* Expected: 20 *)
+let _ = print doubled     (* Expected: 10 *)
+let _ = print tripled     (* Expected: 21 *)
+let _ = print add_result  (* Expected: 15 *)
