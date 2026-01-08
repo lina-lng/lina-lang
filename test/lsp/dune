@@ -1,0 +1,61 @@
+; LSP test helpers
+(library
+ (name lsp_test_helpers)
+ (libraries lina_lsp typing common)
+ (modules lsp_test_helpers))
+
+; LSP types tests
+(library
+ (name test_lsp_types)
+ (libraries lina_lsp common)
+ (modules test_lsp_types)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP document store tests
+(library
+ (name test_lsp_document_store)
+ (libraries lina_lsp typing common)
+ (modules test_lsp_document_store)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP diagnostics tests
+(library
+ (name test_lsp_diagnostics)
+ (libraries lina_lsp lsp_test_helpers typing common)
+ (modules test_lsp_diagnostics)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP hover tests
+(library
+ (name test_lsp_hover)
+ (libraries lina_lsp lsp_test_helpers typing common)
+ (modules test_lsp_hover)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP completion tests
+(library
+ (name test_lsp_completion)
+ (libraries lina_lsp lsp_test_helpers typing common)
+ (modules test_lsp_completion)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP document symbols tests
+(library
+ (name test_lsp_symbols)
+ (libraries lina_lsp lsp_test_helpers typing common)
+ (modules test_lsp_symbols)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP go-to-definition tests
+(library
+ (name test_lsp_definition)
+ (libraries lina_lsp lsp_test_helpers typing common)
+ (modules test_lsp_definition)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

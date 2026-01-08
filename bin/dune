@@ -2,3 +2,8 @@
  (name main)
  (public_name linac)
  (libraries driver cmdliner))
+
+(executable
+ (name lsp_main)
+ (public_name linac-lsp)
+ (libraries lina_lsp eio_main))

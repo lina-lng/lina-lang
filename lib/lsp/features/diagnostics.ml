@@ -1,0 +1,135 @@
+(** Diagnostic computation for the LSP server. *)
+
+open Common
+
+(** Convert an accumulated error to a diagnostic. *)
+let diagnostic_of_accumulated_error (err : Typing.Error_accumulator.error) :
+    Lsp_types.diagnostic =
+  let message = Typing.Error_accumulator.error_message err in
+  let code =
+    match err.kind with
+    | Typing.Error_accumulator.TypeError _ -> Some "type"
+    | Typing.Error_accumulator.UnboundVariable _ -> Some "unbound-variable"
+    | Typing.Error_accumulator.UnboundType _ -> Some "unbound-type"
+    | Typing.Error_accumulator.UnboundConstructor _ -> Some "unbound-constructor"
+    | Typing.Error_accumulator.UnboundModule _ -> Some "unbound-module"
+    | Typing.Error_accumulator.UnificationError _ -> Some "unification"
+    | Typing.Error_accumulator.PatternError _ -> Some "pattern"
+    | Typing.Error_accumulator.ModuleError _ -> Some "module"
+  in
+  Lsp_types.make_diagnostic ~severity:Error ~message ?code ~hints:err.hints
+    err.location
+
+(** Convert a compiler warning to a diagnostic. *)
+let diagnostic_of_warning (info : Compiler_error.warning_info) : Lsp_types.diagnostic
+    =
+  let message = Compiler_error.warning_to_string info.warning in
+  let code =
+    match info.warning with
+    | Compiler_error.NonExhaustiveMatch _ -> Some "non-exhaustive"
+    | Compiler_error.RedundantPattern -> Some "redundant-pattern"
+  in
+  Lsp_types.make_diagnostic ~severity:Warning ~message ?code info.warning_location
+
+(** Parse a document and return AST with any parse errors. *)
+let parse_document store uri =
+  (* Check cache first *)
+  match Document_store.get_parse_cache store uri with
+  | Some cache -> (cache.ast, cache.parse_errors)
+  | None -> (
+      match Document_store.get_document store uri with
+      | None -> (None, [])
+      | Some doc ->
+          let _filename = Document_store.filename_of_uri uri in
+          let result =
+            try
+              let ast = Parsing.Parse.structure_from_string doc.content in
+              (Some ast, [])
+            with
+            | Compiler_error.Error err ->
+                (None, [ Lsp_types.diagnostic_of_compiler_error err ])
+            | _ ->
+                let diag =
+                  Lsp_types.make_diagnostic ~severity:Error
+                    ~message:"Parse error" ~code:"parser" Location.none
+                in
+                (None, [ diag ])
+          in
+          let cache : Document_store.parse_cache =
+            {
+              parse_version = doc.version;
+              ast = fst result;
+              parse_errors = snd result;
+            }
+          in
+          Document_store.set_parse_cache store ~uri cache;
+          result)
+
+(** Type check a document and return typed AST with errors. *)
+let type_check_document store uri =
+  (* Check cache first *)
+  match Document_store.get_typing_cache store uri with
+  | Some cache -> (cache.typed_ast, cache.environment, cache.type_errors @ cache.warnings)
+  | None -> (
+      (* Need to parse first *)
+      let ast_opt, parse_errors = parse_document store uri in
+      match ast_opt with
+      | None ->
+          (* Parse failed, return empty with parse errors *)
+          (None, Typing.Environment.initial, parse_errors)
+      | Some ast -> (
+          match Document_store.get_document store uri with
+          | None -> (None, Typing.Environment.initial, [])
+          | Some doc ->
+              (* Clear warnings before type checking *)
+              Compiler_error.clear_warnings ();
+              Typing.Types.reset_level ();
+
+              let result =
+                try
+                  let typed_ast, env =
+                    Typing.Inference.infer_structure Typing.Environment.initial ast
+                  in
+                  (* Collect warnings *)
+                  let warnings = Compiler_error.get_warnings () in
+                  let warning_diagnostics =
+                    List.map diagnostic_of_warning warnings
+                  in
+                  (Some typed_ast, env, [], warning_diagnostics)
+                with
+                | Compiler_error.Error err ->
+                    let diag = Lsp_types.diagnostic_of_compiler_error err in
+                    (None, Typing.Environment.initial, [ diag ], [])
+                | Typing.Unification.Unification_error
+                    { expected; actual; location; message } ->
+                    let full_message =
+                      Printf.sprintf "%s\nExpected: %s\nActual: %s" message
+                        (Typing.Types.type_expression_to_string expected)
+                        (Typing.Types.type_expression_to_string actual)
+                    in
+                    let diag =
+                      Lsp_types.make_diagnostic ~severity:Error ~message:full_message
+                        ~code:"unification" location
+                    in
+                    (None, Typing.Environment.initial, [ diag ], [])
+              in
+              let typed_ast, env, type_errors, warnings = result in
+              let cache : Document_store.typing_cache =
+                {
+                  typing_version = doc.version;
+                  typed_ast;
+                  environment = env;
+                  type_errors;
+                  warnings;
+                }
+              in
+              Document_store.set_typing_cache store ~uri cache;
+              (typed_ast, env, type_errors @ warnings)))
+
+(** Compute all diagnostics for a document. *)
+let compute_diagnostics store uri =
+  let _, parse_errors = parse_document store uri in
+  if parse_errors <> [] then parse_errors
+  else
+    let _, _, type_diagnostics = type_check_document store uri in
+    type_diagnostics
