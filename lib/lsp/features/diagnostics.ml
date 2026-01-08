@@ -85,34 +85,32 @@ let type_check_document store uri =
               Compiler_error.clear_warnings ();
               Typing.Types.reset_level ();
 
-              let result =
-                try
-                  let typed_ast, env =
-                    Typing.Inference.infer_structure Typing.Environment.initial ast
-                  in
-                  (* Collect warnings *)
-                  let warnings = Compiler_error.get_warnings () in
-                  let warning_diagnostics =
-                    List.map diagnostic_of_warning warnings
-                  in
-                  (Some typed_ast, env, [], warning_diagnostics)
-                with
-                | Compiler_error.Error err ->
-                    let diag = Lsp_types.diagnostic_of_compiler_error err in
-                    (None, Typing.Environment.initial, [ diag ], [])
-                | Typing.Unification.Unification_error
-                    { expected; actual; location; message } ->
-                    let full_message =
-                      Printf.sprintf "%s\nExpected: %s\nActual: %s" message
-                        (Typing.Types.type_expression_to_string expected)
-                        (Typing.Types.type_expression_to_string actual)
-                    in
-                    let diag =
-                      Lsp_types.make_diagnostic ~severity:Error ~message:full_message
-                        ~code:"unification" location
-                    in
-                    (None, Typing.Environment.initial, [ diag ], [])
+              (* Use error-tolerant inference to preserve environment even with errors *)
+              let typed_ast, env, errors =
+                Typing.Inference.infer_structure_tolerant Typing.Environment.initial ast
               in
+              (* Collect warnings *)
+              let warnings = Compiler_error.get_warnings () in
+              let warning_diagnostics =
+                List.map diagnostic_of_warning warnings
+              in
+              (* Convert inference errors to diagnostics *)
+              let error_diagnostics =
+                List.map (fun err ->
+                  match err with
+                  | Typing.Inference.CompilerError compiler_err ->
+                      Lsp_types.diagnostic_of_compiler_error compiler_err
+                  | Typing.Inference.UnificationError details ->
+                      let full_message =
+                        Printf.sprintf "%s\nExpected: %s\nActual: %s" details.message
+                          (Typing.Types.type_expression_to_string details.expected)
+                          (Typing.Types.type_expression_to_string details.actual)
+                      in
+                      Lsp_types.make_diagnostic ~severity:Error ~message:full_message
+                        ~code:"unification" details.location
+                ) errors
+              in
+              let result = (typed_ast, env, error_diagnostics, warning_diagnostics) in
               let typed_ast, env, type_errors, warnings = result in
               let cache : Document_store.typing_cache =
                 {

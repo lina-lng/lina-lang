@@ -124,6 +124,19 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
   in
   (type_declaration, env)
 
+(** Unification error details for tolerant inference. *)
+type unification_error_details = {
+  expected : Types.type_expression;
+  actual : Types.type_expression;
+  location : Common.Location.t;
+  message : string;
+}
+
+(** Error information from tolerant inference. *)
+type inference_error =
+  | CompilerError of Common.Compiler_error.t
+  | UnificationError of unification_error_details
+
 (** [infer_structure_item env item] infers types for a structure item.
 
     @param env The typing environment
@@ -526,3 +539,33 @@ and infer_structure env structure =
     ) ([], env) structure
   in
   (List.rev typed_items, env)
+
+(** [infer_structure_tolerant env structure] infers types for a structure,
+    continuing after errors to accumulate as much environment as possible.
+
+    This is used by LSP features like completion that need the environment
+    even when the code has errors (e.g., incomplete expressions being typed).
+
+    @param env The typing environment
+    @param structure The structure to infer
+    @return A triple [(typed_structure_opt, accumulated_env, errors)] where
+            typed_structure_opt is Some if all items succeeded, None if any failed,
+            and errors is the list of errors encountered *)
+and infer_structure_tolerant env structure =
+  let typed_items, env, errors =
+    List.fold_left (fun (items, env, errors) item ->
+      try
+        let typed_item, env = infer_structure_item env item in
+        (typed_item :: items, env, errors)
+      with
+      | Common.Compiler_error.Error compiler_err ->
+          (* Record error and continue with current env *)
+          (items, env, CompilerError compiler_err :: errors)
+      | Unification.Unification_error { expected; actual; location; message } ->
+          (* Record error and continue with current env *)
+          let err_details = { expected; actual; location; message } in
+          (items, env, UnificationError err_details :: errors)
+    ) ([], env, []) structure
+  in
+  let typed_ast = if errors <> [] then None else Some (List.rev typed_items) in
+  (typed_ast, env, List.rev errors)

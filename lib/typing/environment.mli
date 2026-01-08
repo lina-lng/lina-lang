@@ -158,3 +158,39 @@ val find_module_by_path : Types.path -> t -> Module_types.module_binding option
             and [opened] is a list of (name, identifier) pairs for opened values *)
 val open_module :
   Module_types.signature -> t -> t * (string * Common.Identifier.t) list
+
+(** {1 Iteration Functions} *)
+
+(** [fold_values f env acc] folds over all value bindings in the environment.
+
+    @param f Function called with name, identifier, type scheme, and accumulator
+    @param env The environment to iterate
+    @param acc Initial accumulator value
+    @return Final accumulator after processing all values *)
+val fold_values :
+  (string -> Common.Identifier.t -> Types.type_scheme -> 'a -> 'a) -> t -> 'a -> 'a
+
+(** [fold_types f env acc] folds over all type declarations in the environment.
+
+    @param f Function called with type name, declaration, and accumulator
+    @param env The environment to iterate
+    @param acc Initial accumulator value
+    @return Final accumulator after processing all types *)
+val fold_types : (string -> Types.type_declaration -> 'a -> 'a) -> t -> 'a -> 'a
+
+(** [fold_constructors f env acc] folds over all constructor bindings.
+
+    @param f Function called with constructor name, info, and accumulator
+    @param env The environment to iterate
+    @param acc Initial accumulator value
+    @return Final accumulator after processing all constructors *)
+val fold_constructors : (string -> Types.constructor_info -> 'a -> 'a) -> t -> 'a -> 'a
+
+(** [fold_modules f env acc] folds over all module bindings.
+
+    @param f Function called with module name, binding, and accumulator
+    @param env The environment to iterate
+    @param acc Initial accumulator value
+    @return Final accumulator after processing all modules *)
+val fold_modules :
+  (string -> Module_types.module_binding -> 'a -> 'a) -> t -> 'a -> 'a

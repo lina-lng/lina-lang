@@ -6,83 +6,150 @@ type hover_result = {
   range : Lsp_types.range option;
 }
 
-(** Find the typed expression at a given offset in the typed AST. *)
-let rec find_expression_at offset (expr : Typing.Typed_tree.typed_expression) =
+(** Result of searching for a node at a position - can be expression or pattern. *)
+type node_at_position =
+  | ExpressionNode of Typing.Typed_tree.typed_expression
+  | PatternNode of Typing.Typed_tree.typed_pattern
+
+(** Find the typed pattern at a given offset. *)
+let rec find_pattern_at offset (pat : Typing.Typed_tree.typed_pattern) =
+  let loc = pat.pattern_location in
+  if loc.Common.Location.start_pos.offset <= offset
+     && offset < loc.Common.Location.end_pos.offset
+  then
+    (* Check children first for more specific match *)
+    let child_match =
+      match pat.pattern_desc with
+      | Typing.Typed_tree.TypedPatternTuple pats ->
+          List.find_map (find_pattern_at offset) pats
+      | Typing.Typed_tree.TypedPatternConstructor (_, Some arg) ->
+          find_pattern_at offset arg
+      | Typing.Typed_tree.TypedPatternRecord (fields, _) ->
+          List.find_map
+            (fun (f : Typing.Typed_tree.typed_record_pattern_field) ->
+              find_pattern_at offset f.typed_pattern_field_pattern)
+            fields
+      | _ -> None
+    in
+    match child_match with
+    | Some _ as result -> result
+    | None -> Some pat
+  else None
+
+(** Find the typed expression or pattern at a given offset in the typed AST. *)
+let rec find_node_at offset (expr : Typing.Typed_tree.typed_expression) =
   let loc = expr.expression_location in
-  if loc.start_pos.offset <= offset && offset < loc.end_pos.offset then
+  if loc.Common.Location.start_pos.offset <= offset
+     && offset < loc.Common.Location.end_pos.offset
+  then
     (* Check children first for more specific match *)
     let child_match =
       match expr.expression_desc with
       | Typing.Typed_tree.TypedExpressionTuple exprs ->
-          List.find_map (find_expression_at offset) exprs
+          List.find_map (find_node_at offset) exprs
       | Typing.Typed_tree.TypedExpressionConstructor (_, Some arg) ->
-          find_expression_at offset arg
+          find_node_at offset arg
       | Typing.Typed_tree.TypedExpressionApply (f, args) -> (
-          match find_expression_at offset f with
+          match find_node_at offset f with
           | Some _ as result -> result
-          | None -> List.find_map (find_expression_at offset) args)
-      | Typing.Typed_tree.TypedExpressionFunction (_, body) ->
-          find_expression_at offset body
+          | None -> List.find_map (find_node_at offset) args)
+      | Typing.Typed_tree.TypedExpressionFunction (params, body) -> (
+          (* Check function parameters (patterns) first *)
+          let param_match =
+            List.find_map
+              (fun pat ->
+                match find_pattern_at offset pat with
+                | Some p -> Some (PatternNode p)
+                | None -> None)
+              params
+          in
+          match param_match with
+          | Some _ as result -> result
+          | None -> find_node_at offset body)
       | Typing.Typed_tree.TypedExpressionLet (_, bindings, body) -> (
-          let binding_match =
+          (* Check binding patterns first, then expressions *)
+          let pattern_match =
             List.find_map
               (fun (b : Typing.Typed_tree.typed_binding) ->
-                find_expression_at offset b.binding_expression)
+                match find_pattern_at offset b.binding_pattern with
+                | Some p -> Some (PatternNode p)
+                | None -> None)
               bindings
           in
-          match binding_match with
-          | Some _ as result -> result
-          | None -> find_expression_at offset body)
-      | Typing.Typed_tree.TypedExpressionIf (cond, then_, else_) -> (
-          match find_expression_at offset cond with
+          match pattern_match with
           | Some _ as result -> result
           | None -> (
-              match find_expression_at offset then_ with
+              let binding_match =
+                List.find_map
+                  (fun (b : Typing.Typed_tree.typed_binding) ->
+                    find_node_at offset b.binding_expression)
+                  bindings
+              in
+              match binding_match with
               | Some _ as result -> result
-              | None -> Option.bind else_ (find_expression_at offset)))
-      | Typing.Typed_tree.TypedExpressionSequence (e1, e2) -> (
-          match find_expression_at offset e1 with
+              | None -> find_node_at offset body))
+      | Typing.Typed_tree.TypedExpressionIf (cond, then_, else_) -> (
+          match find_node_at offset cond with
           | Some _ as result -> result
-          | None -> find_expression_at offset e2)
+          | None -> (
+              match find_node_at offset then_ with
+              | Some _ as result -> result
+              | None -> Option.bind else_ (find_node_at offset)))
+      | Typing.Typed_tree.TypedExpressionSequence (e1, e2) -> (
+          match find_node_at offset e1 with
+          | Some _ as result -> result
+          | None -> find_node_at offset e2)
       | Typing.Typed_tree.TypedExpressionRecord fields ->
           List.find_map
             (fun (f : Typing.Typed_tree.typed_record_field) ->
-              find_expression_at offset f.typed_field_value)
+              find_node_at offset f.typed_field_value)
             fields
       | Typing.Typed_tree.TypedExpressionRecordAccess (e, _) ->
-          find_expression_at offset e
+          find_node_at offset e
       | Typing.Typed_tree.TypedExpressionRecordUpdate (e, fields) -> (
-          match find_expression_at offset e with
+          match find_node_at offset e with
           | Some _ as result -> result
           | None ->
               List.find_map
                 (fun (f : Typing.Typed_tree.typed_record_field) ->
-                  find_expression_at offset f.typed_field_value)
+                  find_node_at offset f.typed_field_value)
                 fields)
       | Typing.Typed_tree.TypedExpressionMatch (scrutinee, arms) -> (
-          match find_expression_at offset scrutinee with
+          match find_node_at offset scrutinee with
           | Some _ as result -> result
           | None ->
               List.find_map
                 (fun (arm : Typing.Typed_tree.typed_match_arm) ->
-                  find_expression_at offset arm.typed_arm_expression)
+                  (* Check pattern first, then guard, then expression *)
+                  match find_pattern_at offset arm.typed_arm_pattern with
+                  | Some p -> Some (PatternNode p)
+                  | None -> (
+                      match arm.typed_arm_guard with
+                      | Some guard -> (
+                          match find_node_at offset guard with
+                          | Some _ as result -> result
+                          | None -> find_node_at offset arm.typed_arm_expression)
+                      | None -> find_node_at offset arm.typed_arm_expression))
                 arms)
       | _ -> None
     in
     match child_match with
     | Some _ as result -> result
-    | None -> Some expr
+    | None -> Some (ExpressionNode expr)
   else None
 
-(** Find expression in a structure. *)
-let find_expression_in_structure offset
-    (structure : Typing.Typed_tree.typed_structure) =
+(** Find expression or pattern in a structure. *)
+let find_node_in_structure offset (structure : Typing.Typed_tree.typed_structure)
+    =
   let rec find_in_item (item : Typing.Typed_tree.typed_structure_item) =
     match item.structure_item_desc with
     | Typing.Typed_tree.TypedStructureValue (_, bindings) ->
         List.find_map
           (fun (b : Typing.Typed_tree.typed_binding) ->
-            find_expression_at offset b.binding_expression)
+            (* Check pattern first, then expression *)
+            match find_pattern_at offset b.binding_pattern with
+            | Some p -> Some (PatternNode p)
+            | None -> find_node_at offset b.binding_expression)
           bindings
     | Typing.Typed_tree.TypedStructureModule (_, mod_expr) ->
         find_in_module_expr mod_expr
@@ -111,18 +178,21 @@ let get_hover store uri (pos : Lsp_types.position) =
               match cache.typed_ast with
               | None -> None
               | Some typed_ast -> (
-                  match find_expression_in_structure offset typed_ast with
+                  match find_node_in_structure offset typed_ast with
                   | None -> None
-                  | Some expr ->
+                  | Some node ->
+                      let type_expr, location =
+                        match node with
+                        | ExpressionNode expr ->
+                            (expr.expression_type, expr.expression_location)
+                        | PatternNode pat ->
+                            (pat.pattern_type, pat.pattern_location)
+                      in
                       let type_str =
-                        Typing.Types.type_expression_to_string
-                          expr.expression_type
+                        Typing.Types.type_expression_to_string type_expr
                       in
                       let contents =
                         Printf.sprintf "```lina\n%s\n```" type_str
                       in
-                      let range =
-                        Some
-                          (Lsp_types.range_of_location expr.expression_location)
-                      in
+                      let range = Some (Lsp_types.range_of_location location) in
                       Some { contents; range }))))

@@ -145,6 +145,7 @@ let f x = match x with
 
 let%expect_test "multiple type errors in document" =
   reset ();
+  (* With tolerant inference, both errors are now reported *)
   with_document {|
 let x = unknown1
 let y = unknown2
@@ -153,7 +154,7 @@ let y = unknown2
     let error_count = List.length (List.filter (fun (d : Lsp_types.diagnostic) ->
       d.severity = Lsp_types.Error) diags) in
     Printf.printf "error_count=%d" error_count);
-  [%expect {| error_count=1 |}]
+  [%expect {| error_count=2 |}]
 
 (* ============================================================ *)
 (* Diagnostic Position *)

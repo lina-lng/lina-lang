@@ -147,6 +147,20 @@ and find_module_in_module_type name mty =
   | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
     None
 
+(* Iteration functions for LSP features *)
+
+let fold_values f env acc =
+  StringMap.fold (fun name (id, scheme) acc -> f name id scheme acc) env.values acc
+
+let fold_types f env acc =
+  StringMap.fold f env.types acc
+
+let fold_constructors f env acc =
+  StringMap.fold f env.constructors acc
+
+let fold_modules f env acc =
+  StringMap.fold f env.modules acc
+
 let initial =
   let env = empty in
   let env = add_builtin "+" binary_int_op_type env in

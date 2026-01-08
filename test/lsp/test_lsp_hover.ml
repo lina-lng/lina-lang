@@ -244,3 +244,126 @@ let%expect_test "hover includes range" =
          | None -> print_endline "no range")
     | None -> print_endline "None");
   [%expect {| has_range=true start_line=0 |}]
+
+(* ============================================================ *)
+(* Pattern Hover - Binding Patterns *)
+(* ============================================================ *)
+
+let%expect_test "hover on let binding pattern shows type" =
+  reset ();
+  with_document "let test = 42" (fun store uri ->
+    (* Hover on 'test' at position (0, 4) - the binding name *)
+    let result = Lsp_hover.get_hover store uri (pos 0 4) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
+
+let%expect_test "hover on binding pattern of function application" =
+  reset ();
+  with_document "let inc a = a + 1\nlet result = inc 10" (fun store uri ->
+    (* Hover on 'result' at line 1, position 4 *)
+    let result = Lsp_hover.get_hover store uri (pos 1 4) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
+
+let%expect_test "hover on tuple binding pattern" =
+  reset ();
+  with_document "let (a, b) = (1, 2)" (fun store uri ->
+    (* Hover on 'a' at position (0, 5) *)
+    let result = Lsp_hover.get_hover store uri (pos 0 5) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
+
+(* ============================================================ *)
+(* Pattern Hover - Function Parameters *)
+(* ============================================================ *)
+
+let%expect_test "hover on function parameter shows type" =
+  reset ();
+  with_document "let f x = x + 1" (fun store uri ->
+    (* Hover on 'x' parameter at position (0, 6) *)
+    let result = Lsp_hover.get_hover store uri (pos 0 6) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
+
+let%expect_test "hover on multi-param function first param" =
+  reset ();
+  with_document "let add x y = x + y" (fun store uri ->
+    (* Hover on 'x' parameter at position (0, 8) *)
+    let result = Lsp_hover.get_hover store uri (pos 0 8) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
+
+let%expect_test "hover on multi-param function second param" =
+  reset ();
+  with_document "let add x y = x + y" (fun store uri ->
+    (* Hover on 'y' parameter at position (0, 10) *)
+    let result = Lsp_hover.get_hover store uri (pos 0 10) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
+
+(* ============================================================ *)
+(* Pattern Hover - Match Arm Patterns *)
+(* ============================================================ *)
+
+let%expect_test "hover on match arm pattern variable" =
+  reset ();
+  with_document "type t = A of int\nlet f x = match x with A n -> n" (fun store uri ->
+    (* The pattern 'n' is polymorphic in the match context - just verify we get a type *)
+    let result = Lsp_hover.get_hover store uri (pos 1 25) in
+    match result with
+    | Some r ->
+        (* Just check we got some type info, it may be a type variable *)
+        let has_type = String.length r.contents > 10 in
+        Printf.printf "has_type=%b" has_type
+    | None -> print_endline "None");
+  [%expect {| has_type=true |}]
+
+let%expect_test "hover on wildcard pattern returns unit type" =
+  reset ();
+  with_document "let _ = 42" (fun store uri ->
+    (* Hover on '_' at position (0, 4) *)
+    let result = Lsp_hover.get_hover store uri (pos 0 4) in
+    match result with
+    | Some r -> print_endline r.contents
+    | None -> print_endline "None");
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]

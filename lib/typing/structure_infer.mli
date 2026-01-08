@@ -47,6 +47,39 @@ val infer_structure :
   Parsing.Syntax_tree.structure ->
   Typed_tree.typed_structure * Environment.t
 
+(** Unification error details for tolerant inference. *)
+type unification_error_details = {
+  expected : Types.type_expression;
+  actual : Types.type_expression;
+  location : Common.Location.t;
+  message : string;
+}
+
+(** Error information from tolerant inference. *)
+type inference_error =
+  | CompilerError of Common.Compiler_error.t
+  | UnificationError of unification_error_details
+
+(** [infer_structure_tolerant env structure] infers types for a structure,
+    continuing after errors to accumulate as much environment as possible.
+
+    This is used by LSP features like completion that need the environment
+    even when the code has errors (e.g., incomplete expressions being typed).
+
+    Unlike {!infer_structure}, this function catches type errors per structure
+    item and continues processing subsequent items with the accumulated
+    environment.
+
+    @param env The initial typing environment
+    @param structure The structure to infer
+    @return A triple [(typed_structure_opt, accumulated_env, errors)] where
+            [typed_structure_opt] is [Some ast] if all items succeeded,
+            [None] if any item failed, and [errors] is the list of errors *)
+val infer_structure_tolerant :
+  Environment.t ->
+  Parsing.Syntax_tree.structure ->
+  Typed_tree.typed_structure option * Environment.t * inference_error list
+
 (** [infer_structure_item env item] infers types for a single structure item.
 
     @param env The typing environment

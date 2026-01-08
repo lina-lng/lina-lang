@@ -47,11 +47,71 @@ let keywords =
     "false";
   ]
 
+(** Check if a string starts with a prefix (case-sensitive). *)
+let has_prefix prefix str =
+  let prefix_len = String.length prefix in
+  let str_len = String.length str in
+  prefix_len <= str_len && String.sub str 0 prefix_len = prefix
+
+(** Determine completion kind based on type: Function if arrow type, Variable otherwise. *)
+let kind_of_type_scheme (scheme : Typing.Types.type_scheme) =
+  match scheme.body with
+  | Typing.Types.TypeArrow _ -> Function
+  | _ -> Variable
+
 (** Get completions from environment. *)
-let completions_from_env _prefix (_env : Typing.Environment.t) =
-  (* This is a simplified implementation - we'd need to expose
-     Environment iteration functions for full support *)
-  []
+let completions_from_env prefix (env : Typing.Environment.t) =
+  let value_completions =
+    Typing.Environment.fold_values
+      (fun name _id scheme acc ->
+        if has_prefix prefix name then
+          let type_str = Typing.Types.type_expression_to_string scheme.Typing.Types.body in
+          {
+            label = name;
+            kind = kind_of_type_scheme scheme;
+            detail = Some type_str;
+            documentation = None;
+          }
+          :: acc
+        else acc)
+      env []
+  in
+  let type_completions =
+    Typing.Environment.fold_types
+      (fun name _decl acc ->
+        if has_prefix prefix name then
+          { label = name; kind = Type; detail = Some "type"; documentation = None }
+          :: acc
+        else acc)
+      env []
+  in
+  let constructor_completions =
+    Typing.Environment.fold_constructors
+      (fun name info acc ->
+        if has_prefix prefix name then
+          let type_str =
+            Typing.Types.type_expression_to_string info.Typing.Types.constructor_result_type
+          in
+          {
+            label = name;
+            kind = Constructor;
+            detail = Some type_str;
+            documentation = None;
+          }
+          :: acc
+        else acc)
+      env []
+  in
+  let module_completions =
+    Typing.Environment.fold_modules
+      (fun name _binding acc ->
+        if has_prefix prefix name then
+          { label = name; kind = Module; detail = Some "module"; documentation = None }
+          :: acc
+        else acc)
+      env []
+  in
+  value_completions @ type_completions @ constructor_completions @ module_completions
 
 (** Get keyword completions. *)
 let keyword_completions prefix =
@@ -86,6 +146,9 @@ let get_completions store uri (pos : Lsp_types.position) =
             if start < offset then String.sub doc.content start (offset - start)
             else ""
           in
+
+          (* Trigger type checking to populate cache *)
+          let _, _, _ = Diagnostics.type_check_document store uri in
 
           (* Get environment from typing cache *)
           let env_completions =

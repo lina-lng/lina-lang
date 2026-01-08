@@ -180,8 +180,8 @@ let%expect_test "completion on empty document" =
   with_document "" (fun store uri ->
     let items = Lsp_completion.get_completions store uri (pos 0 0) in
     Printf.printf "count=%d" (List.length items));
-  (* Should return all keywords *)
-  [%expect {| count=24 |}]
+  (* Should return all keywords (24) + built-in values (11) = 35 *)
+  [%expect {| count=35 |}]
 
 let%expect_test "completion on invalid document returns keywords" =
   reset ();
@@ -189,3 +189,103 @@ let%expect_test "completion on invalid document returns keywords" =
   let items = Lsp_completion.get_completions store "nonexistent.lina" (pos 0 0) in
   Printf.printf "count=%d" (List.length items);
   [%expect {| count=0 |}]
+
+(* ============================================================ *)
+(* Environment-Based Completions *)
+(* ============================================================ *)
+
+let%expect_test "completion includes user-defined function" =
+  reset ();
+  (* Use valid syntax: `inc 10` is a complete expression *)
+  with_document "let inc a = a + 1\nlet test = inc 10" (fun store uri ->
+    (* Type "in" at position where we want to complete *)
+    let items = Lsp_completion.get_completions store uri (pos 1 13) in
+    let has_inc = List.exists (fun (item : Lsp_completion.completion_item) ->
+      item.label = "inc") items in
+    Printf.printf "has_inc=%b" has_inc);
+  [%expect {| has_inc=true |}]
+
+let%expect_test "completion for user function has Function kind" =
+  reset ();
+  with_document "let add x y = x + y\nlet result = add 1 2" (fun store uri ->
+    let items = Lsp_completion.get_completions store uri (pos 1 15) in
+    let add_item = List.find_opt (fun (item : Lsp_completion.completion_item) ->
+      item.label = "add") items in
+    match add_item with
+    | Some item ->
+        let kind_str = match item.kind with
+          | Lsp_completion.Function -> "Function"
+          | Lsp_completion.Variable -> "Variable"
+          | _ -> "Other"
+        in
+        Printf.printf "kind=%s" kind_str
+    | None -> print_endline "Not found");
+  [%expect {| kind=Function |}]
+
+let%expect_test "completion for user function includes type in detail" =
+  reset ();
+  with_document "let inc a = a + 1\nlet result = inc 5" (fun store uri ->
+    let items = Lsp_completion.get_completions store uri (pos 1 16) in
+    let inc_item = List.find_opt (fun (item : Lsp_completion.completion_item) ->
+      item.label = "inc") items in
+    match inc_item with
+    | Some item ->
+        Printf.printf "has_detail=%b" (Option.is_some item.detail)
+    | None -> print_endline "Not found");
+  [%expect {| has_detail=true |}]
+
+let%expect_test "completion for user variable has Variable kind" =
+  reset ();
+  with_document "let counter = 42\nlet result = counter + 1" (fun store uri ->
+    let items = Lsp_completion.get_completions store uri (pos 1 20) in
+    let counter_item = List.find_opt (fun (item : Lsp_completion.completion_item) ->
+      item.label = "counter") items in
+    match counter_item with
+    | Some item ->
+        let kind_str = match item.kind with
+          | Lsp_completion.Function -> "Function"
+          | Lsp_completion.Variable -> "Variable"
+          | _ -> "Other"
+        in
+        Printf.printf "kind=%s" kind_str
+    | None -> print_endline "Not found");
+  [%expect {| kind=Variable |}]
+
+let%expect_test "completion includes builtin functions" =
+  reset ();
+  with_document "let _ = print 42" (fun store uri ->
+    let items = Lsp_completion.get_completions store uri (pos 0 13) in
+    let has_print = List.exists (fun (item : Lsp_completion.completion_item) ->
+      item.label = "print") items in
+    Printf.printf "has_print=%b" has_print);
+  [%expect {| has_print=true |}]
+
+let%expect_test "completion includes type names" =
+  reset ();
+  (* Simple variant type to verify types are included *)
+  with_document "type color = Red | Blue\nlet x = 1" (fun store uri ->
+    (* Get all completions with "col" prefix - position after "let x = " is 8, so pos 8 gives empty prefix *)
+    let items = Lsp_completion.get_completions store uri (pos 1 8) in
+    let type_items = List.filter (fun (item : Lsp_completion.completion_item) ->
+      item.kind = Lsp_completion.Type) items in
+    let has_color = List.exists (fun item -> item.Lsp_completion.label = "color") type_items in
+    Printf.printf "has_color=%b types_count=%d" has_color (List.length type_items));
+  [%expect {| has_color=true types_count=1 |}]
+
+let%expect_test "completion includes variant constructors" =
+  reset ();
+  with_document "type color = Red | Green | Blue\nlet c = Green" (fun store uri ->
+    let items = Lsp_completion.get_completions store uri (pos 1 11) in
+    let has_green = List.exists (fun (item : Lsp_completion.completion_item) ->
+      item.label = "Green" && item.kind = Lsp_completion.Constructor) items in
+    Printf.printf "has_Green=%b" has_green);
+  [%expect {| has_Green=true |}]
+
+let%expect_test "completion includes module names" =
+  reset ();
+  with_document "module Math = struct let pi = 3 end\nlet x = Math.pi" (fun store uri ->
+    let items = Lsp_completion.get_completions store uri (pos 1 12) in
+    let has_math = List.exists (fun (item : Lsp_completion.completion_item) ->
+      item.label = "Math" && item.kind = Lsp_completion.Module) items in
+    Printf.printf "has_Math=%b" has_math);
+  [%expect {| has_Math=true |}]
