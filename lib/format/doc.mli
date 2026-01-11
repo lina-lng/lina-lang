@@ -101,10 +101,17 @@ val line_suffix : doc -> doc
 
 (** {1 Derived Combinators} *)
 
-(** The default indentation width (2 spaces). *)
-val indent_width : int
+(** Get the current indentation width.
+    Default is 2 spaces. Use {!set_indent_width} to change. *)
+val indent_width : unit -> int
 
-(** [indent doc] is [nest indent_width doc]. *)
+(** Set the indentation width for subsequent formatting.
+
+    @param n Number of spaces per indent level (must be >= 0)
+    @raise Invalid_argument if [n] is negative *)
+val set_indent_width : int -> unit
+
+(** [indent doc] is [nest (indent_width ()) doc]. *)
 val indent : doc -> doc
 
 (** [concat_list docs] concatenates a list of documents. *)

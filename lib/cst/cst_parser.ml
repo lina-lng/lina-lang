@@ -127,8 +127,7 @@ and parse_application state =
        || at state TK_LPAREN
        || at state TK_LBRACE)
   do
-    let saved = start_node state in
-    (* Move the last child (the function) into this new apply node *)
+    (* Extract the function BEFORE calling start_node *)
     let func =
       match List.rev state.children with
       | [] -> []
@@ -136,6 +135,7 @@ and parse_application state =
           state.children <- List.rev rest;
           [ last ]
     in
+    let saved = start_node state in
     state.children <- func;
     parse_primary state;
     ignore (finish_node state NK_APPLY_EXPR saved)
@@ -157,8 +157,7 @@ and parse_infix_expr state =
        || at state TK_EQUAL_EQUAL
        || at state TK_NOT_EQUAL)
   do
-    let saved = start_node state in
-    (* Move the last child (left operand) into this new infix node *)
+    (* Extract the left operand BEFORE calling start_node *)
     let left =
       match List.rev state.children with
       | [] -> []
@@ -166,6 +165,7 @@ and parse_infix_expr state =
           state.children <- List.rev rest;
           [ last ]
     in
+    let saved = start_node state in
     state.children <- left;
     bump state;
     (* operator *)
@@ -246,16 +246,17 @@ and parse_match_expr state =
   (* match *)
   parse_expression state;
   expect state TK_WITH;
-  if at state TK_BAR then bump state;
   parse_match_arm state;
   while at state TK_BAR do
-    bump state;
     parse_match_arm state
   done
 
-(** [parse_match_arm state] parses a single match arm. *)
+(** [parse_match_arm state] parses a single match arm.
+    The bar token (if present) is included inside the arm node. *)
 and parse_match_arm state =
   let saved = start_node state in
+  (* Include the bar token inside the arm *)
+  if at state TK_BAR then bump state;
   parse_pattern state;
   if at state TK_WHEN then (
     bump state;
@@ -355,7 +356,7 @@ and parse_type state =
   parse_type_primary state;
   (* Arrow types *)
   while at state TK_ARROW do
-    let saved = start_node state in
+    (* Extract the left type BEFORE calling start_node *)
     let left =
       match List.rev state.children with
       | [] -> []
@@ -363,6 +364,7 @@ and parse_type state =
           state.children <- List.rev rest;
           [ last ]
     in
+    let saved = start_node state in
     state.children <- left;
     bump state;
     parse_type_primary state;
@@ -374,7 +376,7 @@ and parse_type_primary state =
   parse_type_atom state;
   (* Tuple types *)
   if at state TK_STAR then (
-    let saved = start_node state in
+    (* Extract the first type BEFORE calling start_node *)
     let first =
       match List.rev state.children with
       | [] -> []
@@ -382,6 +384,7 @@ and parse_type_primary state =
           state.children <- List.rev rest;
           [ last ]
     in
+    let saved = start_node state in
     state.children <- first;
     while at state TK_STAR do
       bump state;
@@ -592,7 +595,7 @@ and parse_module_expr state =
       parse_module_path state;
       (* Check for functor application *)
       while at state TK_LPAREN do
-        let saved = start_node state in
+        (* Extract the functor path BEFORE calling start_node *)
         let path =
           match List.rev state.children with
           | [] -> []
@@ -600,6 +603,7 @@ and parse_module_expr state =
               state.children <- List.rev rest;
               [ last ]
         in
+        let saved = start_node state in
         state.children <- path;
         bump state;
         parse_module_expr state;

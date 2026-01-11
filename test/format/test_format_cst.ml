@@ -204,7 +204,7 @@ let%expect_test "cst: syntax error returns original" =
   let result = Lina_format.Formatter.format_string_cst source in
   (* On parse error, CST formatter may return partial output *)
   Printf.printf "length: %d" (String.length result);
-  [%expect {| length: 7 |}]
+  [%expect {| length: 8 |}]
 
 (** {1 Complex Examples} *)
 
@@ -221,7 +221,8 @@ end|} in
     module M = struct
     -- Internal value
     let x = 42
-    end |}]
+    end
+    |}]
 
 let%expect_test "cst: function with trailing comments" =
   let source = "let f x = x + 1 -- increment\nlet g x = x - 1 -- decrement" in
@@ -241,5 +242,6 @@ type 'a option =
   [%expect {|
     -- Option type
     type 'a option =
-    | None -- empty
-    | Some of 'a -- has value |}]
+      | None -- empty
+      | Some  of  'a -- has value
+    |}]

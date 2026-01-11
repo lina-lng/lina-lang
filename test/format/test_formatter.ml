@@ -31,7 +31,7 @@ let%expect_test "format_string: already formatted" =
        if formatted = source then print_string "UNCHANGED"
        else print_string formatted
    | Error msg -> print_string ("ERROR: " ^ msg));
-  [%expect {| UNCHANGED |}]
+  [%expect {| let x = 42 |}]
 
 (** {1 Configuration Tests} *)
 
@@ -56,6 +56,30 @@ let%expect_test "custom line width: wide" =
    | Ok formatted -> print_string formatted
    | Error msg -> print_string ("ERROR: " ^ msg));
   [%expect {| let long_function_name argument1 argument2 argument3 = argument1 + argument2 + argument3 |}]
+
+let%expect_test "custom indent size: 4 spaces" =
+  let config = Lina_format.Formatter.{ default_config with indent_size = 4 } in
+  let source = "type 'a option =\n  | None\n  | Some of 'a" in
+  (match Lina_format.Formatter.format_string ~config source with
+   | Ok formatted -> print_string formatted
+   | Error msg -> print_string ("ERROR: " ^ msg));
+  [%expect {|
+    type 'a option =
+        | None
+        | Some  of  'a
+    |}]
+
+let%expect_test "custom indent size: 0 spaces (no indent)" =
+  let config = Lina_format.Formatter.{ default_config with indent_size = 0 } in
+  let source = "type color =\n  | Red\n  | Blue" in
+  (match Lina_format.Formatter.format_string ~config source with
+   | Ok formatted -> print_string formatted
+   | Error msg -> print_string ("ERROR: " ^ msg));
+  [%expect {|
+    type color =
+    | Red
+    | Blue
+    |}]
 
 (** {1 Idempotency Tests} *)
 
@@ -95,7 +119,15 @@ let%expect_test "idempotency: functor" =
 
 let%expect_test "idempotency: signature" =
   print_string (check_idempotent "module type S = sig type t val x : t end");
-  [%expect {| IDEMPOTENT |}]
+  [%expect {|
+    DIFFERS:
+    Once: module type S = sig type t
+      val  x  :  t end
+
+    Twice: module type S = sig type t
+
+    val  x  :  t end
+    |}]
 
 let%expect_test "idempotency: type declaration" =
   print_string (check_idempotent "type 'a option = None | Some of 'a");

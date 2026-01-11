@@ -30,7 +30,7 @@ let default_config = {
     @param content Source code to format
     @return [Ok formatted] on success, [Error message] on parse error *)
 let format_string ?(config = default_config) content =
-  Ok (Format_cst.format_string ~width:config.line_width content)
+  Ok (Format_cst.format_string ~width:config.line_width ~indent:config.indent_size content)
 
 (** Format a source file.
 
@@ -50,7 +50,7 @@ let format_file ?(config = default_config) ?(in_place = false) path =
       close_in ic;
       s
     in
-    let formatted = Format_cst.format_string ~width:config.line_width content in
+    let formatted = Format_cst.format_string ~width:config.line_width ~indent:config.indent_size content in
 
     if in_place && formatted <> content then begin
       let oc = open_out path in
@@ -76,7 +76,7 @@ let check_file ?(config = default_config) path =
       close_in ic;
       s
     in
-    let formatted = Format_cst.format_string ~width:config.line_width content in
+    let formatted = Format_cst.format_string ~width:config.line_width ~indent:config.indent_size content in
     Ok (formatted = content)
   with
   | Sys_error msg -> Error msg
@@ -95,7 +95,7 @@ let check_file ?(config = default_config) path =
     @param content Source code to format
     @return The formatted source code as a string *)
 let format_string_cst ?(config = default_config) content =
-  Format_cst.format_string ~width:config.line_width content
+  Format_cst.format_string ~width:config.line_width ~indent:config.indent_size content
 
 (** Format a file using CST.
 

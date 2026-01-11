@@ -24,3 +24,43 @@
  (modules test_format_cst)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Format accessors tests
+(library
+ (name test_format_accessors)
+ (libraries lina_format cst)
+ (modules test_format_accessors)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Expression formatter tests
+(library
+ (name test_format_expr)
+ (libraries lina_format)
+ (modules test_format_expr)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Pattern formatter tests
+(library
+ (name test_format_pattern)
+ (libraries lina_format)
+ (modules test_format_pattern)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Type formatter tests
+(library
+ (name test_format_type)
+ (libraries lina_format)
+ (modules test_format_type)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Module formatter tests
+(library
+ (name test_format_module)
+ (libraries lina_format)
+ (modules test_format_module)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

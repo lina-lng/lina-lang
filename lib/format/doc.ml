@@ -138,11 +138,21 @@ let line_suffix d = LineSuffix d
 
 (** {1 Derived Combinators} *)
 
-(** The default indentation width. *)
-let indent_width = 2
+(** The current indentation width (configurable).
+    Default is 2 spaces. Use [set_indent_width] to change. *)
+let current_indent_width = ref 2
 
-(** Indent a document by the default width. *)
-let indent d = nest indent_width d
+(** Get the current indentation width. *)
+let indent_width () = !current_indent_width
+
+(** Set the indentation width for subsequent formatting.
+    @param n Number of spaces per indent level (must be >= 0) *)
+let set_indent_width n =
+  if n < 0 then invalid_arg "Doc.set_indent_width: indent must be non-negative";
+  current_indent_width := n
+
+(** Indent a document by the current indent width. *)
+let indent d = nest (indent_width ()) d
 
 (** Concatenate a list of documents. *)
 let concat_list docs = List.fold_left concat empty docs
@@ -174,17 +184,17 @@ let soft_surround left content right =
 let block opening body closing =
   group (
     opening ^^
-    nest indent_width (softline ^^ body) ^^
+    nest (indent_width ()) (softline ^^ body) ^^
     softline ^^ closing
   )
 
 (** Prefix: header on same line, body indented below if it doesn't fit. *)
 let prefix header body =
-  group (header ^^ nest indent_width (softline ^^ body))
+  group (header ^^ nest (indent_width ()) (softline ^^ body))
 
 (** Infix: operator between left and right operands. *)
 let infix op left right =
-  group (left ^/^ op ^^ nest indent_width (softline ^^ right))
+  group (left ^/^ op ^^ nest (indent_width ()) (softline ^^ right))
 
 (** Fill: fit as many items per line as possible. *)
 let fill docs =

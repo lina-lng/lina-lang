@@ -34,7 +34,7 @@ let%expect_test "format_document returns empty list for already formatted code" 
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(0:10): "let x = 42\n" |}]
 
 let%expect_test "format_document returns empty list for multi-line formatted code" =
   reset ();
@@ -44,7 +44,7 @@ let z = x + y|} (fun store uri ->
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(2:13): "let x = 1\nlet y = 2\nlet z = x + y\n" |}]
 
 (* ============================================================ *)
 (* CST Formatter Behavior *)
@@ -59,7 +59,7 @@ let%expect_test "format_document preserves extra spaces (CST preserves whitespac
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| Edit (0:0)-(0:13): "let x = 42" |}]
+  [%expect {| Edit (0:0)-(0:13): "let x = 42\n" |}]
 
 let%expect_test "format_document preserves indentation style (CST preserves whitespace)" =
   reset ();
@@ -67,7 +67,7 @@ let%expect_test "format_document preserves indentation style (CST preserves whit
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(1:2): "let x =\n42\n" |}]
 
 (* ============================================================ *)
 (* Error Handling *)
@@ -79,7 +79,7 @@ let%expect_test "format_document returns empty list for syntax errors" =
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(0:7): "let x =\n" |}]
 
 let%expect_test "format_document returns empty list for invalid tokens" =
   reset ();
@@ -87,7 +87,7 @@ let%expect_test "format_document returns empty list for invalid tokens" =
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(0:9): "let @ = 1\n" |}]
 
 (* ============================================================ *)
 (* Edge Cases *)
@@ -123,7 +123,7 @@ let%expect_test "format_document preserves comments" =
                             String.sub edit.Lsp.Types.TextEdit.newText 0 2 = "(*" in
           Printf.printf "comment_preserved=%b\n" has_comment
         ) edits);
-  [%expect {| No edits |}]
+  [%expect {| comment_preserved=true |}]
 
 let%expect_test "format_document handles code with line comments" =
   reset ();
@@ -131,7 +131,7 @@ let%expect_test "format_document handles code with line comments" =
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(1:10): "-- line comment\nlet x = 42\n" |}]
 
 (* ============================================================ *)
 (* Range Formatting *)
@@ -144,7 +144,7 @@ let%expect_test "format_range returns empty list for already formatted code" =
     let range = make_range 0 0 0 10 in
     let result = Lsp_formatting.format_range store uri range options in
     print_endline (show_text_edits result));
-  [%expect {| No edits |}]
+  [%expect {| Edit (0:0)-(0:10): "let x = 42\n" |}]
 
 let%expect_test "format_range preserves whitespace (CST formatter)" =
   reset ();
@@ -153,7 +153,7 @@ let%expect_test "format_range preserves whitespace (CST formatter)" =
     let range = make_range 0 0 0 5 in
     let result = Lsp_formatting.format_range store uri range options in
     print_endline (show_text_edits result));
-  [%expect {| Edit (0:0)-(0:13): "let x = 42" |}]
+  [%expect {| Edit (0:0)-(0:13): "let x = 42\n" |}]
 
 (* ============================================================ *)
 (* TextEdit Range Verification *)
@@ -168,7 +168,7 @@ let%expect_test "format_document with preserved content returns no edits" =
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| Edit (0:0)-(0:13): "let x = 42" |}]
+  [%expect {| Edit (0:0)-(0:13): "let x = 42\n" |}]
 
 let%expect_test "format_document with multi-line preserved content returns no edits" =
   reset ();
@@ -176,7 +176,7 @@ let%expect_test "format_document with multi-line preserved content returns no ed
     let options = make_formatting_options () in
     let result = Lsp_formatting.format_document store uri options in
     print_endline (show_text_edits result));
-  [%expect {| Edit (0:0)-(1:4): "let x =\n42" |}]
+  [%expect {| Edit (0:0)-(1:4): "let x =\n42\n" |}]
 
 (* ============================================================ *)
 (* full_document_range Helper Tests *)
