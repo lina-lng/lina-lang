@@ -108,3 +108,17 @@ let diagnostic_of_compiler_error (err : Compiler_error.t) : diagnostic =
     | Compiler_error.InternalError msg -> (Error, "internal", msg)
   in
   make_diagnostic ~severity ~message ~code ~hints:err.hints err.location
+
+(** Create range covering entire document content. *)
+let full_document_range (content : string) : range =
+  let lines = String.split_on_char '\n' content in
+  let line_count = List.length lines in
+  let last_line_length =
+    match List.rev lines with
+    | [] -> 0
+    | last :: _ -> String.length last
+  in
+  {
+    start_pos = { line = 0; character = 0 };
+    end_pos = { line = line_count - 1; character = last_line_length };
+  }

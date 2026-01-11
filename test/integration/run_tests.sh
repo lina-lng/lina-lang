@@ -19,7 +19,7 @@ run_test() {
     echo -n "Testing $name... "
 
     # Compile
-    if ! ../../_build/default/bin/main.exe "$file" -o "$name.lua" 2>/dev/null; then
+    if ! ../../_build/default/bin/main.exe compile "$file" -o "$name.lua" 2>/dev/null; then
         echo -e "${RED}FAILED${NC} (compilation error)"
         FAILED=$((FAILED + 1))
         return

@@ -145,3 +145,19 @@
  (modules test_ffi)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; CST (Concrete Syntax Tree) tests
+(library
+ (name test_cst)
+ (libraries cst lina_format common)
+ (modules test_cst)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Comprehensive CST integration tests
+(library
+ (name test_cst_comprehensive)
+ (libraries cst lina_format common)
+ (modules test_cst_comprehensive)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

@@ -1,0 +1,5 @@
+(library
+ (name lina_format)
+ (public_name lina.format)
+ (libraries common parsing cst)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

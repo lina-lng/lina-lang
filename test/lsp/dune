@@ -1,7 +1,7 @@
 ; LSP test helpers
 (library
  (name lsp_test_helpers)
- (libraries lina_lsp typing common)
+ (libraries lina_lsp typing common linol)
  (modules lsp_test_helpers))
 
 ; LSP types tests
@@ -57,5 +57,13 @@
  (name test_lsp_definition)
  (libraries lina_lsp lsp_test_helpers typing common)
  (modules test_lsp_definition)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; LSP formatting tests
+(library
+ (name test_lsp_formatting)
+ (libraries lina_lsp lsp_test_helpers typing common linol)
+ (modules test_lsp_formatting)
  (inline_tests)
  (preprocess (pps ppx_expect)))

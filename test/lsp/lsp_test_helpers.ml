@@ -112,3 +112,36 @@ let pos line character : Lsp_types.position = { line; character }
 
 (** Reset type inference state before tests. *)
 let reset () = Typing.Types.reset_level ()
+
+(** Module alias for linol LSP types. *)
+module Lsp = Linol.Lsp
+
+(** Create formatting options for testing. *)
+let make_formatting_options ?(tab_size = 2) ?(insert_spaces = true) () =
+  Lsp.Types.FormattingOptions.create ~tabSize:tab_size ~insertSpaces:insert_spaces ()
+
+(** Format a single TextEdit for testing. *)
+let show_text_edit (edit : Lsp.Types.TextEdit.t) =
+  let range = edit.range in
+  let start_line = range.start.line in
+  let start_char = range.start.character in
+  let end_line = range.end_.line in
+  let end_char = range.end_.character in
+  Printf.sprintf "Edit (%d:%d)-(%d:%d): %S"
+    start_line start_char end_line end_char edit.newText
+
+(** Format a list of TextEdits for testing. *)
+let show_text_edits edits =
+  match edits with
+  | None -> "None"
+  | Some [] -> "No edits"
+  | Some edits ->
+      edits
+      |> List.map show_text_edit
+      |> String.concat "\n"
+
+(** Create an LSP range for testing. *)
+let make_range start_line start_char end_line end_char : Lsp.Types.Range.t =
+  Lsp.Types.Range.create
+    ~start:(Lsp.Types.Position.create ~line:start_line ~character:start_char)
+    ~end_:(Lsp.Types.Position.create ~line:end_line ~character:end_char)

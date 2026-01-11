@@ -86,9 +86,23 @@ rec_flag:
 let_binding:
   | pattern = simple_pattern; EQUAL; expr = expression
     { make_binding pattern expr $loc }
+  (* let x : type = expr - type constraint on binding *)
+  | pattern = simple_pattern; COLON; ty = type_expression; EQUAL; expr = expression
+    {
+      let constrained_pattern = make_located (PatternConstraint (pattern, ty)) $loc(pattern) in
+      make_binding constrained_pattern expr $loc
+    }
   | name = LOWERCASE_IDENTIFIER; params = nonempty_list(simple_pattern); EQUAL; expr = expression
     {
       let func_expr = make_located (ExpressionFunction (params, expr)) $loc in
+      let name_pattern = make_located (PatternVariable name) $loc(name) in
+      make_binding name_pattern func_expr $loc
+    }
+  (* let f x y : return_type = expr - return type annotation on function *)
+  | name = LOWERCASE_IDENTIFIER; params = nonempty_list(simple_pattern); COLON; ty = type_expression; EQUAL; expr = expression
+    {
+      let constrained_expr = make_located (ExpressionConstraint (expr, ty)) $loc(expr) in
+      let func_expr = make_located (ExpressionFunction (params, constrained_expr)) $loc in
       let name_pattern = make_located (PatternVariable name) $loc(name) in
       make_binding name_pattern func_expr $loc
     }
@@ -302,7 +316,7 @@ atomic_pattern:
     { make_located (PatternConstructor (name, Some p)) $loc }
   | LBRACE; fields = separated_list(SEMICOLON, record_pattern_field); RBRACE
     { make_located (PatternRecord (fields, false)) $loc }
-  | LBRACE; fields = separated_list(SEMICOLON, record_pattern_field); SEMICOLON; DOTDOT; RBRACE
+  | LBRACE; fields = record_pattern_field_list_open; RBRACE
     { make_located (PatternRecord (fields, true)) $loc }
 
 pattern:
@@ -332,6 +346,15 @@ record_pattern_field:
     { { pattern_field_name = make_located name $loc(name); pattern_field_pattern = Some p } }
   | name = LOWERCASE_IDENTIFIER
     { { pattern_field_name = make_located name $loc(name); pattern_field_pattern = None } }
+
+(* Record pattern fields with trailing ; .. for open records *)
+record_pattern_field_list_open:
+  | DOTDOT
+    { [] }
+  | field = record_pattern_field; SEMICOLON; DOTDOT
+    { [field] }
+  | field = record_pattern_field; SEMICOLON; rest = record_pattern_field_list_open
+    { field :: rest }
 
 (* Match arms *)
 match_arms:

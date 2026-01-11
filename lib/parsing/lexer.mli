@@ -80,6 +80,7 @@ type token =
   | EQUAL_EQUAL           (** [==] *)
   | NOT_EQUAL             (** [!=] *)
   | EOF                   (** End of input *)
+[@@deriving show, eq]
 
 (** {1 Token Display} *)
 
@@ -134,3 +135,69 @@ val next_token : state -> token * Common.Location.t
     @return A list of [(token, location)] pairs in source order
     @raise Compiler_error.Lexer_error on invalid input *)
 val tokenize : string -> string -> (token * Common.Location.t) list
+
+(** {1 Trivia-Aware Tokenization}
+
+    The following functions provide tokenization with trivia preservation,
+    used by the formatter and refactoring tools that need to preserve
+    whitespace and comments. *)
+
+(** A token with its attached trivia and location.
+
+    The trivia represents whitespace and comments surrounding the token:
+    - [leading] contains trivia that appears before this token
+    - [trailing] contains trivia that appears after this token on the same line *)
+type token_with_trivia = {
+  token : token;
+  location : Common.Location.t;
+  trivia : Trivia.t;
+}
+[@@deriving show, eq]
+
+(** State for trivia-aware lexing.
+
+    Similar to {!state} but tracks trivia (whitespace and comments)
+    between tokens instead of discarding them. *)
+type trivia_state
+
+(** [create_trivia_state filename content] creates a trivia-aware lexer state.
+
+    @param filename The name of the source file (used in error messages)
+    @param content The source code to tokenize
+    @return A fresh trivia-aware lexer state positioned at the start *)
+val create_trivia_state : string -> string -> trivia_state
+
+(** [next_token_with_trivia state] returns the next token with attached trivia.
+
+    Collects leading trivia (whitespace and comments before the token),
+    lexes the token, then collects trailing trivia (on the same line).
+
+    Leading trivia includes:
+    - Whitespace (spaces, tabs)
+    - Newlines
+    - Line comments ([--] to end of line)
+    - Block comments ([(*] to [*)])
+
+    Trailing trivia includes only content on the same line as the token,
+    up to (but not including) the next newline.
+
+    {b Newline preservation}: Line comments do not consume the trailing newline.
+    The newline is left in the buffer using [Sedlexing.rollback] so it can be
+    collected as a separate [Newline] trivia piece by the next token's leading
+    trivia. This ensures lossless source reconstruction.
+
+    @param state The trivia-aware lexer state
+    @return A {!token_with_trivia} with the token, location, and attached trivia
+    @raise Compiler_error.Lexer_error on invalid input *)
+val next_token_with_trivia : trivia_state -> token_with_trivia
+
+(** [tokenize_with_trivia filename content] tokenizes with trivia preservation.
+
+    Returns a list of tokens where each token has its attached leading
+    and trailing trivia. This is the main entry point for the formatter.
+
+    @param filename The name of the source file
+    @param content The source code to tokenize
+    @return A list of {!token_with_trivia} values with attached trivia
+    @raise Compiler_error.Lexer_error on invalid input *)
+val tokenize_with_trivia : string -> string -> token_with_trivia list

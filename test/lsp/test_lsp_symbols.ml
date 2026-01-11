@@ -170,7 +170,10 @@ let%expect_test "symbols for types and values" =
 let x : t = 42|} (fun store uri ->
     let symbols = Lsp_symbols.get_document_symbols store uri in
     print_endline (show_symbols symbols));
-  [%expect {| No symbols |}]
+  [%expect {|
+    t (Type)
+    x (Variable) : int
+    |}]
 
 let%expect_test "symbols for values and modules" =
   reset ();

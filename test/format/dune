@@ -1,0 +1,26 @@
+; Format library tests
+; Comprehensive tests for the Lina code formatter
+
+; Doc IR and layout algorithm tests
+(library
+ (name test_format_doc)
+ (libraries lina_format)
+ (modules test_format_doc)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Integration and API tests
+(library
+ (name test_formatter)
+ (libraries lina_format parsing common)
+ (modules test_formatter)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; CST formatter tests (comment and blank line preservation)
+(library
+ (name test_format_cst)
+ (libraries lina_format)
+ (modules test_format_cst)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

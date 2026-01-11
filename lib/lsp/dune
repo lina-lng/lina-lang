@@ -8,6 +8,7 @@
   parsing
   typing
   driver
+  lina_format
   lsp
   linol
   linol-eio

@@ -81,3 +81,9 @@ val severity_to_int : diagnostic_severity -> int
 
 (** [severity_of_int code] converts LSP integer code to severity. *)
 val severity_of_int : int -> diagnostic_severity
+
+(** {1 Text Edit Helpers} *)
+
+(** [full_document_range content] creates a range covering the entire document.
+    Used for full-document formatting where we replace all content. *)
+val full_document_range : string -> range

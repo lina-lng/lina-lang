@@ -38,7 +38,7 @@ let lsp_diagnostic_of_internal (diag : Lsp_types.diagnostic) : Diagnostic.t =
 (** The Lina LSP server class. *)
 class lina_server =
   object (self)
-    inherit Linol_eio.Jsonrpc2.server
+    inherit Linol_eio.Jsonrpc2.server as super
 
     val state : state = create_state ()
 
@@ -65,6 +65,13 @@ class lina_server =
 
     (** Enable go-to-definition. *)
     method! config_definition = Some (`Bool true)
+
+    (** Advertise formatting capabilities. *)
+    method! config_modify_capabilities caps =
+      { caps with
+        ServerCapabilities.documentFormattingProvider = Some (`Bool true);
+        documentRangeFormattingProvider = Some (`Bool true);
+      }
 
     (** Publish diagnostics for a document. *)
     method private publish_diagnostics notify_back uri =
@@ -224,4 +231,23 @@ class lina_server =
           symbols
       in
       Some (`DocumentSymbol lsp_symbols)
+
+    (** Handle unhandled requests including formatting. *)
+    method! on_request_unhandled
+        : type r.
+          notify_back:Linol_eio.Jsonrpc2.notify_back ->
+          id:Linol_eio.Jsonrpc2.Req_id.t ->
+          r Lsp.Client_request.t ->
+          r =
+      fun ~notify_back ~id req ->
+        match req with
+        | Lsp.Client_request.TextDocumentFormatting params ->
+            let uri = DocumentUri.to_path params.textDocument.uri in
+            Lsp_formatting.format_document state.document_store uri params.options
+        | Lsp.Client_request.TextDocumentRangeFormatting params ->
+            let uri = DocumentUri.to_path params.textDocument.uri in
+            Lsp_formatting.format_range state.document_store uri params.range
+              params.options
+        | _ ->
+            super#on_request_unhandled ~notify_back ~id req
   end

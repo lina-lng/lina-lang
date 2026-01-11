@@ -1,7 +1,7 @@
 (executable
  (name main)
  (public_name linac)
- (libraries driver cmdliner))
+ (libraries driver lina_format cmdliner))
 
 (executable
  (name lsp_main)
