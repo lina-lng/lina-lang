@@ -376,7 +376,16 @@ and infer_bindings env rec_flag bindings =
       List.fold_left (fun (bs, env) (binding : binding) ->
         let typed_expr = infer_expression env binding.binding_expression in
         leave_level ();
-        let scheme = generalize typed_expr.expression_type in
+        (* Value restriction with Garrigue's relaxation:
+           - Values: full generalization
+           - Non-values: generalize only covariant type variables *)
+        let scheme =
+          if Value_check.is_value typed_expr then
+            generalize typed_expr.expression_type
+          else
+            (* Relaxed value restriction: generalize covariant-only variables *)
+            generalize_with_filter Value_check.can_generalize_relaxed typed_expr.expression_type
+        in
         enter_level ();
         let typed_pat, pat_ty, env = Pattern_infer.infer_pattern env binding.binding_pattern in
         unify env binding.binding_location pat_ty typed_expr.expression_type;
@@ -429,8 +438,20 @@ and infer_bindings env rec_flag bindings =
     in
     leave_level ();
     let env =
-      List.fold_left2 (fun env (_binding : binding) (name, id, ty) ->
-        let scheme = generalize ty in
+      List.fold_left2 (fun env (binding : binding) (name, id, ty) ->
+        (* Value restriction with Garrigue's relaxation:
+           - Values: full generalization
+           - Non-values: generalize only covariant type variables *)
+        let typed_expr =
+          List.find (fun tb -> tb.Typed_tree.binding_location = binding.binding_location) typed_bindings
+        in
+        let scheme =
+          if Value_check.is_value typed_expr.binding_expression then
+            generalize ty
+          else
+            (* Relaxed value restriction: generalize covariant-only variables *)
+            generalize_with_filter Value_check.can_generalize_relaxed ty
+        in
         Environment.add_value name id scheme env
       ) env bindings (List.rev temp_info)
     in

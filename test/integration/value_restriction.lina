@@ -1,0 +1,54 @@
+(* Test: Value restriction for sound polymorphism *)
+
+(* This test verifies that syntactic values ARE generalized (polymorphic)
+   while non-values are NOT generalized (monomorphic).
+
+   Value restriction prevents unsound polymorphism with mutable references. *)
+
+(* Lambda abstractions are values - polymorphic *)
+let id = fun x -> x
+let a1 = id 42
+let a2 = id 100
+let a3 = id 999
+let _ = print a1      (* Expected: 42 *)
+let _ = print a2      (* Expected: 100 *)
+let _ = print a3      (* Expected: 999 *)
+
+(* Tuples of values are values - polymorphic *)
+let pair = (fun x -> x, fun y -> y)
+let fst_fn = match pair with (f, _) -> f
+let snd_fn = match pair with (_, g) -> g
+let b1 = fst_fn 100
+let b2 = snd_fn 200
+let _ = print b1      (* Expected: 100 *)
+let _ = print b2      (* Expected: 200 *)
+
+(* Let bindings with value bodies are values *)
+let composed = let f = fun x -> x in f
+let c1 = composed 1
+let c2 = composed 2
+let _ = print c1      (* Expected: 1 *)
+let _ = print c2      (* Expected: 2 *)
+
+(* Constructors with value arguments are values *)
+type 'a option = None | Some of 'a
+let some_id = Some (fun x -> x)
+let d1 = match some_id with None -> 0 | Some f -> f 42
+let d2 = match some_id with None -> 0 | Some f -> f 100
+let _ = print d1      (* Expected: 42 *)
+let _ = print d2      (* Expected: 100 *)
+
+(* Test using polymorphic functions at multiple types *)
+let apply = fun f -> fun x -> f x
+let e1 = apply (fun x -> x + 1) 10     (* int -> int *)
+let e2 = apply (fun x -> x + 2) 20     (* int -> int *)
+let _ = print e1      (* Expected: 11 *)
+let _ = print e2      (* Expected: 22 *)
+
+(* Polymorphic composition *)
+let compose = fun f -> fun g -> fun x -> f (g x)
+let add1 = fun x -> x + 1
+let mul2 = fun x -> x * 2
+let composed_fn = compose add1 mul2
+let f1 = composed_fn 5    (* (5 * 2) + 1 = 11 *)
+let _ = print f1      (* Expected: 11 *)

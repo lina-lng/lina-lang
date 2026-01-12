@@ -21,6 +21,7 @@ type type_variable = {
   id : int;
   mutable level : level;
   mutable link : type_expression option;
+  mutable weak : bool;  (** True if value restriction blocks generalization *)
 }
 
 and type_expression =
@@ -55,7 +56,7 @@ and builtin_type =
   | BuiltinUnit
 
 let new_type_variable_at_level level =
-  TypeVariable { id = fresh_type_variable_id (); level; link = None }
+  TypeVariable { id = fresh_type_variable_id (); level; link = None; weak = false }
 
 let new_type_variable () =
   new_type_variable_at_level (current_level ())
@@ -99,6 +100,29 @@ type type_scheme = {
 
 let trivial_scheme ty = { quantified_variables = []; body = ty }
 
+let mark_as_weak ty =
+  let current = current_level () in
+  let rec mark ty =
+    match representative ty with
+    | TypeVariable tv when tv.level > current ->
+      tv.weak <- true
+    | TypeVariable _ -> ()
+    | TypeConstructor (_, args) -> List.iter mark args
+    | TypeTuple elements -> List.iter mark elements
+    | TypeArrow (arg, result) ->
+      mark arg;
+      mark result
+    | TypeRecord row -> mark_row row
+    | TypeRowEmpty -> ()
+  and mark_row row =
+    List.iter (fun (_, field) ->
+      match field with
+      | RowFieldPresent ty -> mark ty
+    ) row.row_fields;
+    mark row.row_more
+  in
+  mark ty
+
 let generalize ty =
   let current = current_level () in
   (* Use Hashtbl for O(1) duplicate checking instead of O(n) List.exists *)
@@ -106,7 +130,9 @@ let generalize ty =
   let generalized_vars = ref [] in
   let rec collect ty =
     match representative ty with
-    | TypeVariable tv when tv.level > current ->
+    | TypeVariable tv when tv.level > current && not tv.weak ->
+      (* Only generalize non-weak variables above the current level.
+         Weak variables are blocked by value restriction and must remain monomorphic. *)
       if not (Hashtbl.mem seen tv.id) then begin
         Hashtbl.add seen tv.id ();
         tv.level <- generic_level;
@@ -124,6 +150,43 @@ let generalize ty =
     List.iter (fun (_, field) ->
       match field with
       | RowFieldPresent ty -> collect ty
+    ) row.row_fields;
+    collect row.row_more
+  in
+  collect ty;
+  { quantified_variables = !generalized_vars; body = ty }
+
+let generalize_with_filter predicate ty =
+  let current = current_level () in
+  let seen = Hashtbl.create 16 in
+  let generalized_vars = ref [] in
+  let rec collect current_ty =
+    match representative current_ty with
+    | TypeVariable tv when tv.level > current && not tv.weak ->
+      if not (Hashtbl.mem seen tv.id) then begin
+        Hashtbl.add seen tv.id ();
+        (* Use predicate to decide if this variable should be generalized.
+           The predicate receives the variable and the full type for variance checking. *)
+        if predicate tv ty then begin
+          tv.level <- generic_level;
+          generalized_vars := tv :: !generalized_vars
+        end else begin
+          (* Variables that fail the predicate are marked as weak *)
+          tv.weak <- true
+        end
+      end
+    | TypeVariable _ -> ()
+    | TypeConstructor (_, args) -> List.iter collect args
+    | TypeTuple elements -> List.iter collect elements
+    | TypeArrow (arg, result) ->
+      collect arg;
+      collect result
+    | TypeRecord row -> collect_row row
+    | TypeRowEmpty -> ()
+  and collect_row row =
+    List.iter (fun (_, field) ->
+      match field with
+      | RowFieldPresent field_ty -> collect field_ty
     ) row.row_fields;
     collect row.row_more
   in
@@ -190,7 +253,10 @@ and type_declaration_kind =
 let rec pp_type_expression fmt ty =
   match representative ty with
   | TypeVariable tv ->
-    Format.fprintf fmt "'t%d" tv.id
+    if tv.weak then
+      Format.fprintf fmt "'_t%d" tv.id  (* Weak variable: cannot be generalized *)
+    else
+      Format.fprintf fmt "'t%d" tv.id
   | TypeConstructor (path, []) ->
     pp_path fmt path
   | TypeConstructor (path, [arg]) ->

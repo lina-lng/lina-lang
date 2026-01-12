@@ -161,3 +161,11 @@
  (modules test_cst_comprehensive)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Value restriction tests
+(library
+ (name test_value_restriction)
+ (libraries typing parsing common)
+ (modules test_value_restriction)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

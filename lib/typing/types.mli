@@ -58,6 +58,7 @@ type type_variable = {
   id : int;                         (** Unique identifier *)
   mutable level : level;            (** Generalization level *)
   mutable link : type_expression option;  (** Union-find link *)
+  mutable weak : bool;              (** True if value restriction blocks generalization *)
 }
 
 (** Core type expressions.
@@ -180,6 +181,16 @@ type type_scheme = {
 (** [trivial_scheme ty] wraps a monomorphic type as a scheme with no quantifiers. *)
 val trivial_scheme : type_expression -> type_scheme
 
+(** [mark_as_weak ty] marks all type variables in [ty] that are at a higher
+    level than the current level as "weak".
+
+    This is called when value restriction blocks generalization. Weak type
+    variables are displayed with an underscore prefix (e.g., ['_a]) to indicate
+    they are not polymorphic.
+
+    @param ty The type whose variables should be marked as weak *)
+val mark_as_weak : type_expression -> unit
+
 (** [generalize ty] generalizes a type at the current level.
 
     Variables with level > [current_level ()] are marked as [generic_level]
@@ -198,6 +209,20 @@ val trivial_scheme : type_expression -> type_scheme
     @param ty The type to generalize (should be fully unified)
     @return A type scheme with quantified variables *)
 val generalize : type_expression -> type_scheme
+
+(** [generalize_with_filter predicate ty] generalizes a type selectively.
+
+    This is used for relaxed value restriction. The [predicate] function
+    determines which type variables should be generalized. Variables that
+    fail the predicate are marked as weak.
+
+    @param predicate A function [type_variable -> type_expression -> bool]
+           that returns [true] if the variable should be generalized.
+           The [type_expression] argument is the full type being generalized.
+    @param ty The type to generalize
+    @return A type scheme with selectively quantified variables *)
+val generalize_with_filter :
+  (type_variable -> type_expression -> bool) -> type_expression -> type_scheme
 
 (** [instantiate scheme] creates fresh type variables for all quantifiers.
 

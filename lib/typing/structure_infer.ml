@@ -62,18 +62,29 @@ let make_module_type_lookup env =
 let setup_signature_matching env =
   Signature_match.set_module_type_lookup (make_module_type_lookup env)
 
+(** Check if a type is already an option type. *)
+let is_option_type ty =
+  match ty with
+  | Types.TypeConstructor (Types.PathLocal "option", [_]) -> true
+  | _ -> false
+
 (** Wrap the return type of a function in option for @return(nullable).
-    For example: (int -> string) becomes (int -> string option) *)
+    For example: (int -> string) becomes (int -> string option).
+    If the return type is already option, don't double-wrap it. *)
 let rec wrap_return_in_option ty =
   match ty with
   | Types.TypeArrow (arg, ret) ->
     Types.TypeArrow (arg, wrap_return_in_option ret)
+  | _ when is_option_type ty ->
+    (* Already option, don't double-wrap *)
+    ty
   | _ ->
     (* Wrap the final return type in option *)
     Types.TypeConstructor (Types.PathLocal "option", [ty])
 
 (** Process a type declaration and add it to the environment *)
 let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declaration) =
+  (* Create semantic type variables for each type parameter *)
   let type_params =
     List.map (fun _ ->
       match new_type_variable () with
@@ -81,16 +92,36 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
       | _ -> assert false
     ) type_decl.type_parameters
   in
+  (* Build the result type: T or 'a T or ('a, 'b) T *)
   let result_type =
     TypeConstructor (PathLocal type_decl.type_name.Location.value,
       List.map (fun tv -> TypeVariable tv) type_params)
   in
+  (* Get parameter names for mapping (e.g., ["'a"; "'b"]) *)
+  let param_names = type_decl.type_parameters in
+
+  (* For recursive types (like 'a list = Nil | Cons of 'a * 'a list),
+     we need to add the type to the environment BEFORE parsing constructor
+     arguments, so that self-references resolve correctly. *)
+  let preliminary_declaration = {
+    declaration_name = type_decl.type_name.Location.value;
+    declaration_parameters = type_params;
+    declaration_manifest = None;
+    declaration_kind = DeclarationAbstract;  (* Placeholder *)
+  } in
+  let env_with_type = Environment.add_type type_decl.type_name.Location.value preliminary_declaration env in
+
   let (declaration_kind, manifest) = match type_decl.type_kind with
     | TypeAbstract -> (DeclarationAbstract, None)
     | TypeVariant constructors ->
       let constructor_infos =
         List.mapi (fun tag_index (ctor : constructor_declaration) ->
-          let arg_type = Option.map (fun _ -> new_type_variable ()) ctor.constructor_argument in
+          (* Parse the constructor argument type using the parameter mapping.
+             This ensures that 'a in "Some of 'a" refers to the same variable
+             as the 'a type parameter. Use env_with_type so recursive references work. *)
+          let arg_type = Option.map (fun ty_expr ->
+            Module_type_check.check_type_expression_with_params env_with_type param_names type_params ty_expr
+          ) ctor.constructor_argument in
           {
             constructor_name = ctor.constructor_name.Location.value;
             constructor_tag_index = tag_index;
@@ -103,16 +134,18 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
       in
       (DeclarationVariant constructor_infos, None)
     | TypeAlias ty_expr ->
-      (* Convert syntax type expression to semantic type *)
-      let manifest_type = Module_type_check.check_type_expression env ty_expr in
+      (* Convert syntax type expression to semantic type, preserving parameter sharing *)
+      let manifest_type = Module_type_check.check_type_expression_with_params env_with_type param_names type_params ty_expr in
       (DeclarationAbstract, Some manifest_type)
   in
+  (* Create the final type declaration with proper kind *)
   let type_declaration = {
     declaration_name = type_decl.type_name.Location.value;
     declaration_parameters = type_params;
     declaration_manifest = manifest;
     declaration_kind;
   } in
+  (* Update the environment with the final declaration (replaces preliminary) *)
   let env = Environment.add_type type_decl.type_name.Location.value type_declaration env in
   let env = match declaration_kind with
     | DeclarationAbstract -> env

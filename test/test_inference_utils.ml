@@ -97,6 +97,7 @@ let make_type_var id level =
     Types.id;
     level;
     link = None;
+    weak = false;
   } in
   (tv, Types.TypeVariable tv)
 

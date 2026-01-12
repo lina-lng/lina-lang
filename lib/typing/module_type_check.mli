@@ -56,12 +56,37 @@ val lookup_module_path :
 
     Used for type annotations in signatures.
 
+    Note: This function does NOT preserve type variable sharing. Each occurrence
+    of a type variable name creates a fresh variable. For type declarations with
+    parameters, use [check_type_expression_with_params] instead.
+
     @param env The typing environment
     @param ty_expr The syntactic type expression
     @return The semantic type expression
     @raise Compiler_error.Type_error on unbound types *)
 val check_type_expression :
   Environment.t ->
+  Parsing.Syntax_tree.type_expression ->
+  Types.type_expression
+
+(** [check_type_expression_with_params env param_names param_vars ty_expr]
+    converts a syntactic type expression to a semantic type, preserving
+    type variable sharing for declared parameters.
+
+    This is used when processing type declarations like [type 'a option = Some of 'a]
+    where the ['a] in [Some of 'a] must refer to the same type variable as the
+    parameter ['a].
+
+    @param env The typing environment
+    @param param_names List of type parameter names (e.g., ["'a"; "'b"])
+    @param param_vars Corresponding list of semantic type variables
+    @param ty_expr The syntactic type expression
+    @return The semantic type expression with proper variable sharing
+    @raise Compiler_error.Type_error on unbound types *)
+val check_type_expression_with_params :
+  Environment.t ->
+  string list ->
+  Types.type_variable list ->
   Parsing.Syntax_tree.type_expression ->
   Types.type_expression
 

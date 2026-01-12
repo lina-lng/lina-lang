@@ -1,0 +1,48 @@
+(* Test: Relaxed value restriction (Garrigue's extension) *)
+
+(* Relaxed value restriction allows generalizing type variables that appear
+   only in covariant positions, even for non-value expressions (applications).
+
+   This enables more code to be polymorphic without sacrificing soundness. *)
+
+(* Example 1: Application returning a covariant type *)
+(* let x = id [] would have type 'a list where 'a is covariant.
+   With relaxed VR, this can be generalized. *)
+
+(* Since Lina's constructor polymorphism is limited, we demonstrate
+   relaxed VR with simpler examples. *)
+
+(* Test that polymorphic functions still work *)
+let id = fun x -> x
+let apply = fun f -> fun x -> f x
+
+(* These are VALUES, so they're fully polymorphic *)
+let a1 = id 42
+let a2 = id 100
+let _ = print a1      (* Expected: 42 *)
+let _ = print a2      (* Expected: 100 *)
+
+(* These are APPLICATIONS but the result type ('a -> 'a) is invariant,
+   so they remain monomorphic under relaxed VR *)
+let result = apply id
+let b1 = result 10
+let b2 = result 20
+let _ = print b1      (* Expected: 10 *)
+let _ = print b2      (* Expected: 20 *)
+
+(* Tuples of values are polymorphic *)
+let pair = (fun x -> x, fun y -> y)
+let f1 = match pair with (f, _) -> f
+let f2 = match pair with (_, g) -> g
+let c1 = f1 5
+let c2 = f2 10
+let _ = print c1      (* Expected: 5 *)
+let _ = print c2      (* Expected: 10 *)
+
+(* Higher-order functions demonstrate polymorphism *)
+let compose = fun f -> fun g -> fun x -> f (g x)
+let add1 = fun x -> x + 1
+let mul2 = fun x -> x * 2
+let composed = compose add1 mul2
+let d1 = composed 3   (* (3 * 2) + 1 = 7 *)
+let _ = print d1      (* Expected: 7 *)

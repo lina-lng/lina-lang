@@ -61,18 +61,23 @@ let lookup_module_path env path_modules loc =
     | None -> Compiler_error.type_error loc (Printf.sprintf "Unbound module: %s" first)
     end
 
-(** Check a type expression from a signature and convert to semantic type *)
-let rec check_type_expression env (ty_expr : Parsing.Syntax_tree.type_expression) : type_expression =
+(** Check a type expression with a mapping from type variable names to semantic variables.
+    This preserves sharing: multiple occurrences of ['a] map to the same variable. *)
+let rec check_type_expression_impl env (var_map : (string * type_variable) list)
+    (ty_expr : Parsing.Syntax_tree.type_expression) : type_expression =
   let loc = ty_expr.Location.location in
   match ty_expr.Location.value with
-  | TypeVariable _name ->
-    (* TODO: Track type variable names for consistent instantiation within signatures.
-       Currently, each type variable in a signature gets a fresh unification variable,
-       so `'a -> 'a` becomes `'x -> 'y` instead of preserving the sharing. *)
-    new_type_variable ()
+  | TypeVariable name ->
+    (* Look up in the variable mapping first *)
+    begin match List.assoc_opt name var_map with
+    | Some tv -> TypeVariable tv
+    | None ->
+      (* Not a declared parameter - create fresh variable *)
+      new_type_variable ()
+    end
 
   | TypeConstructor (name, args) ->
-    let arg_types = List.map (check_type_expression env) args in
+    let arg_types = List.map (check_type_expression_impl env var_map) args in
     begin match name with
     | "int" -> type_int
     | "float" -> type_float
@@ -90,20 +95,32 @@ let rec check_type_expression env (ty_expr : Parsing.Syntax_tree.type_expression
     end
 
   | TypeArrow (arg_ty, ret_ty) ->
-    let arg = check_type_expression env arg_ty in
-    let ret = check_type_expression env ret_ty in
+    let arg = check_type_expression_impl env var_map arg_ty in
+    let ret = check_type_expression_impl env var_map ret_ty in
     TypeArrow (arg, ret)
 
   | TypeTuple tys ->
-    let types = List.map (check_type_expression env) tys in
+    let types = List.map (check_type_expression_impl env var_map) tys in
     TypeTuple types
 
   | TypeRecord (fields, is_open) ->
     let row_fields = List.map (fun field ->
-      (field.type_field_name, RowFieldPresent (check_type_expression env field.type_field_type))
+      (field.type_field_name, RowFieldPresent (check_type_expression_impl env var_map field.type_field_type))
     ) fields in
     let row_more = if is_open then new_type_variable () else TypeRowEmpty in
     TypeRecord { row_fields; row_more }
+
+(** Check a type expression from a signature and convert to semantic type.
+    Note: This does NOT preserve type variable sharing - use check_type_expression_with_params
+    for type declarations with parameters. *)
+let check_type_expression env ty_expr =
+  check_type_expression_impl env [] ty_expr
+
+(** Check a type expression with declared type parameters.
+    The param_names and param_vars must have the same length. *)
+let check_type_expression_with_params env param_names param_vars ty_expr =
+  let var_map = List.combine param_names param_vars in
+  check_type_expression_impl env var_map ty_expr
 
 (** Check a syntax module type and convert to semantic module type *)
 let rec check_module_type env (mty : module_type) : Module_types.module_type =
