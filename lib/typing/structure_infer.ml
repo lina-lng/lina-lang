@@ -98,7 +98,7 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
       List.map (fun tv -> TypeVariable tv) type_params)
   in
   (* Get parameter names for mapping (e.g., ["'a"; "'b"]) *)
-  let param_names = type_decl.type_parameters in
+  let param_names = List.map (fun (param : type_parameter) -> param.param_name) type_decl.type_parameters in
 
   (* For recursive types (like 'a list = Nil | Cons of 'a * 'a list),
      we need to add the type to the environment BEFORE parsing constructor
@@ -106,6 +106,7 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
   let preliminary_declaration = {
     declaration_name = type_decl.type_name.Location.value;
     declaration_parameters = type_params;
+    declaration_variances = List.map (fun _ -> Types.Covariant) type_params;  (* Placeholder, will be computed later *)
     declaration_manifest = None;
     declaration_kind = DeclarationAbstract;  (* Placeholder *)
   } in
@@ -139,9 +140,29 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
       (DeclarationAbstract, Some manifest_type)
   in
   (* Create the final type declaration with proper kind *)
+
+  (* Convert explicit variance annotations from syntax to Types.variance *)
+  let explicit_variances =
+    List.map (fun (param : type_parameter) ->
+      match param.param_variance with
+      | Some VarianceCovariant -> Some Types.Covariant
+      | Some VarianceContravariant -> Some Types.Contravariant
+      | None -> None
+    ) type_decl.type_parameters
+  in
+
+  (* Infer variances from the type definition *)
+  let inferred_variances = Variance_infer.infer_declaration_variances
+    type_params declaration_kind in
+
+  (* Merge explicit annotations with inferred variances *)
+  let final_variances = Variance_infer.merge_variances
+    explicit_variances inferred_variances in
+
   let type_declaration = {
     declaration_name = type_decl.type_name.Location.value;
     declaration_parameters = type_params;
+    declaration_variances = final_variances;
     declaration_manifest = manifest;
     declaration_kind;
   } in

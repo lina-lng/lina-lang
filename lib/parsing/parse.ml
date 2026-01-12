@@ -60,6 +60,9 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.GREATER_EQUAL -> Parser.GREATER_EQUAL
   | Lexer.EQUAL_EQUAL -> Parser.EQUAL_EQUAL
   | Lexer.NOT_EQUAL -> Parser.NOT_EQUAL
+  | Lexer.REF -> Parser.REF
+  | Lexer.BANG -> Parser.BANG
+  | Lexer.COLONEQUALS -> Parser.COLONEQUALS
   | Lexer.EOF -> Parser.EOF
 
 type lexer_state = {

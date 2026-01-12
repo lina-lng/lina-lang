@@ -54,6 +54,10 @@ type lambda =
   | LambdaFunctorApply of lambda * lambda         (** F(X) - functor application *)
   (* FFI constructs *)
   | LambdaExternalCall of Typing_ffi.Types.ffi_spec * lambda list  (** FFI external call with arguments *)
+  (* Reference constructs *)
+  | LambdaRef of lambda                           (** ref e - create mutable cell *)
+  | LambdaDeref of lambda                         (** !e - read mutable cell *)
+  | LambdaAssign of lambda * lambda               (** e1 := e2 - write to mutable cell *)
 
 and module_binding = {
   mb_name : string;
@@ -582,6 +586,18 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     (* Translate module path to lambda, then access the field *)
     let module_expr = translate_module_path path in
     LambdaModuleAccess (module_expr, name)
+
+  | TypedExpressionRef inner ->
+    (* ref e - create a mutable cell containing the value *)
+    LambdaRef (translate_expression inner)
+
+  | TypedExpressionDeref ref_expr ->
+    (* !e - read the contents of the mutable cell *)
+    LambdaDeref (translate_expression ref_expr)
+
+  | TypedExpressionAssign (ref_expr, value_expr) ->
+    (* e1 := e2 - write the value to the mutable cell *)
+    LambdaAssign (translate_expression ref_expr, translate_expression value_expr)
 
 let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : lambda list =
   let open Typing.Typed_tree in

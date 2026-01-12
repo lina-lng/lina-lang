@@ -60,6 +60,10 @@ type token =
   | GREATER_EQUAL
   | EQUAL_EQUAL
   | NOT_EQUAL
+  (* Reference operations *)
+  | REF            (** ref keyword for creating references *)
+  | BANG           (** ! for dereference *)
+  | COLONEQUALS    (** := for assignment *)
   | EOF
 [@@deriving show, eq]
 
@@ -107,6 +111,8 @@ let keywords =
     ("val", VAL);
     (* FFI keywords *)
     ("external", EXTERNAL);
+    (* Reference keyword *)
+    ("ref", REF);
   ]
 
 let keyword_or_identifier str =
@@ -363,6 +369,9 @@ let rec next_token state =
   | ';' ->
     update_location state;
     (SEMICOLON, state.current_location)
+  | ":=" ->
+    update_location state;
+    (COLONEQUALS, state.current_location)
   | ':' ->
     update_location state;
     (COLON, state.current_location)
@@ -375,6 +384,9 @@ let rec next_token state =
   | "!=" ->
     update_location state;
     (NOT_EQUAL, state.current_location)
+  | '!' ->
+    update_location state;
+    (BANG, state.current_location)
   | "<=" ->
     update_location state;
     (LESS_EQUAL, state.current_location)
@@ -650,6 +662,9 @@ let lex_real_token state =
   | ';' ->
       update_location state;
       Some (SEMICOLON, state.current_location)
+  | ":=" ->
+      update_location state;
+      Some (COLONEQUALS, state.current_location)
   | ':' ->
       update_location state;
       Some (COLON, state.current_location)
@@ -662,6 +677,9 @@ let lex_real_token state =
   | "!=" ->
       update_location state;
       Some (NOT_EQUAL, state.current_location)
+  | '!' ->
+      update_location state;
+      Some (BANG, state.current_location)
   | "<=" ->
       update_location state;
       Some (LESS_EQUAL, state.current_location)

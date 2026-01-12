@@ -1,0 +1,36 @@
+(* Integration test for mutable references *)
+
+(* Basic ref creation and dereference *)
+let counter = ref 0
+let _ = print !counter  (* Expected: 0 *)
+
+(* Assignment *)
+let _ = counter := 1
+let _ = print !counter  (* Expected: 1 *)
+
+(* Increment *)
+let _ = counter := !counter + 1
+let _ = print !counter  (* Expected: 2 *)
+
+(* Multiple refs *)
+let x = ref 10
+let y = ref 20
+let _ = x := !x + !y
+let _ = print !x  (* Expected: 30 *)
+
+(* Ref in a function *)
+let make_counter init =
+  let c = ref init in
+  let get = fun () -> !c in
+  let incr = fun () -> c := !c + 1 in
+  (get, incr)
+
+let counter2 = make_counter 100
+let get = match counter2 with (g, _) -> g
+let incr = match counter2 with (_, i) -> i
+let _ = print (get ())  (* Expected: 100 *)
+let _ = incr ()
+let _ = print (get ())  (* Expected: 101 *)
+let _ = incr ()
+let _ = incr ()
+let _ = print (get ())  (* Expected: 103 *)

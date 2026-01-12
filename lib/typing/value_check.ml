@@ -69,6 +69,11 @@ let rec is_value (expression : typed_expression) : bool =
   (* Module access could trigger module initialization effects *)
   | TypedExpressionModuleAccess _ -> false
 
+  (* Reference operations are NOT values (allocate or have effects) *)
+  | TypedExpressionRef _ -> false       (* Allocation is expansive *)
+  | TypedExpressionDeref _ -> false     (* Effectful read *)
+  | TypedExpressionAssign _ -> false    (* Effectful write *)
+
 
 let rec is_syntax_value (expression : Parsing.Syntax_tree.expression) : bool =
   match expression.Common.Location.value with
@@ -118,6 +123,10 @@ let rec is_syntax_value (expression : Parsing.Syntax_tree.expression) : bool =
   | ExpressionRecordAccess _ -> false
   | ExpressionRecordUpdate _ -> false
   | ExpressionModuleAccess _ -> false
+  (* Reference operations are NOT values (allocate or have effects) *)
+  | ExpressionRef _ -> false      (* Allocation is expansive *)
+  | ExpressionDeref _ -> false    (* Effectful read *)
+  | ExpressionAssign _ -> false   (* Effectful write *)
 
 
 (** {1 Relaxed Value Restriction - Variance Checking} *)
@@ -164,9 +173,12 @@ let apply_context_variance context_variance position_variance =
     A more complete implementation would track declared variances. *)
 let get_constructor_param_variances (path : Types.path) (param_count : int) : variance list =
   match path with
-  | Types.PathLocal "ref" ->
+  | Types.PathBuiltin Types.BuiltinRef ->
     (* ref is invariant - both reading and writing *)
-    List.init param_count (fun _ -> Invariant)
+    [Invariant]
+  | Types.PathBuiltin _ ->
+    (* Other builtins have no type parameters *)
+    []
   | _ ->
     (* Most type constructors are covariant in their parameters *)
     List.init param_count (fun _ -> Covariant)

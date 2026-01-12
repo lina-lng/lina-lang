@@ -203,7 +203,8 @@ let%expect_test "type_of_constant: all constants have distinct types" =
        | Types.BuiltinFloat -> "float"
        | Types.BuiltinString -> "string"
        | Types.BuiltinBool -> "bool"
-       | Types.BuiltinUnit -> "unit")
+       | Types.BuiltinUnit -> "unit"
+       | Types.BuiltinRef -> "ref")
     | _ -> "unknown"
   in
   List.iter (fun ty -> print_endline (type_name ty)) types;

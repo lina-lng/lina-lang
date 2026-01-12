@@ -40,6 +40,9 @@ and typed_expression_desc =
   | TypedExpressionRecordUpdate of typed_expression * typed_record_field list
   | TypedExpressionMatch of typed_expression * typed_match_arm list
   | TypedExpressionModuleAccess of Module_types.path * string  (** M.x, M.N.x *)
+  | TypedExpressionRef of typed_expression           (** ref e *)
+  | TypedExpressionDeref of typed_expression         (** !e *)
+  | TypedExpressionAssign of typed_expression * typed_expression  (** e1 := e2 *)
 
 and typed_record_field = {
   typed_field_name : string;

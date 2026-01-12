@@ -280,3 +280,70 @@ let%expect_test "consecutive underscores in number" =
     File "<test>", line 1, characters 0-4:
     Lexer error: Number literal cannot have consecutive underscores
     |}]
+
+(* Reference tokens *)
+
+let%expect_test "ref keyword" =
+  print_endline (show_tokens "ref");
+  [%expect
+    {|
+    Lexer.REF
+    Lexer.EOF
+    |}]
+
+let%expect_test "bang operator" =
+  print_endline (show_tokens "!");
+  [%expect
+    {|
+    Lexer.BANG
+    Lexer.EOF
+    |}]
+
+let%expect_test "colonequals operator" =
+  print_endline (show_tokens ":=");
+  [%expect
+    {|
+    Lexer.COLONEQUALS
+    Lexer.EOF
+    |}]
+
+let%expect_test "ref expression tokens" =
+  print_endline (show_tokens "ref 0");
+  [%expect
+    {|
+    Lexer.REF
+    (Lexer.INTEGER 0)
+    Lexer.EOF
+    |}]
+
+let%expect_test "deref expression tokens" =
+  print_endline (show_tokens "!x");
+  [%expect
+    {|
+    Lexer.BANG
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    Lexer.EOF
+    |}]
+
+let%expect_test "assign expression tokens" =
+  print_endline (show_tokens "x := 1");
+  [%expect
+    {|
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    Lexer.COLONEQUALS
+    (Lexer.INTEGER 1)
+    Lexer.EOF
+    |}]
+
+let%expect_test "complex ref expression tokens" =
+  print_endline (show_tokens "r := !r + 1");
+  [%expect
+    {|
+    (Lexer.LOWERCASE_IDENTIFIER "r")
+    Lexer.COLONEQUALS
+    Lexer.BANG
+    (Lexer.LOWERCASE_IDENTIFIER "r")
+    Lexer.PLUS
+    (Lexer.INTEGER 1)
+    Lexer.EOF
+    |}]

@@ -102,6 +102,13 @@ and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
     | name :: _ -> referenced := name :: !referenced
     | [] -> ()
     end
+  | ExpressionRef inner ->
+    extract_from_expr referenced inner
+  | ExpressionDeref inner ->
+    extract_from_expr referenced inner
+  | ExpressionAssign (ref_expr, value_expr) ->
+    extract_from_expr referenced ref_expr;
+    extract_from_expr referenced value_expr
 
 (** Build dependency graph *)
 type file_info = {

@@ -96,6 +96,13 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
     | Syntax_tree.ExpressionModuleAccess (path, name) ->
         Syntax_tree.ExpressionModuleAccess
           ({ path with location = Location.none }, name)
+    | Syntax_tree.ExpressionRef inner ->
+        Syntax_tree.ExpressionRef (strip_expr_locations inner)
+    | Syntax_tree.ExpressionDeref inner ->
+        Syntax_tree.ExpressionDeref (strip_expr_locations inner)
+    | Syntax_tree.ExpressionAssign (ref_expr, value_expr) ->
+        Syntax_tree.ExpressionAssign
+          (strip_expr_locations ref_expr, strip_expr_locations value_expr)
   in
   { value = desc; location = Location.none }
 

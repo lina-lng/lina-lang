@@ -423,9 +423,11 @@ and check_signature_item env (item : signature_item) : Module_types.signature_it
         | Parsing.Syntax_tree.TypeAlias _ -> Types.DeclarationAbstract (* Aliases are abstract in signatures *)
       in
       (* Create a type declaration for the signature *)
+      (* Abstract types in signatures default to invariant (most restrictive) *)
       let sig_decl = Types.{
         declaration_name = name;
         declaration_parameters = type_params;
+        declaration_variances = List.map (fun _ -> Types.Invariant) type_params;
         declaration_manifest = None;
         declaration_kind = kind;
       } in

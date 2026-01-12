@@ -2205,3 +2205,78 @@ let process_direction dir =
       return result_498 + 1
     end
     |}]
+
+(* Reference operations *)
+
+let%expect_test "ref creates table with value field" =
+  print_endline (compile "let r = ref 42");
+  [%expect{| local r_502 = {value = 42} |}]
+
+let%expect_test "deref accesses value field" =
+  print_endline (compile "let r = ref 42
+let x = !r");
+  [%expect{|
+    local r_503 = {value = 42}
+    local x_504 = r_503.value
+    |}]
+
+let%expect_test "assign modifies value field" =
+  print_endline (compile "let r = ref 0
+let _ = r := 1");
+  [%expect{|
+    local r_505 = {value = 0}
+    local _top_506 = (function()
+      r_505.value = 1
+      return nil
+    end)()
+    |}]
+
+let%expect_test "increment ref" =
+  print_endline (compile "let r = ref 0
+let _ = r := !r + 1");
+  [%expect{|
+    local r_507 = {value = 0}
+    local _top_508 = (function()
+      r_507.value = r_507.value + 1
+      return nil
+    end)()
+    |}]
+
+let%expect_test "ref in function" =
+  print_endline (compile "let make_counter init =
+  let c = ref init in
+  let get = fun () -> !c in
+  (get, c)");
+  [%expect{|
+    local function make_counter_512(init_509)
+      local c_510 = {value = init_509}
+      local get_511 = function(_param_513)
+      return c_510.value
+    end
+      return {get_511, c_510}
+    end
+    |}]
+
+let%expect_test "multiple refs" =
+  print_endline (compile "let x = ref 10
+let y = ref 20
+let _ = x := !x + !y");
+  [%expect{|
+    local x_514 = {value = 10}
+    local y_515 = {value = 20}
+    local _top_516 = (function()
+      x_514.value = x_514.value + y_515.value
+      return nil
+    end)()
+    |}]
+
+let%expect_test "ref with string" =
+  print_endline (compile {|let s = ref "hello"
+let _ = s := "world"|});
+  [%expect{|
+    local s_517 = {value = "hello"}
+    local _top_518 = (function()
+      s_517.value = "world"
+      return nil
+    end)()
+    |}]

@@ -82,6 +82,9 @@ type t =
   | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL
   | TK_NOT_EQUAL
+  | TK_REF           (** ref keyword *)
+  | TK_BANG          (** ! dereference operator *)
+  | TK_COLONEQUALS   (** := assignment operator *)
 
   (* Special *)
   | TK_EOF
@@ -208,6 +211,7 @@ let is_token = function
   | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH
   | TK_LESS | TK_GREATER | TK_LESS_EQUAL | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL | TK_NOT_EQUAL
+  | TK_REF | TK_BANG | TK_COLONEQUALS
   | TK_EOF
   | TK_WHITESPACE | TK_NEWLINE | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
   | _ -> false
@@ -226,7 +230,7 @@ let is_keyword = function
   | TK_TYPE | TK_OF | TK_AND | TK_AS | TK_MATCH | TK_WITH | TK_WHEN
   | TK_MODULE | TK_STRUCT | TK_END | TK_SIG | TK_FUNCTOR
   | TK_OPEN | TK_INCLUDE | TK_VAL | TK_EXTERNAL
-  | TK_TRUE | TK_FALSE -> true
+  | TK_TRUE | TK_FALSE | TK_REF -> true
   | _ -> false
 
 (** Check if a syntax kind is a punctuation token. *)
@@ -239,7 +243,8 @@ let is_punctuation = function
 let is_operator = function
   | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH
   | TK_LESS | TK_GREATER | TK_LESS_EQUAL | TK_GREATER_EQUAL
-  | TK_EQUAL_EQUAL | TK_NOT_EQUAL -> true
+  | TK_EQUAL_EQUAL | TK_NOT_EQUAL
+  | TK_BANG | TK_COLONEQUALS -> true
   | _ -> false
 
 (** Check if a syntax kind is an expression node. *)

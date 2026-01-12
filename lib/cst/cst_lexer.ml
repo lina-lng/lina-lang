@@ -70,6 +70,9 @@ let syntax_kind_of_token : Lexer.token -> Syntax_kind.t = function
   | Lexer.GREATER_EQUAL -> Syntax_kind.TK_GREATER_EQUAL
   | Lexer.EQUAL_EQUAL -> Syntax_kind.TK_EQUAL_EQUAL
   | Lexer.NOT_EQUAL -> Syntax_kind.TK_NOT_EQUAL
+  | Lexer.REF -> Syntax_kind.TK_REF
+  | Lexer.BANG -> Syntax_kind.TK_BANG
+  | Lexer.COLONEQUALS -> Syntax_kind.TK_COLONEQUALS
   | Lexer.EOF -> Syntax_kind.TK_EOF
 
 (** [token_text token] returns the source text representation of a token. *)
@@ -131,6 +134,9 @@ let token_text : Lexer.token -> string = function
   | Lexer.GREATER_EQUAL -> ">="
   | Lexer.EQUAL_EQUAL -> "=="
   | Lexer.NOT_EQUAL -> "!="
+  | Lexer.REF -> "ref"
+  | Lexer.BANG -> "!"
+  | Lexer.COLONEQUALS -> ":="
   | Lexer.EOF -> ""
 
 (** {1 Trivia Conversion} *)

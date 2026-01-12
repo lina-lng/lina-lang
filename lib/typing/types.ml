@@ -54,6 +54,20 @@ and builtin_type =
   | BuiltinString
   | BuiltinBool
   | BuiltinUnit
+  | BuiltinRef  (** Mutable reference type *)
+
+(** Variance of a type parameter.
+
+    Variance describes how a type constructor relates to subtyping
+    (or in ML, how it affects generalization under the value restriction):
+    - [Covariant]: parameter appears in output positions only
+    - [Contravariant]: parameter appears in input positions only
+    - [Invariant]: parameter appears in both positions *)
+type variance =
+  | Covariant
+  | Contravariant
+  | Invariant
+[@@deriving show, eq]
 
 let new_type_variable_at_level level =
   TypeVariable { id = fresh_type_variable_id (); level; link = None; weak = false }
@@ -66,6 +80,9 @@ let type_float = TypeConstructor (PathBuiltin BuiltinFloat, [])
 let type_string = TypeConstructor (PathBuiltin BuiltinString, [])
 let type_bool = TypeConstructor (PathBuiltin BuiltinBool, [])
 let type_unit = TypeConstructor (PathBuiltin BuiltinUnit, [])
+
+(** [type_ref content_type] creates a reference type [content_type ref]. *)
+let type_ref content_type = TypeConstructor (PathBuiltin BuiltinRef, [content_type])
 
 (* Create a closed record type *)
 let type_record_closed fields =
@@ -241,6 +258,7 @@ type constructor_info = {
 type type_declaration = {
   declaration_name : string;
   declaration_parameters : type_variable list;
+  declaration_variances : variance list;  (** Variance of each type parameter *)
   declaration_manifest : type_expression option;  (* Type alias: type t = int *)
   declaration_kind : type_declaration_kind;
 }
@@ -300,6 +318,7 @@ and pp_path fmt = function
   | PathBuiltin BuiltinString -> Format.fprintf fmt "string"
   | PathBuiltin BuiltinBool -> Format.fprintf fmt "bool"
   | PathBuiltin BuiltinUnit -> Format.fprintf fmt "unit"
+  | PathBuiltin BuiltinRef -> Format.fprintf fmt "ref"
   | PathLocal name -> Format.fprintf fmt "%s" name
   | PathIdent id -> Format.fprintf fmt "%s" (Common.Identifier.name id)
   | PathDot (parent, name) ->
@@ -324,6 +343,7 @@ let rec path_to_string = function
   | PathBuiltin BuiltinString -> "string"
   | PathBuiltin BuiltinBool -> "bool"
   | PathBuiltin BuiltinUnit -> "unit"
+  | PathBuiltin BuiltinRef -> "ref"
   | PathLocal name -> name
   | PathIdent id -> Common.Identifier.name id
   | PathDot (parent, name) -> path_to_string parent ^ "." ^ name

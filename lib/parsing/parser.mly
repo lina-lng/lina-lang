@@ -25,9 +25,11 @@ let make_binding pattern expression loc =
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
 %token STAR PLUS MINUS SLASH
 %token LESS GREATER LESS_EQUAL GREATER_EQUAL EQUAL_EQUAL NOT_EQUAL
+%token REF BANG COLONEQUALS
 %token EOF
 
 %right ARROW
+%right COLONEQUALS
 %right SEMICOLON
 %nonassoc IN
 %nonassoc WITH
@@ -41,6 +43,7 @@ let make_binding pattern expression loc =
 %left PLUS MINUS
 %left STAR SLASH
 %nonassoc unary_minus
+%nonassoc REF BANG
 %left DOT
 %nonassoc APP
 
@@ -140,10 +143,19 @@ signature_type_declaration:
         type_location = make_loc $loc }
     }
 
+(* Type parameter with optional variance annotation: 'a, +'a, -'a *)
+type_param:
+  | PLUS; v = TYPE_VARIABLE
+    { { Syntax_tree.param_name = v; param_variance = Some VarianceCovariant } }
+  | MINUS; v = TYPE_VARIABLE
+    { { Syntax_tree.param_name = v; param_variance = Some VarianceContravariant } }
+  | v = TYPE_VARIABLE
+    { { Syntax_tree.param_name = v; param_variance = None } }
+
 type_parameters:
   | { [] }
-  | v = TYPE_VARIABLE { [v] }
-  | LPAREN; params = separated_nonempty_list(COMMA, TYPE_VARIABLE); RPAREN { params }
+  | p = type_param { [p] }
+  | LPAREN; params = separated_nonempty_list(COMMA, type_param); RPAREN { params }
 
 type_declaration_kind:
   | constructors = separated_nonempty_list(BAR, constructor_declaration)
@@ -207,6 +219,9 @@ expression:
     { make_located (ExpressionConstraint (e, t)) $loc }
   | MATCH; scrutinee = expression; WITH; arms = match_arms
     { make_located (ExpressionMatch (scrutinee, arms)) $loc }
+  (* Reference assignment: e1 := e2 *)
+  | e1 = simple_expression; COLONEQUALS; e2 = expression
+    { make_located (ExpressionAssign (e1, e2)) $loc }
 
 simple_expression:
   | e = application_expression { e }
@@ -216,6 +231,9 @@ simple_expression:
       let minus = make_located (ExpressionVariable "-") $loc in
       make_located (ExpressionApply (minus, [zero; e])) $loc
     }
+  (* Reference creation: ref e *)
+  | REF; e = simple_expression %prec REF
+    { make_located (ExpressionRef e) $loc }
   | e1 = simple_expression; op = binary_operator; e2 = simple_expression
     {
       let op_expr = make_located (ExpressionVariable op) $loc in
@@ -251,6 +269,9 @@ postfix_expression:
   | e = postfix_expression; DOT; field = UPPERCASE_IDENTIFIER
     (* Allow M.N for nested module access - type checker handles the semantics *)
     { make_located (ExpressionRecordAccess (e, field)) $loc }
+  (* Dereference at postfix level so it can be used as function argument *)
+  | BANG; e = postfix_expression %prec BANG
+    { make_located (ExpressionDeref e) $loc }
 
 atomic_expression:
   | LPAREN; RPAREN
@@ -474,10 +495,10 @@ signature_item:
   | ext = external_declaration
     { make_located (SignatureExternal ext) $loc }
 
-(* With constraints *)
+(* With constraints - use simple type variable names, no variance annotations *)
 with_constraint:
   | TYPE; path = longident_type; params = type_parameters; EQUAL; ty = type_expression
-    { WithType (path, params, ty) }
+    { WithType (path, List.map (fun p -> p.Syntax_tree.param_name) params, ty) }
   | MODULE; path = longident; EQUAL; target = module_path
     { WithModule (path, target) }
 

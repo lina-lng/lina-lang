@@ -115,6 +115,24 @@ and builtin_type =
   | BuiltinString
   | BuiltinBool
   | BuiltinUnit
+  | BuiltinRef  (** Mutable reference type *)
+
+(** {1 Variance} *)
+
+(** Variance of a type parameter.
+
+    Variance describes how a type constructor relates to subtyping
+    (or in ML, how it affects generalization under the value restriction):
+    - [Covariant]: parameter appears in output positions only
+    - [Contravariant]: parameter appears in input positions only
+    - [Invariant]: parameter appears in both positions *)
+type variance =
+  | Covariant
+  | Contravariant
+  | Invariant
+
+val pp_variance : Format.formatter -> variance -> unit
+val equal_variance : variance -> variance -> bool
 
 (** {1 Type Variable Creation} *)
 
@@ -140,6 +158,9 @@ val type_bool : type_expression
 
 (** The [unit] type. *)
 val type_unit : type_expression
+
+(** [type_ref content_type] creates a reference type [content_type ref]. *)
+val type_ref : type_expression -> type_expression
 
 (** {1 Record Type Constructors} *)
 
@@ -258,6 +279,7 @@ type constructor_info = {
 type type_declaration = {
   declaration_name : string;
   declaration_parameters : type_variable list;
+  declaration_variances : variance list;  (** Variance of each type parameter *)
   declaration_manifest : type_expression option;  (** [Some t] for type aliases *)
   declaration_kind : type_declaration_kind;
 }

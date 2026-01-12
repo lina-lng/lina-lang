@@ -113,6 +113,12 @@ type lambda =
       (** Functor application: [F(A)] *)
   | LambdaExternalCall of Typing_ffi.Types.ffi_spec * lambda list
       (** FFI external call with arguments (translated to inline Lua) *)
+  | LambdaRef of lambda
+      (** Create mutable reference: [ref e] *)
+  | LambdaDeref of lambda
+      (** Dereference: [!e] *)
+  | LambdaAssign of lambda * lambda
+      (** Assignment: [e1 := e2] *)
 
 (** Module binding in a module expression. *)
 and module_binding = {

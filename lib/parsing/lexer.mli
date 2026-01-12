@@ -79,6 +79,9 @@ type token =
   | GREATER_EQUAL         (** [>=] *)
   | EQUAL_EQUAL           (** [==] *)
   | NOT_EQUAL             (** [!=] *)
+  | REF                   (** [ref] keyword *)
+  | BANG                  (** [!] dereference *)
+  | COLONEQUALS           (** [:=] assignment *)
   | EOF                   (** End of input *)
 [@@deriving show, eq]
 

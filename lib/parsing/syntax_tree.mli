@@ -82,6 +82,9 @@ and expression_desc =
   | ExpressionRecordUpdate of expression * record_field list
   | ExpressionMatch of expression * match_arm list
   | ExpressionModuleAccess of module_path * string
+  | ExpressionRef of expression                     (** ref e *)
+  | ExpressionDeref of expression                   (** !e *)
+  | ExpressionAssign of expression * expression     (** e1 := e2 *)
 [@@deriving show, eq]
 
 and record_field = {
@@ -111,9 +114,22 @@ type constructor_declaration = {
 }
 [@@deriving show, eq]
 
+(** Variance annotation for type parameters. *)
+type variance_annotation =
+  | VarianceCovariant      (** [+'a]: covariant, output-only position *)
+  | VarianceContravariant  (** [-'a]: contravariant, input-only position *)
+[@@deriving show, eq]
+
+(** Type parameter with optional variance annotation. *)
+type type_parameter = {
+  param_name : string;
+  param_variance : variance_annotation option;
+}
+[@@deriving show, eq]
+
 type type_declaration = {
   type_name : string Location.located;
-  type_parameters : string list;
+  type_parameters : type_parameter list;  (** Type parameters with variance annotations *)
   type_kind : type_declaration_kind;
   type_location : Location.t;
 }

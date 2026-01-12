@@ -82,6 +82,9 @@ type t =
   | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL
   | TK_NOT_EQUAL
+  | TK_REF           (** ref keyword *)
+  | TK_BANG          (** ! dereference operator *)
+  | TK_COLONEQUALS   (** := assignment operator *)
 
   (* Special *)
   | TK_EOF

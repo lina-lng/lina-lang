@@ -362,6 +362,42 @@ let rec infer_expression env (expr : expression) =
       Compiler_error.type_error loc "Cannot access value in an abstract module type"
     end
 
+  (* === Reference operations === *)
+
+  | ExpressionRef inner_expr ->
+    (* ref e : ref 'a when e : 'a *)
+    let typed_inner = infer_expression env inner_expr in
+    let ref_type = Types.type_ref typed_inner.expression_type in
+    {
+      expression_desc = TypedExpressionRef typed_inner;
+      expression_type = ref_type;
+      expression_location = loc;
+    }
+
+  | ExpressionDeref ref_expr ->
+    (* !e : 'a when e : ref 'a *)
+    let typed_ref = infer_expression env ref_expr in
+    let content_type = Types.new_type_variable () in
+    Unification.unify loc typed_ref.expression_type (Types.type_ref content_type);
+    {
+      expression_desc = TypedExpressionDeref typed_ref;
+      expression_type = content_type;
+      expression_location = loc;
+    }
+
+  | ExpressionAssign (ref_expr, value_expr) ->
+    (* e1 := e2 : unit when e1 : ref 'a and e2 : 'a *)
+    let typed_ref = infer_expression env ref_expr in
+    let typed_value = infer_expression env value_expr in
+    let content_type = Types.new_type_variable () in
+    Unification.unify loc typed_ref.expression_type (Types.type_ref content_type);
+    Unification.unify loc typed_value.expression_type content_type;
+    {
+      expression_desc = TypedExpressionAssign (typed_ref, typed_value);
+      expression_type = Types.type_unit;
+      expression_location = loc;
+    }
+
 (** [infer_bindings env rec_flag bindings] infers types for a list of bindings.
 
     @param env The typing environment

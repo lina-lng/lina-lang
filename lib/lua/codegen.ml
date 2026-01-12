@@ -307,6 +307,28 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     else
       (call_expr, ctx)
 
+  (* Reference operations *)
+  | Lambda.LambdaRef inner ->
+    (* ref e -> {value = e} *)
+    let inner_expr, ctx = translate_expression ctx inner in
+    (ExpressionTable [FieldNamed ("value", inner_expr)], ctx)
+
+  | Lambda.LambdaDeref ref_expr ->
+    (* !e -> e.value *)
+    let ref_lua, ctx = translate_expression ctx ref_expr in
+    (ExpressionField (ref_lua, "value"), ctx)
+
+  | Lambda.LambdaAssign (ref_expr, value_expr) ->
+    (* e1 := e2 -> (function() e1.value = e2; return nil end)() *)
+    (* We need to use an IIFE since assignment is a statement in Lua *)
+    let ref_lua, ctx = translate_expression ctx ref_expr in
+    let value_lua, ctx = translate_expression ctx value_expr in
+    let lvalue = LvalueField (ref_lua, "value") in
+    let assign_stmt = StatementAssign ([lvalue], [value_lua]) in
+    let return_nil = StatementReturn [ExpressionNil] in
+    let iife = ExpressionCall (ExpressionFunction ([], [assign_stmt; return_nil]), []) in
+    (iife, ctx)
+
 (** Helper to translate a list of expressions.
     Uses cons + reverse for O(n) instead of O(n²) list append. *)
 and translate_expression_list ctx exprs =

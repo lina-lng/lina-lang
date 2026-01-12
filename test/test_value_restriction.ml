@@ -238,7 +238,7 @@ let%expect_test "variance: variable in type constructor is covariant" =
 let%expect_test "variance: variable in ref is invariant" =
   (* 'a ref - ref is invariant *)
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeConstructor (Types.PathLocal "ref", [Types.TypeVariable tv]) in
+  let ty = Types.type_ref (Types.TypeVariable tv) in
   let variance = Value_check.check_variance tv ty in
   print_endline (variance_to_string variance);
   [%expect {| invariant |}]
