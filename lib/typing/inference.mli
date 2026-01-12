@@ -10,44 +10,49 @@
     1. Expression type inference: assign types to all expressions
     2. Structure inference: process type and module declarations
 
+    Type variables are created using context-based state threading via
+    [Typing_context.new_type_variable].
+
     @see <https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system>
          Hindley-Milner type system *)
 
 (** {1 Expression Inference} *)
 
-(** [infer_expression env expr] infers the type of an expression.
+(** [infer_expression ctx expr] infers the type of an expression.
 
     Traverses the expression AST, assigns type variables to unknowns,
     and uses unification to solve constraints. The returned typed expression
     has full type annotations.
 
-    @param env The typing environment containing bindings
+    @param ctx The typing context containing bindings
     @param expr The expression to type-check
-    @return A typed expression with inferred types
+    @return A pair [(typed_expr, updated_ctx)]
     @raise Compiler_error.Type_error on type mismatches
     @raise Unification.Unification_error on unification failures *)
 val infer_expression :
-  Environment.t -> Parsing.Syntax_tree.expression -> Typed_tree.typed_expression
+  Typing_context.t ->
+  Parsing.Syntax_tree.expression ->
+  Typed_tree.typed_expression * Typing_context.t
 
 (** {1 Structure Inference} *)
 
-(** [infer_structure env structure] infers types for a complete structure.
+(** [infer_structure ctx structure] infers types for a complete structure.
 
     Processes all structure items (let bindings, type definitions, modules)
-    and returns a typed structure along with the updated environment.
+    and returns a typed structure along with the updated context.
 
-    Type definitions are added to the environment before processing bindings,
+    Type definitions are added to the context before processing bindings,
     allowing forward references within a structure.
 
-    @param env The initial typing environment
+    @param ctx The initial typing context
     @param structure The structure to type-check
-    @return A pair of (typed_structure, updated_environment)
+    @return A pair of (typed_structure, updated_context)
     @raise Compiler_error.Type_error on type errors
     @raise Unification.Unification_error on unification failures *)
 val infer_structure :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.structure ->
-  Typed_tree.typed_structure * Environment.t
+  Typed_tree.typed_structure * Typing_context.t
 
 (** Unification error details for tolerant inference. *)
 type unification_error_details = {
@@ -62,22 +67,22 @@ type inference_error =
   | CompilerError of Common.Compiler_error.t
   | UnificationError of unification_error_details
 
-(** [infer_structure_tolerant env structure] infers types for a structure,
-    continuing after errors to accumulate as much environment as possible.
+(** [infer_structure_tolerant ctx structure] infers types for a structure,
+    continuing after errors to accumulate as much context as possible.
 
     This is used by LSP features like completion that need the environment
     even when the code has errors (e.g., incomplete expressions being typed).
 
     Unlike {!infer_structure}, this function catches type errors per structure
     item and continues processing subsequent items with the accumulated
-    environment.
+    context.
 
-    @param env The initial typing environment
+    @param ctx The initial typing context
     @param structure The structure to infer
-    @return A triple [(typed_structure_opt, accumulated_env, errors)] where
+    @return A triple [(typed_structure_opt, accumulated_ctx, errors)] where
             [typed_structure_opt] is [Some ast] if all items succeeded,
             [None] if any item failed, and [errors] is the list of errors *)
 val infer_structure_tolerant :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.structure ->
-  Typed_tree.typed_structure option * Environment.t * inference_error list
+  Typed_tree.typed_structure option * Typing_context.t * inference_error list

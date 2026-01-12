@@ -77,13 +77,13 @@ let open_module (sig_ : Module_types.signature) env =
     match item with
     | Module_types.SigValue (name, desc) ->
       let id = Identifier.create name in
-      let env = add_value name id desc.val_type env in
+      let env = add_value name id desc.value_type env in
       (env, (name, id) :: bindings)
     | Module_types.SigType (name, decl) ->
       (add_type name decl env, bindings)
     | Module_types.SigModule (name, mty) ->
       let id = Identifier.create name in
-      let binding = Module_types.{ mod_name = name; mod_id = id; mod_type = mty; mod_alias = None } in
+      let binding = Module_types.{ binding_name = name; binding_id = id; binding_type = mty; binding_alias = None } in
       (add_module name binding env, bindings)
     | Module_types.SigModuleType (name, mty_opt) ->
       (add_module_type name mty_opt env, bindings)
@@ -106,7 +106,7 @@ let rec find_type_by_path path env =
     begin match find_module_by_path parent_path env with
     | None -> None
     | Some binding ->
-      find_type_in_module_type name binding.Module_types.mod_type
+      find_type_in_module_type name binding.Module_types.binding_type
     end
   | Types.PathApply _ ->
     (* Functor application - not supported yet *)
@@ -123,7 +123,7 @@ and find_module_by_path path env =
     begin match find_module_by_path parent_path env with
     | None -> None
     | Some binding ->
-      find_module_in_module_type name binding.Module_types.mod_type
+      find_module_in_module_type name binding.Module_types.binding_type
     end
   | Types.PathBuiltin _ | Types.PathApply _ ->
     None
@@ -141,7 +141,7 @@ and find_module_in_module_type name mty =
     begin match Module_types.find_module_in_sig name sig_ with
     | Some inner_mty ->
       let id = Identifier.create name in
-      Some Module_types.{ mod_name = name; mod_id = id; mod_type = inner_mty; mod_alias = None }
+      Some Module_types.{ binding_name = name; binding_id = id; binding_type = inner_mty; binding_alias = None }
     | None -> None
     end
   | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->

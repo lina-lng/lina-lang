@@ -31,25 +31,18 @@ type level = int
 (** The level for fully generalized (polymorphic) type variables. *)
 val generic_level : level
 
-(** [current_level ()] returns the current nesting level. *)
-val current_level : unit -> level
+(** [fresh_type_variable_id ()] generates a fresh unique ID and increments
+    the global counter. Returns the ID that was allocated.
 
-(** [enter_level ()] increments the level when entering a let-binding. *)
-val enter_level : unit -> unit
+    Note: This is the only global state in Types. All level management
+    is done through Typing_context. *)
+val fresh_type_variable_id : unit -> int
 
-(** [leave_level ()] decrements the level when leaving a let-binding. *)
-val leave_level : unit -> unit
+(** [reset_type_variable_id ()] resets the type variable ID counter to 0.
 
-(** [reset_level ()] resets the level to the initial value. *)
-val reset_level : unit -> unit
-
-(** [set_level level] sets the current level directly.
-    Used for context migration during module-boundary compilation. *)
-val set_level : level -> unit
-
-(** [set_next_type_variable_id id] sets the next ID for fresh type variables.
-    Used for context migration during module-boundary compilation. *)
-val set_next_type_variable_id : int -> unit
+    This is intended for testing only, to ensure reproducible type variable
+    names between test runs. Should not be used in production code. *)
+val reset_type_variable_id : unit -> unit
 
 (** {1 Type Expressions} *)
 
@@ -138,10 +131,11 @@ val equal_variance : variance -> variance -> bool
 
 (** {1 Type Variable Creation} *)
 
-(** [new_type_variable ()] creates a fresh type variable at the current level. *)
-val new_type_variable : unit -> type_expression
+(** [new_type_variable_at_level level] creates a type variable at a specific level.
 
-(** [new_type_variable_at_level level] creates a type variable at a specific level. *)
+    Note: For most use cases, prefer [Typing_context.new_type_variable] which
+    manages levels automatically. This function is for low-level operations
+    that need explicit level control. *)
 val new_type_variable_at_level : level -> type_expression
 
 (** {1 Built-in Types} *)
@@ -170,9 +164,10 @@ val type_ref : type_expression -> type_expression
     The record has exactly the given fields and no others. *)
 val type_record_closed : (string * row_field) list -> type_expression
 
-(** [type_record_open fields] creates an open record type.
-    The record has at least the given fields, plus potentially more. *)
-val type_record_open : (string * row_field) list -> type_expression
+(** [type_record_open fields ~row_var] creates an open record type.
+    The record has at least the given fields, with [row_var] as the tail
+    to allow additional fields. *)
+val type_record_open : (string * row_field) list -> row_var:type_expression -> type_expression
 
 (** {1 Type Manipulation} *)
 
@@ -204,62 +199,9 @@ type type_scheme = {
 (** [trivial_scheme ty] wraps a monomorphic type as a scheme with no quantifiers. *)
 val trivial_scheme : type_expression -> type_scheme
 
-(** [mark_as_weak ty] marks all type variables in [ty] that are at a higher
-    level than the current level as "weak".
-
-    This is called when value restriction blocks generalization. Weak type
-    variables are displayed with an underscore prefix (e.g., ['_a]) to indicate
-    they are not polymorphic.
-
-    @param ty The type whose variables should be marked as weak *)
-val mark_as_weak : type_expression -> unit
-
-(** [generalize ty] generalizes a type at the current level.
-
-    Variables with level > [current_level ()] are marked as [generic_level]
-    and collected into the scheme's [quantified_variables] list.
-
-    Behavior:
-    - Variables at current level or below remain monomorphic
-    - Variables at higher levels become polymorphic (quantified)
-    - If [ty] contains no generalizable variables, returns a trivial scheme
-    - Uses a hash table internally for O(n) duplicate detection
-
-    This implements the "level-based" approach to generalization from
-    Rémy's "Extension of ML Type System with a Sorted Equational Theory
-    on Types" (1992).
-
-    @param ty The type to generalize (should be fully unified)
-    @return A type scheme with quantified variables *)
-val generalize : type_expression -> type_scheme
-
-(** [generalize_with_filter predicate ty] generalizes a type selectively.
-
-    This is used for relaxed value restriction. The [predicate] function
-    determines which type variables should be generalized. Variables that
-    fail the predicate are marked as weak.
-
-    @param predicate A function [type_variable -> type_expression -> bool]
-           that returns [true] if the variable should be generalized.
-           The [type_expression] argument is the full type being generalized.
-    @param ty The type to generalize
-    @return A type scheme with selectively quantified variables *)
-val generalize_with_filter :
-  (type_variable -> type_expression -> bool) -> type_expression -> type_scheme
-
-(** [instantiate scheme] creates fresh type variables for all quantifiers.
-
-    Each quantified variable in [scheme.quantified_variables] is replaced
-    with a fresh type variable at the current level.
-
-    Behavior:
-    - If [scheme.quantified_variables] is empty, returns [scheme.body] unchanged
-    - Fresh variables are created at [current_level ()]
-    - The original scheme is not modified
-
-    @param scheme The polymorphic type scheme to instantiate
-    @return A monomorphic type with fresh variables *)
-val instantiate : type_scheme -> type_expression
+(* NOTE: Type scheme operations (generalize, instantiate, mark_as_weak) are in
+   the Type_scheme module. Use Type_scheme.generalize, Type_scheme.instantiate,
+   etc. instead. This avoids circular dependency with Type_traversal. *)
 
 (** {1 Type Declarations} *)
 

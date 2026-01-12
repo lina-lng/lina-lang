@@ -1,5 +1,5 @@
 let compile source =
-  Typing.Types.reset_level ();
+  Typing.Types.reset_type_variable_id ();
   match Driver.Pipeline.compile_string Driver.Pipeline.default_options "<test>" source with
   | Ok lua_code -> lua_code
   | Error msg -> "ERROR: " ^ msg
@@ -302,7 +302,7 @@ let v = r.y");
     ERROR: File "<string>", line 2, characters 8-11:
     Type error: Missing field 'y' in closed record
     Expected: {}
-    Actual: { y : 't114 }
+    Actual: { y : 't1 }
     |}]
 
 let%expect_test "type error: match arm type mismatch" =
@@ -1378,9 +1378,9 @@ type 'a result = Ok of 'a | Err
 let f x = match x with | Some n -> n | Err -> 0");
   [%expect{|
     ERROR: File "<string>", line 3, characters 39-47:
-    Type error: Type mismatch: expected 't462 option, got 't463 result
-    Expected: 't462 option
-    Actual: 't463 result
+    Type error: Type mismatch: expected 't5 option, got 't6 result
+    Expected: 't5 option
+    Actual: 't6 result
     |}]
 
 let%expect_test "type error: inconsistent tuple sizes" =
@@ -1388,8 +1388,8 @@ let%expect_test "type error: inconsistent tuple sizes" =
   [%expect{|
     ERROR: File "<string>", line 1, characters 39-53:
     Type error: Tuple size mismatch: expected 2 elements, got 3
-    Expected: ('t466 * 't467)
-    Actual: ('t468 * 't469 * 't470)
+    Expected: ('t2 * 't3)
+    Actual: ('t4 * 't5 * 't6)
     |}]
 
 let%expect_test "type error: wrong constructor argument type" =

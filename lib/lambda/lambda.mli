@@ -57,7 +57,7 @@ type constant =
 
     Tags are integers used for efficient pattern matching via dispatch tables
     or numeric comparisons. *)
-type constructor_tag = {
+type construconstructor_tag_index = {
   tag_name : string;       (** Constructor name (e.g., "Some") *)
   tag_index : int;         (** Numeric tag (0-based within type) *)
   tag_type_name : string;  (** Parent type name (e.g., "option") *)
@@ -95,7 +95,7 @@ type lambda =
       (** Tuple field access (0-based index) *)
   | LambdaSwitch of lambda * switch_case list * lambda option
       (** Switch on integer tag: [switch scrutinee { cases } default] *)
-  | LambdaConstructor of constructor_tag * lambda option
+  | LambdaConstructor of construconstructor_tag_index * lambda option
       (** Variant constructor: [Tag] or [Tag(arg)] *)
   | LambdaMakeRecord of (string * lambda) list
       (** Record literal: [{x = e1; y = e2}] *)

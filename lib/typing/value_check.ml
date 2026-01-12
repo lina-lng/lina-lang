@@ -5,129 +5,142 @@
 
     See value_check.mli for detailed documentation. *)
 
-open Typed_tree
-open Parsing.Syntax_tree
+(** {1 Functor-Based Value Checking}
 
-let rec is_value (expression : typed_expression) : bool =
-  match expression.expression_desc with
-  (* Variables are always values - they reference existing bindings *)
-  | TypedExpressionVariable _ -> true
+    Uses a functor to eliminate duplication between typed and syntax expressions. *)
 
-  (* Constants are values - no allocation or effects *)
-  | TypedExpressionConstant _ -> true
+(** Classification of expressions for value checking.
+    This type abstracts over the differences between typed and syntax ASTs. *)
+type 'expr value_shape =
+  | ShapeAtomicValue
+      (** Variable, constant, or function - always a value *)
+  | ShapeTuple of 'expr list
+      (** Tuple - value if all components are values *)
+  | ShapeConstructor of 'expr option
+      (** Constructor - None for nullary, Some for with argument *)
+  | ShapeRecord of 'expr list
+      (** Record - list of field values *)
+  | ShapeLet of 'expr list * 'expr
+      (** Let binding - binding expressions and body *)
+  | ShapeConstraint of 'expr
+      (** Type constraint - inner expression (syntax AST only) *)
+  | ShapeNonValue
+      (** Apply, match, if, sequence, etc. - never a value *)
 
-  (* Lambda abstractions are values - they don't evaluate their body *)
-  | TypedExpressionFunction _ -> true
+(** Module signature for expression types that can be checked for value-ness. *)
+module type EXPRESSION = sig
+  (** The expression type *)
+  type t
 
-  (* Tuples are values if all components are values *)
-  | TypedExpressionTuple components ->
-    List.for_all is_value components
+  (** Classify an expression into its value shape *)
+  val classify : t -> t value_shape
+end
 
-  (* Nullary constructors (like None) are values *)
-  | TypedExpressionConstructor (_, None) -> true
+(** Functor that generates is_value from an EXPRESSION implementation. *)
+module Make (E : EXPRESSION) = struct
+  let rec is_value (expr : E.t) : bool =
+    match E.classify expr with
+    | ShapeAtomicValue -> true
+    | ShapeTuple components -> List.for_all is_value components
+    | ShapeConstructor None -> true
+    | ShapeConstructor (Some arg) -> is_value arg
+    | ShapeRecord field_values -> List.for_all is_value field_values
+    | ShapeLet (binding_exprs, body) ->
+      List.for_all is_value binding_exprs && is_value body
+    | ShapeConstraint inner -> is_value inner
+    | ShapeNonValue -> false
+end
 
-  (* Constructors with arguments are values if the argument is a value *)
-  | TypedExpressionConstructor (_, Some argument) ->
-    is_value argument
+(** {2 Typed Expression Implementation} *)
 
-  (* Records are values if all field values are values *)
-  | TypedExpressionRecord fields ->
-    List.for_all (fun field -> is_value field.typed_field_value) fields
+module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = struct
+  type t = Typed_tree.typed_expression
 
-  (* Let bindings are values if:
-     - All bound expressions are values
-     - The body is a value
-     This allows: let x = 1 in let y = 2 in (x, y) *)
-  | TypedExpressionLet (_, bindings, body) ->
-    List.for_all (fun (binding : Typed_tree.typed_binding) ->
-      is_value binding.binding_expression
-    ) bindings
-    && is_value body
+  let classify (expr : t) : t value_shape =
+    match expr.Typed_tree.expression_desc with
+    (* Atomic values *)
+    | Typed_tree.TypedExpressionVariable _ -> ShapeAtomicValue
+    | Typed_tree.TypedExpressionConstant _ -> ShapeAtomicValue
+    | Typed_tree.TypedExpressionFunction _ -> ShapeAtomicValue
 
-  (* ----------------------------------------
-     The following are NOT values (expansive)
-     ---------------------------------------- *)
+    (* Compound values *)
+    | Typed_tree.TypedExpressionTuple components -> ShapeTuple components
+    | Typed_tree.TypedExpressionConstructor (_, arg) -> ShapeConstructor arg
+    | Typed_tree.TypedExpressionRecord fields ->
+      ShapeRecord (List.map (fun field -> field.Typed_tree.typed_field_value) fields)
+    | Typed_tree.TypedExpressionLet (_, bindings, body) ->
+      let binding_exprs = List.map
+        (fun (binding : Typed_tree.typed_binding) -> binding.Typed_tree.binding_expression)
+        bindings
+      in
+      ShapeLet (binding_exprs, body)
 
-  (* Function applications can create new mutable state (e.g., ref []) *)
-  | TypedExpressionApply _ -> false
+    (* Non-values *)
+    | Typed_tree.TypedExpressionApply _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionMatch _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionIf _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionSequence _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionRecordAccess _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionRecordUpdate _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionModuleAccess _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionRef _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionDeref _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionAssign _ -> ShapeNonValue
+end
 
-  (* Match expressions evaluate branches which may have effects *)
-  | TypedExpressionMatch _ -> false
+(** {2 Syntax Expression Implementation} *)
 
-  (* If expressions evaluate branches which may have effects *)
-  | TypedExpressionIf _ -> false
+module SyntaxExpression : EXPRESSION with type t = Parsing.Syntax_tree.expression = struct
+  type t = Parsing.Syntax_tree.expression
 
-  (* Sequences explicitly allow effects in the first expression *)
-  | TypedExpressionSequence _ -> false
+  let classify (expr : t) : t value_shape =
+    match expr.Common.Location.value with
+    (* Atomic values *)
+    | Parsing.Syntax_tree.ExpressionVariable _ -> ShapeAtomicValue
+    | Parsing.Syntax_tree.ExpressionConstant _ -> ShapeAtomicValue
+    | Parsing.Syntax_tree.ExpressionFunction _ -> ShapeAtomicValue
 
-  (* Record access could trigger evaluation in lazy contexts *)
-  | TypedExpressionRecordAccess _ -> false
+    (* Compound values *)
+    | Parsing.Syntax_tree.ExpressionTuple components -> ShapeTuple components
+    | Parsing.Syntax_tree.ExpressionConstructor (_, arg) -> ShapeConstructor arg
+    | Parsing.Syntax_tree.ExpressionRecord fields ->
+      ShapeRecord (List.map (fun field -> field.Parsing.Syntax_tree.field_value) fields)
+    | Parsing.Syntax_tree.ExpressionLet (_, bindings, body) ->
+      let binding_exprs = List.map
+        (fun (binding : Parsing.Syntax_tree.binding) -> binding.Parsing.Syntax_tree.binding_expression)
+        bindings
+      in
+      ShapeLet (binding_exprs, body)
 
-  (* Record update creates a new record - could involve allocation *)
-  | TypedExpressionRecordUpdate _ -> false
+    (* Type constraint - syntax only, transparent for value checking *)
+    | Parsing.Syntax_tree.ExpressionConstraint (inner, _) ->
+      ShapeConstraint inner
 
-  (* Module access could trigger module initialization effects *)
-  | TypedExpressionModuleAccess _ -> false
+    (* Non-values *)
+    | Parsing.Syntax_tree.ExpressionApply _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionMatch _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionIf _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionSequence _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionRecordAccess _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionRecordUpdate _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionModuleAccess _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionRef _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionDeref _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionAssign _ -> ShapeNonValue
+end
 
-  (* Reference operations are NOT values (allocate or have effects) *)
-  | TypedExpressionRef _ -> false       (* Allocation is expansive *)
-  | TypedExpressionDeref _ -> false     (* Effectful read *)
-  | TypedExpressionAssign _ -> false    (* Effectful write *)
+(** {2 Instantiate the Functor} *)
 
+module TypedCheck = Make (TypedExpression)
+module SyntaxCheck = Make (SyntaxExpression)
 
-let rec is_syntax_value (expression : Parsing.Syntax_tree.expression) : bool =
-  match expression.Common.Location.value with
-  (* Variables are always values *)
-  | ExpressionVariable _ -> true
+(** [is_value expression] returns [true] if the typed expression is a
+    syntactic value (non-expansive) and can be safely generalized. *)
+let is_value = TypedCheck.is_value
 
-  (* Constants are values *)
-  | ExpressionConstant _ -> true
-
-  (* Lambda abstractions are values *)
-  | ExpressionFunction _ -> true
-
-  (* Tuples are values if all components are values *)
-  | ExpressionTuple components ->
-    List.for_all is_syntax_value components
-
-  (* Nullary constructors (like None) are values *)
-  | ExpressionConstructor (_, None) -> true
-
-  (* Constructors with arguments are values if the argument is a value *)
-  | ExpressionConstructor (_, Some argument) ->
-    is_syntax_value argument
-
-  (* Records are values if all field values are values *)
-  | ExpressionRecord fields ->
-    List.for_all (fun field -> is_syntax_value field.field_value) fields
-
-  (* Let bindings are values if all parts are values *)
-  | ExpressionLet (_, bindings, body) ->
-    List.for_all (fun (binding : Parsing.Syntax_tree.binding) ->
-      is_syntax_value binding.binding_expression
-    ) bindings
-    && is_syntax_value body
-
-  (* Type constraints don't affect value-ness *)
-  | ExpressionConstraint (inner, _) ->
-    is_syntax_value inner
-
-  (* ----------------------------------------
-     The following are NOT values (expansive)
-     ---------------------------------------- *)
-
-  | ExpressionApply _ -> false
-  | ExpressionMatch _ -> false
-  | ExpressionIf _ -> false
-  | ExpressionSequence _ -> false
-  | ExpressionRecordAccess _ -> false
-  | ExpressionRecordUpdate _ -> false
-  | ExpressionModuleAccess _ -> false
-  (* Reference operations are NOT values (allocate or have effects) *)
-  | ExpressionRef _ -> false      (* Allocation is expansive *)
-  | ExpressionDeref _ -> false    (* Effectful read *)
-  | ExpressionAssign _ -> false   (* Effectful write *)
-
+(** [is_syntax_value expression] returns [true] if the surface syntax
+    expression is a syntactic value. *)
+let is_syntax_value = SyntaxCheck.is_value
 
 (** {1 Relaxed Value Restriction - Variance Checking} *)
 
@@ -138,112 +151,9 @@ type variance = Types.variance =
   | Invariant
   | Bivariant
 
-(** Use Variance module for operations. *)
-let flip_variance = Variance.flip
-let combine_variance = Variance.combine
-let apply_context_variance = Variance.compose
-
-(** Get the variance of type parameters for a type constructor.
-
-    For built-in and standard types:
-    - ref: invariant (can read and write)
-    - list, option, and most others: covariant
-
-    For user-defined types, we conservatively assume covariant.
-    A more complete implementation would track declared variances. *)
-let get_constructor_param_variances (path : Types.path) (param_count : int) : variance list =
-  match path with
-  | Types.PathBuiltin Types.BuiltinRef ->
-    (* ref is invariant - both reading and writing *)
-    [Invariant]
-  | Types.PathBuiltin _ ->
-    (* Other builtins have no type parameters *)
-    []
-  | _ ->
-    (* Most type constructors are covariant in their parameters *)
-    List.init param_count (fun _ -> Covariant)
-
-(** Check the variance of a type variable within a type expression.
-
-    @param target_var The type variable we're checking
-    @param context_variance The variance of the current context
-    @param ty The type to search within
-    @return The variance of target_var in ty *)
-let rec check_variance_in_context
-    (target_var : Types.type_variable)
-    (context_variance : variance)
-    (ty : Types.type_expression)
-  : variance =
-  match Types.representative ty with
-  | Types.TypeVariable tv ->
-    if tv.Types.id = target_var.Types.id then
-      context_variance
-    else
-      Bivariant  (* Different variable, not present *)
-
-  | Types.TypeConstructor (path, args) ->
-    let param_variances = get_constructor_param_variances path (List.length args) in
-    List.fold_left2
-      (fun accumulated_variance arg param_variance ->
-        let effective_variance = apply_context_variance context_variance param_variance in
-        let arg_variance = check_variance_in_context target_var effective_variance arg in
-        combine_variance accumulated_variance arg_variance)
-      Bivariant
-      args
-      param_variances
-
-  | Types.TypeTuple elements ->
-    (* Tuple elements are covariant *)
-    List.fold_left
-      (fun accumulated_variance element ->
-        let element_variance = check_variance_in_context target_var context_variance element in
-        combine_variance accumulated_variance element_variance)
-      Bivariant
-      elements
-
-  | Types.TypeArrow (arg_type, result_type) ->
-    (* Argument is contravariant, result is covariant *)
-    let arg_variance =
-      check_variance_in_context target_var (flip_variance context_variance) arg_type
-    in
-    let result_variance =
-      check_variance_in_context target_var context_variance result_type
-    in
-    combine_variance arg_variance result_variance
-
-  | Types.TypeRecord row ->
-    check_variance_in_row target_var context_variance row
-
-  | Types.TypeRowEmpty ->
-    Bivariant
-
-(** Check variance in a row type (for records). *)
-and check_variance_in_row
-    (target_var : Types.type_variable)
-    (context_variance : variance)
-    (row : Types.row)
-  : variance =
-  let field_variance =
-    List.fold_left
-      (fun accumulated_variance (_, field) ->
-        match field with
-        | Types.RowFieldPresent field_type ->
-          (* Record fields are covariant (read-only access) *)
-          let fv = check_variance_in_context target_var context_variance field_type in
-          combine_variance accumulated_variance fv)
-      Bivariant
-      row.Types.row_fields
-  in
-  (* Also check the row extension variable *)
-  let row_more_variance =
-    check_variance_in_context target_var context_variance row.Types.row_more
-  in
-  combine_variance field_variance row_more_variance
-
 (** Check the variance of a type variable in a type expression.
-    Entry point that starts in a covariant context. *)
-let check_variance (target_var : Types.type_variable) (ty : Types.type_expression) : variance =
-  check_variance_in_context target_var Covariant ty
+    Delegates to {!Variance.check_in_type}. *)
+let check_variance = Variance.check_in_type
 
 (** Check if a type variable can be generalized under relaxed value restriction.
     A variable can be generalized if it appears only in covariant positions

@@ -16,44 +16,44 @@ let variance_to_string = function
 (** {1 flip_variance tests} *)
 
 let%expect_test "flip_variance: covariant becomes contravariant" =
-  let result = Variance_infer.flip_variance Types.Covariant in
+  let result = Variance.flip Types.Covariant in
   print_endline (variance_to_string result);
   [%expect {| contravariant |}]
 
 let%expect_test "flip_variance: contravariant becomes covariant" =
-  let result = Variance_infer.flip_variance Types.Contravariant in
+  let result = Variance.flip Types.Contravariant in
   print_endline (variance_to_string result);
   [%expect {| covariant |}]
 
 let%expect_test "flip_variance: invariant stays invariant" =
-  let result = Variance_infer.flip_variance Types.Invariant in
+  let result = Variance.flip Types.Invariant in
   print_endline (variance_to_string result);
   [%expect {| invariant |}]
 
 (** {1 combine_variance tests} *)
 
 let%expect_test "combine_variance: covariant + covariant = covariant" =
-  let result = Variance_infer.combine_variance Types.Covariant Types.Covariant in
+  let result = Variance.combine Types.Covariant Types.Covariant in
   print_endline (variance_to_string result);
   [%expect {| covariant |}]
 
 let%expect_test "combine_variance: contravariant + contravariant = contravariant" =
-  let result = Variance_infer.combine_variance Types.Contravariant Types.Contravariant in
+  let result = Variance.combine Types.Contravariant Types.Contravariant in
   print_endline (variance_to_string result);
   [%expect {| contravariant |}]
 
 let%expect_test "combine_variance: covariant + contravariant = invariant" =
-  let result = Variance_infer.combine_variance Types.Covariant Types.Contravariant in
+  let result = Variance.combine Types.Covariant Types.Contravariant in
   print_endline (variance_to_string result);
   [%expect {| invariant |}]
 
 let%expect_test "combine_variance: contravariant + covariant = invariant" =
-  let result = Variance_infer.combine_variance Types.Contravariant Types.Covariant in
+  let result = Variance.combine Types.Contravariant Types.Covariant in
   print_endline (variance_to_string result);
   [%expect {| invariant |}]
 
 let%expect_test "combine_variance: invariant + anything = invariant" =
-  let result = Variance_infer.combine_variance Types.Invariant Types.Covariant in
+  let result = Variance.combine Types.Invariant Types.Covariant in
   print_endline (variance_to_string result);
   [%expect {| invariant |}]
 
@@ -156,27 +156,27 @@ let%expect_test "merge_variances: all inferred" =
 (** {1 Bivariant tests} *)
 
 let%expect_test "flip_variance: bivariant stays bivariant" =
-  let result = Variance_infer.flip_variance Types.Bivariant in
+  let result = Variance.flip Types.Bivariant in
   print_endline (variance_to_string result);
   [%expect {| bivariant |}]
 
 let%expect_test "combine_variance: bivariant + covariant = covariant" =
-  let result = Variance_infer.combine_variance Types.Bivariant Types.Covariant in
+  let result = Variance.combine Types.Bivariant Types.Covariant in
   print_endline (variance_to_string result);
   [%expect {| covariant |}]
 
 let%expect_test "combine_variance: covariant + bivariant = covariant" =
-  let result = Variance_infer.combine_variance Types.Covariant Types.Bivariant in
+  let result = Variance.combine Types.Covariant Types.Bivariant in
   print_endline (variance_to_string result);
   [%expect {| covariant |}]
 
 let%expect_test "combine_variance: bivariant + bivariant = bivariant" =
-  let result = Variance_infer.combine_variance Types.Bivariant Types.Bivariant in
+  let result = Variance.combine Types.Bivariant Types.Bivariant in
   print_endline (variance_to_string result);
   [%expect {| bivariant |}]
 
 let%expect_test "combine_variance: bivariant + invariant = invariant" =
-  let result = Variance_infer.combine_variance Types.Bivariant Types.Invariant in
+  let result = Variance.combine Types.Bivariant Types.Invariant in
   print_endline (variance_to_string result);
   [%expect {| invariant |}]
 

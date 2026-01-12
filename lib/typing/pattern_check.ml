@@ -133,9 +133,9 @@ let is_complete_signature (heads : simple_pattern list) (sig_ : constructor_sign
     (* Tuple has one constructor, complete if any tuple pattern present *)
     List.exists (function PatTuple _ -> true | _ -> false) heads
   | SigVariant ctors ->
-    List.for_all (fun (ctor_name, _) ->
+    List.for_all (fun (constructor_name, _) ->
       List.exists (function
-        | PatConstructor (name, _) -> name = ctor_name
+        | PatConstructor (name, _) -> name = constructor_name
         | _ -> false
       ) heads
     ) ctors

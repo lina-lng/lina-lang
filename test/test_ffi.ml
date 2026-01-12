@@ -509,7 +509,7 @@ let%expect_test "unknown attributes are ignored" =
 
 (** Compile source and return Lua code or error *)
 let compile source =
-  Typing.Types.reset_level ();
+  Typing.Types.reset_type_variable_id ();
   match Driver.Pipeline.compile_string Driver.Pipeline.default_options "<test>" source with
   | Ok lua_code -> lua_code
   | Error msg -> "ERROR: " ^ msg

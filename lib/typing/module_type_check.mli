@@ -7,6 +7,9 @@
     - Functor types ([functor (X : S) -> MT])
     - With-constraints ([S with type t = int])
 
+    Type variables are created using context-based state threading via
+    [Typing_context.new_type_variable].
+
     {2 Signatures}
 
     Signatures are checked item by item, converting syntactic declarations
@@ -21,19 +24,19 @@
 
 (** {1 Module Type Checking} *)
 
-(** [check_module_type env mty] checks a syntactic module type.
+(** [check_module_type ctx mty] checks a syntactic module type.
 
     Converts the parsed module type to its semantic representation,
     resolving module type paths and checking signature items.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param mty The syntactic module type to check
-    @return The semantic module type
+    @return A pair [(module_type, updated_ctx)]
     @raise Compiler_error.Type_error on unbound module types or invalid constructs *)
 val check_module_type :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.module_type ->
-  Module_types.module_type
+  Module_types.module_type * Typing_context.t
 
 (** {1 Helper Functions} *)
 
@@ -51,7 +54,7 @@ val lookup_module_path :
   Common.Location.t ->
   Module_types.module_binding * Module_types.module_binding
 
-(** [check_type_expression env ty_expr] converts a syntactic type expression
+(** [check_type_expression ctx ty_expr] converts a syntactic type expression
     to a semantic type.
 
     Used for type annotations in signatures.
@@ -60,16 +63,16 @@ val lookup_module_path :
     of a type variable name creates a fresh variable. For type declarations with
     parameters, use [check_type_expression_with_params] instead.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param ty_expr The syntactic type expression
-    @return The semantic type expression
+    @return A pair [(type_expr, updated_ctx)]
     @raise Compiler_error.Type_error on unbound types *)
 val check_type_expression :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.type_expression ->
-  Types.type_expression
+  Types.type_expression * Typing_context.t
 
-(** [check_type_expression_with_params env param_names param_vars ty_expr]
+(** [check_type_expression_with_params ctx param_names param_vars ty_expr]
     converts a syntactic type expression to a semantic type, preserving
     type variable sharing for declared parameters.
 
@@ -77,18 +80,18 @@ val check_type_expression :
     where the ['a] in [Some of 'a] must refer to the same type variable as the
     parameter ['a].
 
-    @param env The typing environment
+    @param ctx The typing context
     @param param_names List of type parameter names (e.g., ["'a"; "'b"])
     @param param_vars Corresponding list of semantic type variables
     @param ty_expr The syntactic type expression
-    @return The semantic type expression with proper variable sharing
+    @return A pair [(type_expr, updated_ctx)] with proper variable sharing
     @raise Compiler_error.Type_error on unbound types *)
 val check_type_expression_with_params :
-  Environment.t ->
+  Typing_context.t ->
   string list ->
   Types.type_variable list ->
   Parsing.Syntax_tree.type_expression ->
-  Types.type_expression
+  Types.type_expression * Typing_context.t
 
 (** [module_path_to_internal_path base_id path_modules] converts a module path
     to an internal path representation.

@@ -4,16 +4,20 @@
     - Structure items (let bindings, type declarations, modules)
     - Module expressions (struct, path, functor, apply, constraint)
     - Module type checking and signature matching
-    - Signature extraction from typed structures *)
+    - Signature extraction from typed structures
+
+    Type variables are created using context-based state threading via
+    [Typing_context.new_type_variable]. *)
 
 open Common
 open Parsing.Syntax_tree
 open Types
 open Typed_tree
 
-(** Create a module type lookup function from the environment.
+(** Create a module type lookup function from the context's environment.
     This handles both simple paths (PathIdent) and qualified paths (PathDot). *)
-let make_module_type_lookup env =
+let make_module_type_lookup ctx =
+  let env = Typing_context.environment ctx in
   let rec lookup_mty_by_path path =
     match path with
     | Types.PathIdent id ->
@@ -45,7 +49,7 @@ let make_module_type_lookup env =
     match path with
     | Types.PathIdent id ->
       begin match Environment.find_module (Identifier.name id) env with
-      | Some binding -> Some binding.Module_types.mod_type
+      | Some binding -> Some binding.Module_types.binding_type
       | None -> None
       end
     | Types.PathDot (base_path, name) ->
@@ -58,9 +62,12 @@ let make_module_type_lookup env =
   in
   lookup_mty_by_path
 
-(** Set up signature matching with module type lookup from environment *)
-let setup_signature_matching env =
-  Signature_match.set_module_type_lookup (make_module_type_lookup env)
+(** Create a signature matching context from a typing context. *)
+let make_match_context ctx =
+  let env = Typing_context.environment ctx in
+  Signature_match.create_context
+    ~type_lookup:(fun path -> Environment.find_type_by_path path env)
+    ~module_type_lookup:(make_module_type_lookup ctx)
 
 (** Check if a type is already an option type. *)
 let is_option_type ty =
@@ -82,15 +89,20 @@ let rec wrap_return_in_option ty =
     (* Wrap the final return type in option *)
     Types.TypeConstructor (Types.PathLocal "option", [ty])
 
-(** Process a type declaration and add it to the environment *)
-let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declaration) =
+(** Process a type declaration and add it to the context *)
+let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declaration) =
+  let env = Typing_context.environment ctx in
   (* Create semantic type variables for each type parameter *)
-  let type_params =
-    List.map (fun _ ->
-      match new_type_variable () with
-      | TypeVariable tv -> tv
-      | _ -> assert false
-    ) type_decl.type_parameters
+  let type_params, ctx =
+    List.fold_left (fun (params, ctx) _ ->
+      let tv, ctx = Typing_context.new_type_variable ctx in
+      match tv with
+      | TypeVariable tv -> (params @ [tv], ctx)
+      | _ ->
+        (* new_type_variable always returns a TypeVariable *)
+        Compiler_error.internal_error
+          "new_type_variable did not return a TypeVariable"
+    ) ([], ctx) type_decl.type_parameters
   in
   (* Build the result type: T or 'a T or ('a, 'b) T *)
   let result_type =
@@ -98,7 +110,7 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
       List.map (fun tv -> TypeVariable tv) type_params)
   in
   (* Get parameter names for mapping (e.g., ["'a"; "'b"]) *)
-  let param_names = List.map (fun (param : type_parameter) -> param.param_name) type_decl.type_parameters in
+  let param_names = List.map (fun (param : type_parameter) -> param.parameter_name) type_decl.type_parameters in
 
   (* For recursive types (like 'a list = Nil | Cons of 'a * 'a list),
      we need to add the type to the environment BEFORE parsing constructor
@@ -112,39 +124,47 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
   } in
   let env_with_type = Environment.add_type type_decl.type_name.Location.value preliminary_declaration env in
 
-  let (declaration_kind, manifest) = match type_decl.type_kind with
-    | TypeAbstract -> (DeclarationAbstract, None)
+  (* Create a context with the type added for recursive references *)
+  let ctx_with_type = Typing_context.with_environment env_with_type ctx in
+
+  let (declaration_kind, manifest, ctx) = match type_decl.type_kind with
+    | TypeAbstract -> (DeclarationAbstract, None, ctx)
     | TypeVariant constructors ->
-      let constructor_infos =
-        List.mapi (fun tag_index (ctor : constructor_declaration) ->
+      let indexed_constructors = List.mapi (fun index ctor -> (index, ctor)) constructors in
+      let constructor_infos, ctx =
+        List.fold_left (fun (infos, ctx) (tag_index, (ctor : constructor_declaration)) ->
           (* Parse the constructor argument type using the parameter mapping.
              This ensures that 'a in "Some of 'a" refers to the same variable
-             as the 'a type parameter. Use env_with_type so recursive references work. *)
-          let arg_type = Option.map (fun ty_expr ->
-            Module_type_check.check_type_expression_with_params env_with_type param_names type_params ty_expr
-          ) ctor.constructor_argument in
-          {
+             as the 'a type parameter. Use ctx_with_type so recursive references work. *)
+          let arg_type, ctx = match ctor.constructor_argument with
+            | Some ty_expr ->
+              let ty, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
+              (Some ty, ctx)
+            | None -> (None, ctx)
+          in
+          let ctor_info = {
             constructor_name = ctor.constructor_name.Location.value;
             constructor_tag_index = tag_index;
             constructor_type_name = type_decl.type_name.Location.value;
             constructor_argument_type = arg_type;
             constructor_result_type = result_type;
             constructor_type_parameters = type_params;
-          }
-        ) constructors
+          } in
+          (infos @ [ctor_info], ctx)
+        ) ([], ctx) indexed_constructors
       in
-      (DeclarationVariant constructor_infos, None)
+      (DeclarationVariant constructor_infos, None, ctx)
     | TypeAlias ty_expr ->
       (* Convert syntax type expression to semantic type, preserving parameter sharing *)
-      let manifest_type = Module_type_check.check_type_expression_with_params env_with_type param_names type_params ty_expr in
-      (DeclarationAbstract, Some manifest_type)
+      let manifest_type, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
+      (DeclarationAbstract, Some manifest_type, ctx)
   in
   (* Create the final type declaration with proper kind *)
 
   (* Convert explicit variance annotations from syntax to Types.variance *)
   let explicit_variances =
     List.map (fun (param : type_parameter) ->
-      match param.param_variance with
+      match param.parameter_variance with
       | Some VarianceCovariant -> Some Types.Covariant
       | Some VarianceContravariant -> Some Types.Contravariant
       | None -> None
@@ -205,7 +225,8 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
       ) env constructors
     | DeclarationRecord _ -> env
   in
-  (type_declaration, env)
+  let ctx = Typing_context.with_environment env ctx in
+  (type_declaration, ctx)
 
 (** Unification error details for tolerant inference. *)
 type unification_error_details = {
@@ -220,33 +241,34 @@ type inference_error =
   | CompilerError of Common.Compiler_error.t
   | UnificationError of unification_error_details
 
-(** [infer_structure_item env item] infers types for a structure item.
+(** [infer_structure_item ctx item] infers types for a structure item.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param item The structure item to infer
-    @return A pair [(typed_item, updated_env)] *)
-let rec infer_structure_item env (item : structure_item) =
+    @return A pair [(typed_item, updated_ctx)] *)
+let rec infer_structure_item ctx (item : structure_item) =
+  let env = Typing_context.environment ctx in
   match item.Location.value with
   | StructureValue (rec_flag, bindings) ->
-    let typed_bindings, env = Expression_infer.infer_bindings env rec_flag bindings in
+    let typed_bindings, ctx = Expression_infer.infer_bindings ctx rec_flag bindings in
     let typed_item = {
       structure_item_desc = TypedStructureValue (rec_flag, typed_bindings);
       structure_item_location = item.Location.location;
     } in
-    (typed_item, env)
+    (typed_item, ctx)
 
   | StructureType type_decls ->
-    let type_declarations, env =
-      List.fold_left (fun (decls, env) type_decl ->
-        let decl, env = process_type_declaration env type_decl in
-        (decl :: decls, env)
-      ) ([], env) type_decls
+    let type_declarations, ctx =
+      List.fold_left (fun (decls, ctx) type_decl ->
+        let decl, ctx = process_type_declaration ctx type_decl in
+        (decl :: decls, ctx)
+      ) ([], ctx) type_decls
     in
     let typed_item = {
       structure_item_desc = TypedStructureType (List.rev type_declarations);
       structure_item_location = item.Location.location;
     } in
-    (typed_item, env)
+    (typed_item, ctx)
 
   | StructureModule module_binding ->
     let module_name = module_binding.module_name.Location.value in
@@ -257,18 +279,18 @@ let rec infer_structure_item env (item : structure_item) =
         let loc = module_binding.module_location in
         { Location.value = ModuleFunctor (params, module_binding.module_expr); location = loc }
     in
-    let typed_mexpr, env = infer_module_expression env actual_expr in
+    let typed_mexpr, ctx = infer_module_expression ctx actual_expr in
     (* Check if there's a signature constraint *)
-    let final_mexpr, final_mty =
+    let final_mexpr, final_mty, ctx =
       match module_binding.module_type with
       | None ->
         (* No constraint - use inferred type *)
-        (typed_mexpr, typed_mexpr.module_type)
+        (typed_mexpr, typed_mexpr.module_type, ctx)
       | Some constraint_mty ->
         (* Check the constraint and perform signature matching *)
-        let spec_mty = Module_type_check.check_module_type env constraint_mty in
-        setup_signature_matching env;
-        begin match Signature_match.match_module_type item.Location.location typed_mexpr.module_type spec_mty with
+        let spec_mty, ctx = Module_type_check.check_module_type ctx constraint_mty in
+        let match_ctx = make_match_context ctx in
+        begin match Signature_match.match_module_type match_ctx item.Location.location typed_mexpr.module_type spec_mty with
         | Ok () ->
           (* Matching succeeded - use the constrained type *)
           let constrained_mexpr = {
@@ -276,55 +298,60 @@ let rec infer_structure_item env (item : structure_item) =
             module_type = spec_mty;
             module_location = typed_mexpr.module_location;
           } in
-          (constrained_mexpr, spec_mty)
+          (constrained_mexpr, spec_mty, ctx)
         | Error err ->
           Compiler_error.type_error item.Location.location
             (Printf.sprintf "Module %s does not match signature: %s"
               module_name (Signature_match.format_match_error err))
         end
     in
+    let env = Typing_context.environment ctx in
     (* Register the module in the environment *)
     let module_id = Identifier.create module_name in
     (* Strengthen the module type so that abstract types become concrete *)
     let module_path = Types.PathIdent module_id in
     let strengthened_mty = Signature_match.strengthen_module_type module_path final_mty in
     let mod_binding = Module_types.{
-      mod_name = module_name;
-      mod_id = module_id;
-      mod_type = strengthened_mty;
-      mod_alias = None;
+      binding_name = module_name;
+      binding_id = module_id;
+      binding_type = strengthened_mty;
+      binding_alias = None;
     } in
     let env = Environment.add_module module_name mod_binding env in
+    let ctx = Typing_context.with_environment env ctx in
     let typed_item = {
       structure_item_desc = TypedStructureModule (module_id, final_mexpr);
       structure_item_location = item.Location.location;
     } in
-    (typed_item, env)
+    (typed_item, ctx)
 
   | StructureModuleType (name_loc, mty) ->
     (* Check the module type expression *)
     let name = name_loc.Location.value in
-    let resolved_mty = Module_type_check.check_module_type env mty in
+    let resolved_mty, ctx = Module_type_check.check_module_type ctx mty in
+    let env = Typing_context.environment ctx in
     (* Add the module type to the environment *)
     let env = Environment.add_module_type name (Some resolved_mty) env in
+    let ctx = Typing_context.with_environment env ctx in
     let typed_item = {
       structure_item_desc = TypedStructureModuleType (name, resolved_mty);
       structure_item_location = item.Location.location;
     } in
-    (typed_item, env)
+    (typed_item, ctx)
 
   | StructureOpen module_path ->
     let path_modules = module_path.Location.value in
     let (base_binding, mod_binding) = Module_type_check.lookup_module_path env path_modules item.Location.location in
-    begin match mod_binding.Module_types.mod_type with
+    begin match mod_binding.Module_types.binding_type with
     | Module_types.ModTypeSig sig_ ->
       let (env, opened_bindings) = Environment.open_module sig_ env in
-      let path = Module_type_check.module_path_to_internal_path base_binding.mod_id path_modules in
+      let ctx = Typing_context.with_environment env ctx in
+      let path = Module_type_check.module_path_to_internal_path base_binding.binding_id path_modules in
       let typed_item = {
         structure_item_desc = TypedStructureOpen (path, opened_bindings);
         structure_item_location = item.Location.location;
       } in
-      (typed_item, env)
+      (typed_item, ctx)
     | Module_types.ModTypeFunctor _ ->
       Compiler_error.type_error item.Location.location "Cannot open a functor"
     | Module_types.ModTypeIdent _ ->
@@ -333,16 +360,18 @@ let rec infer_structure_item env (item : structure_item) =
 
   | StructureInclude mexpr ->
     (* Type-check the included module expression *)
-    let (typed_mexpr, env) = infer_module_expression env mexpr in
+    let (typed_mexpr, ctx) = infer_module_expression ctx mexpr in
     begin match typed_mexpr.module_type with
     | Module_types.ModTypeSig sig_ ->
       (* Bring all signature contents into scope (like open) *)
+      let env = Typing_context.environment ctx in
       let (env, included_bindings) = Environment.open_module sig_ env in
+      let ctx = Typing_context.with_environment env ctx in
       let typed_item = {
         structure_item_desc = TypedStructureInclude (typed_mexpr, included_bindings);
         structure_item_location = item.Location.location;
       } in
-      (typed_item, env)
+      (typed_item, ctx)
     | Module_types.ModTypeFunctor _ ->
       Compiler_error.type_error item.Location.location "Cannot include a functor"
     | Module_types.ModTypeIdent _ ->
@@ -354,7 +383,8 @@ let rec infer_structure_item env (item : structure_item) =
     let name = ext_decl.external_name.Location.value in
     let location = ext_decl.external_location in
     (* Check the type expression *)
-    let external_type = Module_type_check.check_type_expression env ext_decl.external_type in
+    let external_type, ctx = Module_type_check.check_type_expression ctx ext_decl.external_type in
+    let env = Typing_context.environment ctx in
     (* Compute arity from type (count function arrows) *)
     let rec compute_arity ty =
       match ty with
@@ -383,8 +413,9 @@ let rec infer_structure_item env (item : structure_item) =
     (* Create identifier for this external *)
     let external_id = Identifier.create name in
     (* Add to environment as a value binding *)
-    let scheme = Types.generalize final_type in
+    let scheme = Typing_context.generalize ctx final_type in
     let env = Environment.add_value name external_id scheme env in
+    let ctx = Typing_context.with_environment env ctx in
     (* Create the typed external *)
     let typed_ext = {
       Typed_tree.external_id;
@@ -396,19 +427,20 @@ let rec infer_structure_item env (item : structure_item) =
       structure_item_desc = TypedStructureExternal typed_ext;
       structure_item_location = item.Location.location;
     } in
-    (typed_item, env)
+    (typed_item, ctx)
 
-(** [infer_module_expression env mexpr] infers the type of a module expression.
+(** [infer_module_expression ctx mexpr] infers the type of a module expression.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param mexpr The module expression to infer
-    @return A pair [(typed_mexpr, updated_env)] *)
-and infer_module_expression env (mexpr : module_expression) =
+    @return A pair [(typed_mexpr, updated_ctx)] *)
+and infer_module_expression ctx (mexpr : module_expression) =
+  let env = Typing_context.environment ctx in
   let loc = mexpr.Location.location in
   match mexpr.Location.value with
   | ModuleStructure structure ->
     (* Type-check the structure and infer its signature *)
-    let typed_structure, _inner_env = infer_structure env structure in
+    let typed_structure, _inner_ctx = infer_structure ctx structure in
     let sig_ = signature_of_typed_structure typed_structure in
     let module_type = Module_types.ModTypeSig sig_ in
     let typed_mexpr = {
@@ -416,18 +448,18 @@ and infer_module_expression env (mexpr : module_expression) =
       module_type;
       module_location = loc;
     } in
-    (typed_mexpr, env)
+    (typed_mexpr, ctx)
 
   | ModulePath module_path ->
     let path_modules = module_path.Location.value in
     let (base_binding, mod_binding) = Module_type_check.lookup_module_path env path_modules loc in
-    let internal_path = Module_type_check.module_path_to_internal_path base_binding.mod_id path_modules in
+    let internal_path = Module_type_check.module_path_to_internal_path base_binding.binding_id path_modules in
     let typed_mexpr = {
       Typed_tree.module_desc = TypedModulePath internal_path;
-      module_type = mod_binding.mod_type;
+      module_type = mod_binding.binding_type;
       module_location = loc;
     } in
-    (typed_mexpr, env)
+    (typed_mexpr, ctx)
 
   | ModuleFunctor (params, body) ->
     (* Type-check functor: functor (X : S) -> ME *)
@@ -436,24 +468,26 @@ and infer_module_expression env (mexpr : module_expression) =
       Compiler_error.type_error loc "Functor must have at least one parameter"
     | [param] ->
       (* Single parameter functor *)
-      let param_name = param.functor_param_name.Location.value in
-      let param_mty = Module_type_check.check_module_type env param.functor_param_type in
-      let param_id = Identifier.create param_name in
+      let parameter_name = param.functor_param_name.Location.value in
+      let parameter_type, ctx = Module_type_check.check_module_type ctx param.functor_param_type in
+      let env = Typing_context.environment ctx in
+      let parameter_id = Identifier.create parameter_name in
       let param_binding = Module_types.{
-        mod_name = param_name;
-        mod_id = param_id;
-        mod_type = param_mty;
-        mod_alias = None;
+        binding_name = parameter_name;
+        binding_id = parameter_id;
+        binding_type = parameter_type;
+        binding_alias = None;
       } in
       (* Add parameter to environment for checking body *)
-      let body_env = Environment.add_module param_name param_binding env in
+      let body_env = Environment.add_module parameter_name param_binding env in
+      let body_ctx = Typing_context.with_environment body_env ctx in
       (* Type-check the body *)
-      let (typed_body, _body_env) = infer_module_expression body_env body in
+      let (typed_body, _body_ctx) = infer_module_expression body_ctx body in
       (* Build the functor parameter *)
       let semantic_param = Module_types.{
-        param_name;
-        param_id;
-        param_type = param_mty;
+        parameter_name;
+        parameter_id;
+        parameter_type;
       } in
       (* Build functor type *)
       let functor_type = Module_types.ModTypeFunctor (semantic_param, typed_body.module_type) in
@@ -462,7 +496,7 @@ and infer_module_expression env (mexpr : module_expression) =
         module_type = functor_type;
         module_location = loc;
       } in
-      (typed_mexpr, env)
+      (typed_mexpr, ctx)
     | param :: rest ->
       (* Multiple parameters - desugar to nested functors *)
       let inner_functor = {
@@ -473,13 +507,13 @@ and infer_module_expression env (mexpr : module_expression) =
         Location.value = ModuleFunctor ([param], inner_functor);
         location = loc;
       } in
-      infer_module_expression env single_param_functor
+      infer_module_expression ctx single_param_functor
     end
 
   | ModuleApply (func_expr, arg_expr) ->
     (* Type-check functor application: F(M) *)
-    let (typed_func, env) = infer_module_expression env func_expr in
-    let (typed_arg, env) = infer_module_expression env arg_expr in
+    let (typed_func, ctx) = infer_module_expression ctx func_expr in
+    let (typed_arg, ctx) = infer_module_expression ctx arg_expr in
     (* Extract paths from typed expressions for applicative semantics *)
     let extract_path mexpr =
       match mexpr.Typed_tree.module_desc with
@@ -492,17 +526,17 @@ and infer_module_expression env (mexpr : module_expression) =
     begin match typed_func.module_type with
     | Module_types.ModTypeFunctor (param, result_mty) ->
       (* Check that argument matches parameter type *)
-      begin match typed_arg.module_type, param.param_type with
+      begin match typed_arg.module_type, param.parameter_type with
       | Module_types.ModTypeSig arg_sig, Module_types.ModTypeSig param_sig ->
-        setup_signature_matching env;
-        begin match Signature_match.match_signature loc arg_sig param_sig with
+        let match_ctx = make_match_context ctx in
+        begin match Signature_match.match_signature match_ctx loc arg_sig param_sig with
         | Ok () ->
           (* Matching succeeded - apply applicative semantics *)
           let final_mty =
             match func_path_opt, arg_path_opt with
             | Some func_path, Some arg_path ->
               (* 1. Substitute parameter path with argument path in result *)
-              let param_path = Types.PathIdent param.param_id in
+              let param_path = Types.PathIdent param.parameter_id in
               let substituted_mty = Signature_match.substitute_path_in_module_type param_path arg_path result_mty in
               (* 2. Create PathApply for the result and strengthen *)
               let apply_path = Types.PathApply (func_path, arg_path) in
@@ -516,7 +550,7 @@ and infer_module_expression env (mexpr : module_expression) =
             module_type = final_mty;
             module_location = loc;
           } in
-          (typed_mexpr, env)
+          (typed_mexpr, ctx)
         | Error err ->
           Compiler_error.type_error loc
             (Printf.sprintf "Functor argument does not match parameter: %s"
@@ -529,7 +563,7 @@ and infer_module_expression env (mexpr : module_expression) =
           module_type = result_mty;
           module_location = loc;
         } in
-        (typed_mexpr, env)
+        (typed_mexpr, ctx)
       end
     | _ ->
       Compiler_error.type_error loc "Cannot apply non-functor module"
@@ -537,12 +571,12 @@ and infer_module_expression env (mexpr : module_expression) =
 
   | ModuleConstraint (inner_mexpr, constraint_mty) ->
     (* Type-check the inner expression *)
-    let (typed_inner, env) = infer_module_expression env inner_mexpr in
+    let (typed_inner, ctx) = infer_module_expression ctx inner_mexpr in
     (* Check the constraint module type *)
-    let spec_mty = Module_type_check.check_module_type env constraint_mty in
+    let spec_mty, ctx = Module_type_check.check_module_type ctx constraint_mty in
     (* Match implementation against specification *)
-    setup_signature_matching env;
-    begin match Signature_match.match_module_type loc typed_inner.module_type spec_mty with
+    let match_ctx = make_match_context ctx in
+    begin match Signature_match.match_module_type match_ctx loc typed_inner.module_type spec_mty with
     | Ok () ->
       (* Matching succeeded - return with the constrained (more restrictive) type *)
       let typed_mexpr = {
@@ -550,7 +584,7 @@ and infer_module_expression env (mexpr : module_expression) =
         module_type = spec_mty;  (* Use spec type to hide implementation details *)
         module_location = loc;
       } in
-      (typed_mexpr, env)
+      (typed_mexpr, ctx)
     | Error err ->
       Compiler_error.type_error loc (Signature_match.format_match_error err)
     end
@@ -568,10 +602,11 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
       match binding.binding_pattern.pattern_desc with
       | TypedPatternVariable id ->
         let name = Identifier.name id in
-        let scheme = Types.generalize binding.binding_expression.expression_type in
+        (* Use base level for top-level generalization *)
+        let scheme = Type_scheme.generalize ~level:1 binding.binding_expression.expression_type in
         let val_desc = Module_types.{
-          val_type = scheme;
-          val_location = item.structure_item_location;
+          value_type = scheme;
+          value_location = item.structure_item_location;
         } in
         Some (Module_types.SigValue (name, val_desc))
       | _ -> None
@@ -602,53 +637,54 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
   | TypedStructureExternal ext ->
     (* External contributes a value to the signature *)
     let name = Identifier.name ext.external_id in
-    let scheme = Types.generalize ext.external_type in
+    (* Use base level for top-level generalization *)
+    let scheme = Type_scheme.generalize ~level:1 ext.external_type in
     let val_desc = Module_types.{
-      val_type = scheme;
-      val_location = ext.external_location;
+      value_type = scheme;
+      value_location = ext.external_location;
     } in
     [Module_types.SigValue (name, val_desc)]
 
-(** [infer_structure env structure] infers types for a complete structure.
+(** [infer_structure ctx structure] infers types for a complete structure.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param structure The structure to infer
-    @return A pair [(typed_structure, updated_env)] *)
-and infer_structure env structure =
-  let typed_items, env =
-    List.fold_left (fun (items, env) item ->
-      let typed_item, env = infer_structure_item env item in
-      (typed_item :: items, env)
-    ) ([], env) structure
+    @return A pair [(typed_structure, updated_ctx)] *)
+and infer_structure ctx structure =
+  let typed_items, ctx =
+    List.fold_left (fun (items, ctx) item ->
+      let typed_item, ctx = infer_structure_item ctx item in
+      (typed_item :: items, ctx)
+    ) ([], ctx) structure
   in
-  (List.rev typed_items, env)
+  (List.rev typed_items, ctx)
 
-(** [infer_structure_tolerant env structure] infers types for a structure,
-    continuing after errors to accumulate as much environment as possible.
+(** [infer_structure_tolerant ctx structure] infers types for a structure,
+    continuing after errors to accumulate as much context as possible.
 
     This is used by LSP features like completion that need the environment
     even when the code has errors (e.g., incomplete expressions being typed).
 
-    @param env The typing environment
+    @param ctx The typing context
     @param structure The structure to infer
-    @return A triple [(typed_structure_opt, accumulated_env, errors)] where
+    @return A triple [(typed_structure_opt, accumulated_ctx, errors)] where
             typed_structure_opt is Some if all items succeeded, None if any failed,
             and errors is the list of errors encountered *)
-and infer_structure_tolerant env structure =
-  let typed_items, env, errors =
-    List.fold_left (fun (items, env, errors) item ->
+and infer_structure_tolerant ctx structure =
+  let typed_items, ctx, errors =
+    List.fold_left (fun (items, ctx, errors) item ->
       try
-        let typed_item, env = infer_structure_item env item in
-        (typed_item :: items, env, errors)
+        let typed_item, ctx = infer_structure_item ctx item in
+        (typed_item :: items, ctx, errors)
       with
       | Common.Compiler_error.Error compiler_err ->
-          (* Record error and continue with current env *)
-          (items, env, CompilerError compiler_err :: errors)
+          (* Record error and continue with current ctx *)
+          (items, ctx, CompilerError compiler_err :: errors)
       | Unification.Unification_error { expected; actual; location; message } ->
-          (* Record error and continue with current env *)
+          (* Record error and continue with current ctx *)
           let err_details = { expected; actual; location; message } in
-          (items, env, UnificationError err_details :: errors)
-    ) ([], env, []) structure
+          (items, ctx, UnificationError err_details :: errors)
+    ) ([], ctx, []) structure
   in
   let typed_ast = if errors <> [] then None else Some (List.rev typed_items) in
-  (typed_ast, env, List.rev errors)
+  (typed_ast, ctx, List.rev errors)

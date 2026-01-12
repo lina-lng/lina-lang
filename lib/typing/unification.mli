@@ -32,29 +32,34 @@ exception Unification_error of {
 
 (** {1 Configuration} *)
 
-(** [set_type_lookup lookup] sets the function used to resolve type aliases.
+(** Type lookup function signature *)
+type type_lookup = Types.path -> Types.type_declaration option
 
-    Must be called before unification to enable type alias support.
-    The lookup function should return [Some decl] for type aliases,
-    [None] for abstract or unknown types.
+(** Type variable factory function signature.
+    Used to create fresh type variables during row unification.
+    Allows callers to control how type variables are allocated. *)
+type fresh_type_var = unit -> Types.type_expression
 
-    @param lookup A function from type path to type declaration *)
-val set_type_lookup : (Types.path -> Types.type_declaration option) -> unit
+(** Default type variable factory using global state.
+    Creates a fresh type variable at the current level. *)
+val default_fresh_type_var : fresh_type_var
 
 (** {1 Type Operations} *)
 
-(** [expand_type ty] expands type aliases to their definitions.
+(** [expand_type ~type_lookup ty] expands type aliases to their definitions.
 
     Recursively expands type constructors that are aliases until reaching
     a non-alias type. Does not expand types within the result.
 
+    @param type_lookup Function to resolve type aliases
     @param ty The type to expand
     @return The expanded type, or [ty] if not an alias *)
-val expand_type : Types.type_expression -> Types.type_expression
+val expand_type :
+  type_lookup:type_lookup -> Types.type_expression -> Types.type_expression
 
 (** {1 Unification} *)
 
-(** [unify loc ty1 ty2] unifies two types.
+(** [unify ~type_lookup loc ty1 ty2] unifies two types.
 
     Attempts to make [ty1] and [ty2] equal by linking type variables.
     On success, both types will represent the same type.
@@ -91,8 +96,28 @@ val expand_type : Types.type_expression -> Types.type_expression
     expanded and retried. This allows [type t = int] to unify with [int].
     Cyclic type alias expansion is detected and reported.
 
+    @param type_lookup Function to resolve type aliases
     @param loc Location for error messages
     @param ty1 First type (typically "expected")
     @param ty2 Second type (typically "actual")
     @raise Unification_error when types cannot be unified *)
-val unify : Location.t -> Types.type_expression -> Types.type_expression -> unit
+val unify :
+  type_lookup:type_lookup ->
+  Location.t -> Types.type_expression -> Types.type_expression -> unit
+
+(** [unify_full ~type_lookup ~fresh_type_var loc ty1 ty2] unifies two types
+    with full control over type variable creation.
+
+    This is the most flexible unification function. It allows callers to provide
+    their own type variable factory, enabling context-based type variable creation.
+
+    @param type_lookup Function to resolve type aliases
+    @param fresh_type_var Function to create fresh type variables during row unification
+    @param loc Location for error messages
+    @param ty1 First type (typically "expected")
+    @param ty2 Second type (typically "actual")
+    @raise Unification_error when types cannot be unified *)
+val unify_full :
+  type_lookup:type_lookup ->
+  fresh_type_var:fresh_type_var ->
+  Location.t -> Types.type_expression -> Types.type_expression -> unit

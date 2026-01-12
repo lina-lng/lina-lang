@@ -70,3 +70,65 @@ and fold_row f acc row =
     | RowFieldPresent ty -> fold f acc ty
   ) acc row.row_fields in
   fold f acc row.row_more
+
+(** {1 Context-Aware Traversal} *)
+
+let rec fold_with_context f ctx acc ty =
+  let ty = representative ty in
+  let ctx, acc = f ctx ty acc in
+  match ty with
+  | TypeVariable _ -> acc
+  | TypeConstructor (_, args) ->
+    List.fold_left (fun acc arg -> fold_with_context f ctx acc arg) acc args
+  | TypeTuple elements ->
+    List.fold_left (fun acc elem -> fold_with_context f ctx acc elem) acc elements
+  | TypeArrow (arg, result) ->
+    let acc = fold_with_context f ctx acc arg in
+    fold_with_context f ctx acc result
+  | TypeRecord row -> fold_row_with_context f ctx acc row
+  | TypeRowEmpty -> acc
+
+and fold_row_with_context f ctx acc row =
+  let acc = List.fold_left (fun acc (_, field) ->
+    match field with
+    | RowFieldPresent ty -> fold_with_context f ctx acc ty
+  ) acc row.row_fields in
+  fold_with_context f ctx acc row.row_more
+
+(** {1 Type Variable Operations} *)
+
+let collect_variables predicate ty =
+  let seen = Hashtbl.create 16 in
+  let vars = ref [] in
+  iter (function
+    | TypeVariable tv when predicate tv ->
+      if not (Hashtbl.mem seen tv.id) then begin
+        Hashtbl.add seen tv.id ();
+        vars := tv :: !vars
+      end
+    | _ -> ()
+  ) ty;
+  List.rev !vars
+
+let exists_variable predicate ty =
+  let found = ref false in
+  try
+    iter (function
+      | TypeVariable tv when predicate tv ->
+        found := true;
+        raise Exit
+      | _ -> ()
+    ) ty;
+    false
+  with Exit -> true
+
+let for_all_variables predicate ty =
+  not (exists_variable (fun tv -> not (predicate tv)) ty)
+
+(** {1 Type Variable Collection with Deduplication} *)
+
+let free_type_variables ty =
+  collect_variables (fun _ -> true) ty
+
+let free_type_variables_above_level level ty =
+  collect_variables (fun tv -> tv.level > level) ty

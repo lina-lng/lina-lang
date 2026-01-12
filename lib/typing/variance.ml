@@ -68,3 +68,103 @@ let to_annotation = function
   | Contravariant -> "-"
   | Invariant -> "" (* No annotation means invariant *)
   | Bivariant -> "_" (* Underscore for unused/phantom *)
+
+let get_constructor_variances (path : Types.path) (param_count : int) : t list =
+  match path with
+  | Types.PathBuiltin Types.BuiltinRef ->
+    (* ref is invariant - both reading and writing *)
+    [Invariant]
+  | Types.PathBuiltin _ ->
+    (* Other builtins have no type parameters *)
+    []
+  | _ ->
+    (* Most type constructors are covariant in their parameters.
+       TODO: Look up declared variances from type declarations. *)
+    List.init param_count (fun _ -> Covariant)
+
+(** {1 Variance Checking in Types}
+
+    These functions check how a type variable occurs within a type expression.
+    Used for relaxed value restriction. *)
+
+(** Check the variance of a type variable within a type expression.
+
+    @param target_var The type variable we're checking
+    @param context_variance The variance of the current context
+    @param ty The type to search within
+    @return The variance of target_var in ty *)
+let rec check_in_context
+    (target_var : Types.type_variable)
+    (context_variance : t)
+    (ty : Types.type_expression)
+  : t =
+  match Types.representative ty with
+  | Types.TypeVariable tv ->
+    if tv.Types.id = target_var.Types.id then
+      context_variance
+    else
+      Bivariant  (* Different variable, not present *)
+
+  | Types.TypeConstructor (path, args) ->
+    let param_variances = get_constructor_variances path (List.length args) in
+    List.fold_left2
+      (fun accumulated_variance arg param_variance ->
+        let effective_variance = compose context_variance param_variance in
+        let arg_variance = check_in_context target_var effective_variance arg in
+        combine accumulated_variance arg_variance)
+      Bivariant
+      args
+      param_variances
+
+  | Types.TypeTuple elements ->
+    (* Tuple elements are covariant *)
+    List.fold_left
+      (fun accumulated_variance element ->
+        let element_variance = check_in_context target_var context_variance element in
+        combine accumulated_variance element_variance)
+      Bivariant
+      elements
+
+  | Types.TypeArrow (arg_type, result_type) ->
+    (* Argument is contravariant, result is covariant *)
+    let arg_variance =
+      check_in_context target_var (flip context_variance) arg_type
+    in
+    let result_variance =
+      check_in_context target_var context_variance result_type
+    in
+    combine arg_variance result_variance
+
+  | Types.TypeRecord row ->
+    check_in_row target_var context_variance row
+
+  | Types.TypeRowEmpty ->
+    Bivariant
+
+(** Check variance in a row type (for records). *)
+and check_in_row
+    (target_var : Types.type_variable)
+    (context_variance : t)
+    (row : Types.row)
+  : t =
+  let field_variance =
+    List.fold_left
+      (fun accumulated_variance (_, field) ->
+        match field with
+        | Types.RowFieldPresent field_type ->
+          (* Record fields are covariant (read-only access) *)
+          let fv = check_in_context target_var context_variance field_type in
+          combine accumulated_variance fv)
+      Bivariant
+      row.Types.row_fields
+  in
+  (* Also check the row extension variable *)
+  let row_more_variance =
+    check_in_context target_var context_variance row.Types.row_more
+  in
+  combine field_variance row_more_variance
+
+(** Check the variance of a type variable in a type expression.
+    Entry point that starts in a covariant context. *)
+let check_in_type (target_var : Types.type_variable) (ty : Types.type_expression) : t =
+  check_in_context target_var Covariant ty

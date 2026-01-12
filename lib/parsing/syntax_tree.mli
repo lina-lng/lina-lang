@@ -122,8 +122,8 @@ type variance_annotation =
 
 (** Type parameter with optional variance annotation. *)
 type type_parameter = {
-  param_name : string;
-  param_variance : variance_annotation option;
+  parameter_name : string;
+  parameter_variance : variance_annotation option;
 }
 [@@deriving show, eq]
 

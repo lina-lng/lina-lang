@@ -20,14 +20,25 @@
     Example: [functor (X : BIG) -> SMALL] matches [functor (X : SMALL) -> BIG]
     because the impl accepts more general input and produces more specific output. *)
 
-(** {1 Configuration} *)
+(** {1 Match Context}
 
-(** [set_module_type_lookup lookup] sets the function for expanding [ModTypeIdent].
+    Context for signature matching operations, containing lookup functions
+    for type aliases and module types. *)
 
-    Must be called before matching to resolve named module types.
+(** Context for signature matching operations. *)
+type match_context = {
+  type_lookup : Unification.type_lookup;
+  module_type_lookup : Types.path -> Module_types.module_type option;
+}
 
-    @param lookup Function from path to module type definition *)
-val set_module_type_lookup : (Types.path -> Module_types.module_type option) -> unit
+(** [create_context ~type_lookup ~module_type_lookup] creates a match context.
+
+    @param type_lookup Function to look up type declarations for alias expansion
+    @param module_type_lookup Function to look up module type definitions *)
+val create_context :
+  type_lookup:Unification.type_lookup ->
+  module_type_lookup:(Types.path -> Module_types.module_type option) ->
+  match_context
 
 (** {1 Module Strengthening} *)
 
@@ -83,9 +94,12 @@ type match_error =
 (** Result of signature matching. *)
 type match_result = (unit, match_error) result
 
+(** List of all match errors. Used by accumulating match functions. *)
+type match_errors = match_error list
+
 (** {1 Matching Functions} *)
 
-(** [match_signature loc impl spec] checks implementation against specification.
+(** [match_signature ctx loc impl spec] checks implementation against specification.
 
     For each item in [spec], checks that [impl] has a compatible item:
     - [SigValue]: Implementation value type must unify with spec type
@@ -93,24 +107,61 @@ type match_result = (unit, match_error) result
     - [SigModule]: Implementation module must match spec module recursively
     - [SigModuleType]: Not fully implemented (skipped)
 
+    @param ctx Match context with lookup functions
     @param loc Location for error messages
     @param impl Implementation signature (what we have)
     @param spec Specification signature (what we need)
     @return [Ok ()] if impl satisfies spec, [Error reason] otherwise *)
-val match_signature : Common.Location.t -> Module_types.signature -> Module_types.signature -> match_result
+val match_signature :
+  match_context -> Common.Location.t -> Module_types.signature -> Module_types.signature -> match_result
 
-(** [match_module_type loc impl spec] checks module type compatibility.
+(** [match_module_type ctx loc impl spec] checks module type compatibility.
 
     Handles three cases:
     - Both signatures: delegates to {!match_signature}
     - Both functors: checks contravariant params, covariant result
     - Named module type: expands via lookup and recurses
 
+    @param ctx Match context with lookup functions
     @param loc Location for error messages
     @param impl Implementation module type
     @param spec Specification module type
     @return [Ok ()] if compatible, [Error reason] otherwise *)
-val match_module_type : Common.Location.t -> Module_types.module_type -> Module_types.module_type -> match_result
+val match_module_type :
+  match_context -> Common.Location.t -> Module_types.module_type -> Module_types.module_type -> match_result
 
 (** [format_match_error err] converts a match error to a human-readable string. *)
 val format_match_error : match_error -> string
+
+(** {1 Accumulating Match Functions}
+
+    These functions collect all errors instead of stopping at the first one.
+    Useful for LSP diagnostics where showing all issues at once is preferred. *)
+
+(** [match_signature_all ctx loc impl spec] checks implementation against specification,
+    returning all errors found instead of stopping at the first.
+
+    @param ctx Match context with lookup functions
+    @param loc Location for error messages
+    @param impl Implementation signature
+    @param spec Specification signature
+    @return List of all match errors (empty if successful) *)
+val match_signature_all :
+  match_context -> Common.Location.t -> Module_types.signature -> Module_types.signature -> match_errors
+
+(** [match_module_type_all ctx loc impl spec] checks module type compatibility,
+    returning all errors found instead of stopping at the first.
+
+    @param ctx Match context with lookup functions
+    @param loc Location for error messages
+    @param impl Implementation module type
+    @param spec Specification module type
+    @return List of all match errors (empty if successful) *)
+val match_module_type_all :
+  match_context -> Common.Location.t -> Module_types.module_type -> Module_types.module_type -> match_errors
+
+(** [errors_to_result errors] converts accumulated errors to a single result.
+
+    Returns [Ok ()] if the list is empty, otherwise [Error first_error].
+    Useful for backward compatibility with code expecting [match_result]. *)
+val errors_to_result : match_errors -> match_result

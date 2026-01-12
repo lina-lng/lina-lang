@@ -83,12 +83,14 @@ let type_check_document store uri =
           | Some doc ->
               (* Clear warnings before type checking *)
               Compiler_error.clear_warnings ();
-              Typing.Types.reset_level ();
+              Typing.Types.reset_type_variable_id ();
 
               (* Use error-tolerant inference to preserve environment even with errors *)
-              let typed_ast, env, errors =
-                Typing.Inference.infer_structure_tolerant Typing.Environment.initial ast
+              let ctx = Typing.Typing_context.create Typing.Environment.initial in
+              let typed_ast, final_ctx, errors =
+                Typing.Inference.infer_structure_tolerant ctx ast
               in
+              let env = Typing.Typing_context.environment final_ctx in
               (* Collect warnings *)
               let warnings = Compiler_error.get_warnings () in
               let warning_diagnostics =

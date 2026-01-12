@@ -12,7 +12,7 @@
     {2 Structure Inference}
 
     Structures are processed sequentially, with each item potentially
-    modifying the environment for subsequent items. Type declarations
+    modifying the context for subsequent items. Type declarations
     are added before value bindings are processed, allowing forward
     references within a structure.
 
@@ -29,23 +29,26 @@
 
     After inferring a structure, a signature is extracted containing
     all the declarations. This signature can be used for module type
-    matching and strengthening. *)
+    matching and strengthening.
+
+    Note: Type variables are created using global state (Types.new_type_variable)
+    for consistency with other inference modules during the migration period. *)
 
 (** {1 Structure Inference} *)
 
-(** [infer_structure env structure] infers types for a complete structure.
+(** [infer_structure ctx structure] infers types for a complete structure.
 
-    Processes all structure items sequentially, building up the environment
-    and returning a typed structure with the final environment.
+    Processes all structure items sequentially, building up the context
+    and returning a typed structure with the final context.
 
-    @param env The initial typing environment
+    @param ctx The initial typing context
     @param structure The structure to infer
-    @return A pair [(typed_structure, updated_env)]
+    @return A pair [(typed_structure, updated_ctx)]
     @raise Compiler_error.Type_error on type errors *)
 val infer_structure :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.structure ->
-  Typed_tree.typed_structure * Environment.t
+  Typed_tree.typed_structure * Typing_context.t
 
 (** Unification error details for tolerant inference. *)
 type unification_error_details = {
@@ -60,52 +63,52 @@ type inference_error =
   | CompilerError of Common.Compiler_error.t
   | UnificationError of unification_error_details
 
-(** [infer_structure_tolerant env structure] infers types for a structure,
-    continuing after errors to accumulate as much environment as possible.
+(** [infer_structure_tolerant ctx structure] infers types for a structure,
+    continuing after errors to accumulate as much context as possible.
 
     This is used by LSP features like completion that need the environment
     even when the code has errors (e.g., incomplete expressions being typed).
 
     Unlike {!infer_structure}, this function catches type errors per structure
     item and continues processing subsequent items with the accumulated
-    environment.
+    context.
 
-    @param env The initial typing environment
+    @param ctx The initial typing context
     @param structure The structure to infer
-    @return A triple [(typed_structure_opt, accumulated_env, errors)] where
+    @return A triple [(typed_structure_opt, accumulated_ctx, errors)] where
             [typed_structure_opt] is [Some ast] if all items succeeded,
             [None] if any item failed, and [errors] is the list of errors *)
 val infer_structure_tolerant :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.structure ->
-  Typed_tree.typed_structure option * Environment.t * inference_error list
+  Typed_tree.typed_structure option * Typing_context.t * inference_error list
 
-(** [infer_structure_item env item] infers types for a single structure item.
+(** [infer_structure_item ctx item] infers types for a single structure item.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param item The structure item to infer
-    @return A pair [(typed_item, updated_env)]
+    @return A pair [(typed_item, updated_ctx)]
     @raise Compiler_error.Type_error on type errors *)
 val infer_structure_item :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.structure_item ->
-  Typed_tree.typed_structure_item * Environment.t
+  Typed_tree.typed_structure_item * Typing_context.t
 
 (** {1 Module Expression Inference} *)
 
-(** [infer_module_expression env mexpr] infers the type of a module expression.
+(** [infer_module_expression ctx mexpr] infers the type of a module expression.
 
     Handles all module expression forms and performs signature matching
     for functor applications and constraints.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param mexpr The module expression to infer
-    @return A pair [(typed_mexpr, updated_env)]
+    @return A pair [(typed_mexpr, updated_ctx)]
     @raise Compiler_error.Type_error on type errors or signature mismatches *)
 val infer_module_expression :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.module_expression ->
-  Typed_tree.typed_module_expression * Environment.t
+  Typed_tree.typed_module_expression * Typing_context.t
 
 (** {1 Signature Extraction} *)
 

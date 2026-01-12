@@ -1,21 +1,24 @@
 type level = int
 
+(** Level for fully generalized (polymorphic) type variables. *)
 let generic_level = 100_000_000
-let current_level_ref = ref 1
 
-let current_level () = !current_level_ref
-let enter_level () = incr current_level_ref
-let leave_level () = decr current_level_ref
-let reset_level () = current_level_ref := 1
-let set_level level = current_level_ref := level
-
+(** Global counter for unique type variable IDs.
+    This is the only global state remaining in Types - it's harmless as it
+    just generates unique identifiers. All level management is done through
+    Typing_context. *)
 let next_type_variable_id = ref 0
-let set_next_type_variable_id id = next_type_variable_id := id
 
 let fresh_type_variable_id () =
   let id = !next_type_variable_id in
   incr next_type_variable_id;
   id
+
+(** Reset the type variable ID counter.
+    Used for testing to ensure reproducible type variable names.
+    Should not be used in production code. *)
+let reset_type_variable_id () =
+  next_type_variable_id := 0
 
 type type_variable = {
   id : int;
@@ -74,8 +77,8 @@ type variance =
 let new_type_variable_at_level level =
   TypeVariable { id = fresh_type_variable_id (); level; link = None; weak = false }
 
-let new_type_variable () =
-  new_type_variable_at_level (current_level ())
+(* NOTE: new_type_variable() has been removed. All type variable creation should
+   go through Typing_context.new_type_variable which manages levels explicitly. *)
 
 let type_int = TypeConstructor (PathBuiltin BuiltinInt, [])
 let type_float = TypeConstructor (PathBuiltin BuiltinFloat, [])
@@ -86,18 +89,21 @@ let type_unit = TypeConstructor (PathBuiltin BuiltinUnit, [])
 (** [type_ref content_type] creates a reference type [content_type ref]. *)
 let type_ref content_type = TypeConstructor (PathBuiltin BuiltinRef, [content_type])
 
-(* Create a closed record type *)
+(** [type_record_closed fields] creates a closed record type.
+    The record has exactly the given fields and no others. *)
 let type_record_closed fields =
   TypeRecord {
     row_fields = List.sort compare fields;
     row_more = TypeRowEmpty;
   }
 
-(* Create an open record type with a fresh row variable *)
-let type_record_open fields =
+(** [type_record_open fields ~row_var] creates an open record type.
+    The record has at least the given fields, with [row_var] as the tail
+    to allow additional fields. *)
+let type_record_open fields ~row_var =
   TypeRecord {
     row_fields = List.sort compare fields;
-    row_more = new_type_variable ();
+    row_more = row_var;
   }
 
 let rec representative ty =
@@ -119,134 +125,9 @@ type type_scheme = {
 
 let trivial_scheme ty = { quantified_variables = []; body = ty }
 
-let mark_as_weak ty =
-  let current = current_level () in
-  let rec mark ty =
-    match representative ty with
-    | TypeVariable tv when tv.level > current ->
-      tv.weak <- true
-    | TypeVariable _ -> ()
-    | TypeConstructor (_, args) -> List.iter mark args
-    | TypeTuple elements -> List.iter mark elements
-    | TypeArrow (arg, result) ->
-      mark arg;
-      mark result
-    | TypeRecord row -> mark_row row
-    | TypeRowEmpty -> ()
-  and mark_row row =
-    List.iter (fun (_, field) ->
-      match field with
-      | RowFieldPresent ty -> mark ty
-    ) row.row_fields;
-    mark row.row_more
-  in
-  mark ty
-
-let generalize ty =
-  let current = current_level () in
-  (* Use Hashtbl for O(1) duplicate checking instead of O(n) List.exists *)
-  let seen = Hashtbl.create 16 in
-  let generalized_vars = ref [] in
-  let rec collect ty =
-    match representative ty with
-    | TypeVariable tv when tv.level > current && not tv.weak ->
-      (* Only generalize non-weak variables above the current level.
-         Weak variables are blocked by value restriction and must remain monomorphic. *)
-      if not (Hashtbl.mem seen tv.id) then begin
-        Hashtbl.add seen tv.id ();
-        tv.level <- generic_level;
-        generalized_vars := tv :: !generalized_vars
-      end
-    | TypeVariable _ -> ()
-    | TypeConstructor (_, args) -> List.iter collect args
-    | TypeTuple elements -> List.iter collect elements
-    | TypeArrow (arg, result) ->
-      collect arg;
-      collect result
-    | TypeRecord row -> collect_row row
-    | TypeRowEmpty -> ()
-  and collect_row row =
-    List.iter (fun (_, field) ->
-      match field with
-      | RowFieldPresent ty -> collect ty
-    ) row.row_fields;
-    collect row.row_more
-  in
-  collect ty;
-  { quantified_variables = !generalized_vars; body = ty }
-
-let generalize_with_filter predicate ty =
-  let current = current_level () in
-  let seen = Hashtbl.create 16 in
-  let generalized_vars = ref [] in
-  let rec collect current_ty =
-    match representative current_ty with
-    | TypeVariable tv when tv.level > current && not tv.weak ->
-      if not (Hashtbl.mem seen tv.id) then begin
-        Hashtbl.add seen tv.id ();
-        (* Use predicate to decide if this variable should be generalized.
-           The predicate receives the variable and the full type for variance checking. *)
-        if predicate tv ty then begin
-          tv.level <- generic_level;
-          generalized_vars := tv :: !generalized_vars
-        end else begin
-          (* Variables that fail the predicate are marked as weak *)
-          tv.weak <- true
-        end
-      end
-    | TypeVariable _ -> ()
-    | TypeConstructor (_, args) -> List.iter collect args
-    | TypeTuple elements -> List.iter collect elements
-    | TypeArrow (arg, result) ->
-      collect arg;
-      collect result
-    | TypeRecord row -> collect_row row
-    | TypeRowEmpty -> ()
-  and collect_row row =
-    List.iter (fun (_, field) ->
-      match field with
-      | RowFieldPresent field_ty -> collect field_ty
-    ) row.row_fields;
-    collect row.row_more
-  in
-  collect ty;
-  { quantified_variables = !generalized_vars; body = ty }
-
-let instantiate scheme =
-  if scheme.quantified_variables = [] then scheme.body
-  else begin
-    let substitution =
-      List.map (fun tv ->
-        (tv.id, new_type_variable ())
-      ) scheme.quantified_variables
-    in
-    let rec copy ty =
-      match representative ty with
-      | TypeVariable tv ->
-        begin match List.assoc_opt tv.id substitution with
-        | Some fresh_ty -> fresh_ty
-        | None -> ty
-        end
-      | TypeConstructor (path, args) ->
-        TypeConstructor (path, List.map copy args)
-      | TypeTuple elements ->
-        TypeTuple (List.map copy elements)
-      | TypeArrow (arg, result) ->
-        TypeArrow (copy arg, copy result)
-      | TypeRecord row ->
-        TypeRecord (copy_row row)
-      | TypeRowEmpty ->
-        TypeRowEmpty
-    and copy_row row = {
-      row_fields = List.map (fun (name, field) ->
-        (name, match field with
-          | RowFieldPresent ty -> RowFieldPresent (copy ty))
-      ) row.row_fields;
-      row_more = copy row.row_more;
-    }
-    in
-    copy scheme.body
-  end
+(* NOTE: Type scheme operations (generalize, instantiate, mark_as_weak) have been
+   moved to Type_scheme module to avoid circular dependency with Type_traversal.
+   Use Type_scheme.generalize, Type_scheme.instantiate, etc. instead. *)
 
 type constructor_info = {
   constructor_name : string;

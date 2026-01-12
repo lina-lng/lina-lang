@@ -28,7 +28,7 @@ end
 
 (** Helper to compile Lina code to Lua and return the generated code *)
 let compile code =
-  Typing.Types.reset_level ();
+  Typing.Types.reset_type_variable_id ();
   match Pipeline.compile_string Pipeline.default_options "<test>" code with
   | Ok lua -> lua
   | Error msg -> "ERROR: " ^ msg

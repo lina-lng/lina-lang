@@ -146,11 +146,11 @@ signature_type_declaration:
 (* Type parameter with optional variance annotation: 'a, +'a, -'a *)
 type_param:
   | PLUS; v = TYPE_VARIABLE
-    { { Syntax_tree.param_name = v; param_variance = Some VarianceCovariant } }
+    { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceCovariant } }
   | MINUS; v = TYPE_VARIABLE
-    { { Syntax_tree.param_name = v; param_variance = Some VarianceContravariant } }
+    { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceContravariant } }
   | v = TYPE_VARIABLE
-    { { Syntax_tree.param_name = v; param_variance = None } }
+    { { Syntax_tree.parameter_name = v; parameter_variance = None } }
 
 type_parameters:
   | { [] }
@@ -498,7 +498,7 @@ signature_item:
 (* With constraints - use simple type variable names, no variance annotations *)
 with_constraint:
   | TYPE; path = longident_type; params = type_parameters; EQUAL; ty = type_expression
-    { WithType (path, List.map (fun p -> p.Syntax_tree.param_name) params, ty) }
+    { WithType (path, List.map (fun p -> p.Syntax_tree.parameter_name) params, ty) }
   | MODULE; path = longident; EQUAL; target = module_path
     { WithModule (path, target) }
 

@@ -11,8 +11,8 @@ let rec format_module_type = function
     Printf.sprintf "sig [%s]" items_str
   | Module_types.ModTypeFunctor (param, result) ->
     Printf.sprintf "functor (%s : %s) -> %s"
-      param.Module_types.param_name
-      (format_module_type param.Module_types.param_type)
+      param.Module_types.parameter_name
+      (format_module_type param.Module_types.parameter_type)
       (format_module_type result)
   | Module_types.ModTypeIdent path ->
     Printf.sprintf "ident(%s)" (Types.path_to_string path)
@@ -28,8 +28,8 @@ and format_sig_item = function
 let make_sig_with_value name ty =
   Module_types.ModTypeSig [
     Module_types.SigValue (name, {
-      Module_types.val_type = ty;
-      val_location = Common.Location.none;
+      Module_types.value_type = ty;
+      value_location = Common.Location.none;
     })
   ]
 
@@ -88,9 +88,9 @@ let%expect_test "expand: functor type is preserved" =
   let param_sig = make_sig_with_type "t" in
   let result_sig = make_sig_with_type "s" in
   let functor_type = Module_types.ModTypeFunctor (
-    { Module_types.param_name = "X";
-      param_id = Common.Identifier.create "X";
-      param_type = param_sig },
+    { Module_types.parameter_name = "X";
+      parameter_id = Common.Identifier.create "X";
+      parameter_type = param_sig },
     result_sig
   ) in
   let expanded = Module_expansion.expand state functor_type in

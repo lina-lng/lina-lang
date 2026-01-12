@@ -47,10 +47,10 @@ let rec expand state mty =
 
   | Module_types.ModTypeFunctor (param, result) ->
     (* Expand parameter and result types *)
-    let expanded_param_type = expand state param.Module_types.param_type in
+    let expanded_parameter_type = expand state param.Module_types.parameter_type in
     let expanded_result = expand state result in
     Module_types.ModTypeFunctor (
-      { param with Module_types.param_type = expanded_param_type },
+      { param with Module_types.parameter_type = expanded_parameter_type },
       expanded_result
     )
 

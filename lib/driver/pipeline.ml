@@ -20,8 +20,9 @@ let compile_string options _filename source =
         (Parsing.Syntax_tree.show_structure ast)
     end;
 
-    Typing.Types.reset_level ();
-    let typed_ast, _env = Typing.Inference.infer_structure Typing.Environment.initial ast in
+    Typing.Types.reset_type_variable_id ();
+    let ctx = Typing.Typing_context.create Typing.Environment.initial in
+    let typed_ast, _ctx = Typing.Inference.infer_structure ctx ast in
     if options.dump_typed then begin
       Printf.eprintf "=== Typed AST ===\n";
       Printf.eprintf "(typed tree dump not implemented)\n\n"

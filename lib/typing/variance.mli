@@ -96,3 +96,45 @@ val pp : Format.formatter -> t -> unit
 (** [to_annotation v] returns the variance as it would appear in source code.
     Same as [to_string] but with descriptions for documentation. *)
 val to_annotation : t -> string
+
+(** {1 Constructor Variances} *)
+
+(** [get_constructor_variances path param_count] returns the variances for
+    a type constructor's parameters.
+
+    Built-in types have known variances:
+    - [ref]: Invariant (can read and write)
+    - Other builtins: no type parameters
+
+    User-defined types are conservatively assumed covariant.
+    A more complete implementation would look up declared variances.
+
+    @param path The type constructor path
+    @param param_count Number of type parameters
+    @return List of variances, one per parameter *)
+val get_constructor_variances : Types.path -> int -> t list
+
+(** {1 Variance Checking in Types}
+
+    These functions check how a type variable occurs within a type expression.
+    Used for relaxed value restriction. *)
+
+(** [check_in_type target_var ty] checks the variance of a type variable
+    in a type expression. Entry point that starts in a covariant context.
+
+    @param target_var The type variable to check
+    @param ty The type expression to search
+    @return The variance of target_var in ty *)
+val check_in_type : Types.type_variable -> Types.type_expression -> t
+
+(** [check_in_context target_var context_variance ty] checks the variance
+    of a type variable within a specific context variance.
+
+    This is the general function that recursively traverses the type,
+    flipping variance at contravariant positions (function arguments).
+
+    @param target_var The type variable to check
+    @param context_variance The current context variance
+    @param ty The type expression to search
+    @return The variance of target_var in ty *)
+val check_in_context : Types.type_variable -> t -> Types.type_expression -> t

@@ -130,8 +130,8 @@ type variance_annotation =
     - [+'a] - explicitly covariant
     - [-'a] - explicitly contravariant *)
 type type_parameter = {
-  param_name : string;
-  param_variance : variance_annotation option;
+  parameter_name : string;
+  parameter_variance : variance_annotation option;
 }
 [@@deriving show, eq]
 

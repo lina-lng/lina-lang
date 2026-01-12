@@ -126,7 +126,7 @@ let%expect_test "new_type_variable preserves var_id counter across contexts" =
   let ctx = Typing_context.with_environment env2 ctx in
   let id, _ = Typing_context.fresh_type_variable_id ctx in
   Printf.printf "next_id=%d\n" id;
-  [%expect {| next_id=2 |}]
+  [%expect {| next_id=11 |}]
 
 (** {1 Generalization Tests} *)
 

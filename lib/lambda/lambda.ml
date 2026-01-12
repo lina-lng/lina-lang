@@ -23,7 +23,7 @@ type constant =
   | ConstantBool of bool
   | ConstantUnit
 
-type constructor_tag = {
+type construconstructor_tag_index = {
   tag_name : string;
   tag_index : int;
   tag_type_name : string;
@@ -43,7 +43,7 @@ type lambda =
   | LambdaMakeBlock of int * lambda list
   | LambdaGetField of int * lambda
   | LambdaSwitch of lambda * switch_case list * lambda option
-  | LambdaConstructor of constructor_tag * lambda option
+  | LambdaConstructor of construconstructor_tag_index * lambda option
   | LambdaMakeRecord of (string * lambda) list
   | LambdaGetRecordField of string * lambda
   | LambdaRecordUpdate of lambda * (string * lambda) list
@@ -409,7 +409,7 @@ and translate_module_expression (mexpr : Typing.Typed_tree.typed_module_expressi
   | TypedModuleFunctor (param, body) ->
     (* Functor becomes a function taking a module and returning a module *)
     let translated_body = translate_module_expression body in
-    LambdaFunctor (param.Typing.Module_types.param_id, translated_body)
+    LambdaFunctor (param.Typing.Module_types.parameter_id, translated_body)
   | TypedModuleApply (func_mexpr, arg_mexpr) ->
     (* Functor application becomes function application *)
     let translated_func = translate_module_expression func_mexpr in

@@ -111,7 +111,7 @@ let show_diagnostics diagnostics =
 let pos line character : Lsp_types.position = { line; character }
 
 (** Reset type inference state before tests. *)
-let reset () = Typing.Types.reset_level ()
+let reset () = Typing.Types.reset_type_variable_id ()
 
 (** Module alias for linol LSP types. *)
 module Lsp = Linol.Lsp

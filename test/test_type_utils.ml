@@ -91,7 +91,7 @@ let%expect_test "substitute_type_params: unrelated variable unchanged" =
 
 let%expect_test "instantiate_constructor: nullary constructor" =
   (* A constructor like None : 'a option with no argument *)
-  Types.reset_level ();
+  Types.reset_type_variable_id ();
   let param_tv = { Types.id = 0; level = 0; link = None; weak = false } in
   let result_type = Types.TypeConstructor (Types.PathLocal "option", [Types.TypeVariable param_tv]) in
   let ctor_info = {
@@ -102,7 +102,8 @@ let%expect_test "instantiate_constructor: nullary constructor" =
     constructor_result_type = result_type;
     constructor_type_parameters = [param_tv];
   } in
-  let (arg_opt, result_ty) = Type_utils.instantiate_constructor ctor_info in
+  let fresh_var () = Types.new_type_variable_at_level 1 in
+  let (arg_opt, result_ty) = Type_utils.instantiate_constructor ~fresh_var ctor_info in
   print_endline (match arg_opt with None -> "no arg" | Some _ -> "has arg");
   (match result_ty with
    | Types.TypeConstructor (Types.PathLocal "option", [Types.TypeVariable _]) ->
@@ -114,7 +115,7 @@ let%expect_test "instantiate_constructor: nullary constructor" =
 
 let%expect_test "instantiate_constructor: unary constructor" =
   (* A constructor like Some : 'a -> 'a option *)
-  Types.reset_level ();
+  Types.reset_type_variable_id ();
   let param_tv = { Types.id = 0; level = 0; link = None; weak = false } in
   let result_type = Types.TypeConstructor (Types.PathLocal "option", [Types.TypeVariable param_tv]) in
   let ctor_info = {
@@ -125,7 +126,8 @@ let%expect_test "instantiate_constructor: unary constructor" =
     constructor_result_type = result_type;
     constructor_type_parameters = [param_tv];
   } in
-  let (arg_opt, result_ty) = Type_utils.instantiate_constructor ctor_info in
+  let fresh_var () = Types.new_type_variable_at_level 1 in
+  let (arg_opt, result_ty) = Type_utils.instantiate_constructor ~fresh_var ctor_info in
   print_endline (match arg_opt with None -> "no arg" | Some (Types.TypeVariable _) -> "var arg" | _ -> "other");
   (match result_ty with
    | Types.TypeConstructor (Types.PathLocal "option", [Types.TypeVariable _]) ->
@@ -242,12 +244,12 @@ let%expect_test "substitute_path_in_module_type: signature" =
   let type_path = Types.PathDot (old_path, "t") in
   let ty = Types.TypeConstructor (type_path, []) in
   let scheme = { Types.quantified_variables = []; body = ty } in
-  let sig_item = Module_types.SigValue ("x", { val_type = scheme; val_location = Common.Location.none }) in
+  let sig_item = Module_types.SigValue ("x", { value_type = scheme; value_location = Common.Location.none }) in
   let mty = Module_types.ModTypeSig [sig_item] in
   let result = Type_utils.substitute_path_in_module_type ~old_path ~new_path mty in
   (match result with
-   | Module_types.ModTypeSig [Module_types.SigValue ("x", { val_type; _ })] ->
-     (match val_type.body with
+   | Module_types.ModTypeSig [Module_types.SigValue ("x", { value_type; _ })] ->
+     (match value_type.body with
       | Types.TypeConstructor (Types.PathDot (Types.PathIdent id, "t"), [])
         when Common.Identifier.name id = "N" ->
         print_endline "path updated in signature"
@@ -258,24 +260,24 @@ let%expect_test "substitute_path_in_module_type: signature" =
 let%expect_test "substitute_path_in_module_type: functor" =
   let old_path = Types.PathIdent (Common.Identifier.create "M") in
   let new_path = Types.PathIdent (Common.Identifier.create "N") in
-  let param_id = Common.Identifier.create "X" in
+  let parameter_id = Common.Identifier.create "X" in
   let param = {
-    Module_types.param_name = "X";
-    param_id;
-    param_type = Module_types.ModTypeSig [];
+    Module_types.parameter_name = "X";
+    parameter_id;
+    parameter_type = Module_types.ModTypeSig [];
   } in
   let type_path = Types.PathDot (old_path, "t") in
   let ty = Types.TypeConstructor (type_path, []) in
   let scheme = { Types.quantified_variables = []; body = ty } in
   let result_sig = Module_types.ModTypeSig [
-    Module_types.SigValue ("v", { val_type = scheme; val_location = Common.Location.none })
+    Module_types.SigValue ("v", { value_type = scheme; value_location = Common.Location.none })
   ] in
   let mty = Module_types.ModTypeFunctor (param, result_sig) in
   let result = Type_utils.substitute_path_in_module_type ~old_path ~new_path mty in
   (match result with
    | Module_types.ModTypeFunctor (_, Module_types.ModTypeSig [
-       Module_types.SigValue ("v", { val_type; _ })]) ->
-     (match val_type.body with
+       Module_types.SigValue ("v", { value_type; _ })]) ->
+     (match value_type.body with
       | Types.TypeConstructor (Types.PathDot (Types.PathIdent id, "t"), [])
         when Common.Identifier.name id = "N" ->
         print_endline "path updated in functor result"

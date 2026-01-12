@@ -55,7 +55,7 @@ val substitute_type_params :
 
 (** {1 Constructor Instantiation} *)
 
-(** [instantiate_constructor ctor] creates fresh type variables for a
+(** [instantiate_constructor ~fresh_var ctor] creates fresh type variables for a
     constructor's type parameters and returns the instantiated argument
     and result types.
 
@@ -63,9 +63,11 @@ val substitute_type_params :
     type variable ['t0] and returns [Some 't0] as argument type and
     ['t0 option] as result type.
 
+    @param fresh_var Function to create fresh type variables
     @param ctor The constructor info to instantiate
     @return A pair [(arg_type_opt, result_type)] with fresh type variables *)
 val instantiate_constructor :
+  fresh_var:(unit -> Types.type_expression) ->
   Types.constructor_info ->
   Types.type_expression option * Types.type_expression
 

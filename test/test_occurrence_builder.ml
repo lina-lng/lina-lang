@@ -13,7 +13,7 @@ open Driver
 
 (** Helper to compile a match expression and return Lua code *)
 let compile code =
-  Types.reset_level ();
+  Types.reset_type_variable_id ();
   match Pipeline.compile_string Pipeline.default_options "<test>" code with
   | Ok lua -> lua
   | Error msg -> "ERROR: " ^ msg

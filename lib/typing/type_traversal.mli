@@ -95,3 +95,83 @@ val fold : ('a -> type_expression -> 'a) -> 'a -> type_expression -> 'a
     @param row The row to fold over
     @return Final accumulated value *)
 val fold_row : ('a -> type_expression -> 'a) -> 'a -> row -> 'a
+
+(** {1 Context-Aware Traversal} *)
+
+(** [fold_with_context f ctx acc ty] folds over [ty] with context transformation.
+
+    The function [f] receives the current context and can return a modified
+    context for child nodes. This is useful for variance inference where the
+    context (covariant/contravariant) changes when entering function arguments.
+
+    @param f Function [f ctx ty acc] returns [(new_ctx, new_acc)]
+    @param ctx Initial context
+    @param acc Initial accumulator
+    @param ty The type to traverse
+    @return Final accumulated value *)
+val fold_with_context :
+  ('ctx -> type_expression -> 'acc -> 'ctx * 'acc) ->
+  'ctx -> 'acc -> type_expression -> 'acc
+
+(** [fold_row_with_context f ctx acc row] folds over a row with context.
+
+    @param f Context-aware folding function
+    @param ctx Current context
+    @param acc Current accumulator
+    @param row The row to traverse
+    @return Final accumulated value *)
+val fold_row_with_context :
+  ('ctx -> type_expression -> 'acc -> 'ctx * 'acc) ->
+  'ctx -> 'acc -> row -> 'acc
+
+(** {1 Type Variable Operations} *)
+
+(** [collect_variables predicate ty] collects all type variables in [ty]
+    that satisfy [predicate].
+
+    Variables are deduplicated by ID and returned in traversal order.
+
+    @param predicate Test function for variables
+    @param ty The type to search
+    @return List of matching type variables (deduplicated) *)
+val collect_variables :
+  (type_variable -> bool) -> type_expression -> type_variable list
+
+(** [exists_variable predicate ty] checks if any type variable in [ty]
+    satisfies [predicate].
+
+    Short-circuits on first match for efficiency.
+
+    @param predicate Test function for variables
+    @param ty The type to search
+    @return [true] if any variable matches, [false] otherwise *)
+val exists_variable : (type_variable -> bool) -> type_expression -> bool
+
+(** [for_all_variables predicate ty] checks if all type variables in [ty]
+    satisfy [predicate].
+
+    @param predicate Test function for variables
+    @param ty The type to check
+    @return [true] if all variables match (or no variables), [false] otherwise *)
+val for_all_variables : (type_variable -> bool) -> type_expression -> bool
+
+(** {1 Common Variable Collections} *)
+
+(** [free_type_variables ty] returns all type variables in [ty].
+
+    Variables are deduplicated by ID.
+
+    @param ty The type expression
+    @return List of all type variables *)
+val free_type_variables : type_expression -> type_variable list
+
+(** [free_type_variables_above_level level ty] returns type variables
+    with level strictly greater than [level].
+
+    This is useful for generalization: variables above the current level
+    can be generalized.
+
+    @param level The threshold level
+    @param ty The type expression
+    @return List of variables with level > [level] *)
+val free_type_variables_above_level : int -> type_expression -> type_variable list

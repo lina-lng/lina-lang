@@ -21,31 +21,27 @@ let substitute_type_params params args body =
   if params = [] then body
   else
     let substitution = List.map2 (fun tv arg -> (tv.id, arg)) params args in
-    let rec subst ty =
-      match representative ty with
+    Type_traversal.map (function
       | TypeVariable tv ->
         begin match List.assoc_opt tv.id substitution with
         | Some replacement -> replacement
-        | None -> ty
+        | None -> TypeVariable tv
         end
-      | TypeConstructor (path, type_args) ->
-        TypeConstructor (path, List.map subst type_args)
-      | TypeTuple elements ->
-        TypeTuple (List.map subst elements)
-      | TypeArrow (arg, result) ->
-        TypeArrow (subst arg, subst result)
-      | TypeRecord row ->
-        TypeRecord (map_row_types subst row)
-      | TypeRowEmpty -> TypeRowEmpty
-    in
-    subst body
+      | ty -> ty
+    ) body
 
 (** {1 Constructor Instantiation} *)
 
-let instantiate_constructor (ctor : constructor_info) =
+(** [instantiate_constructor ~fresh_var ctor] creates fresh type variables
+    for constructor type parameters and substitutes them.
+
+    @param fresh_var Function to create fresh type variables
+    @param ctor The constructor info to instantiate
+    @return Tuple of (argument_type option, result_type) with fresh variables *)
+let instantiate_constructor ~fresh_var (ctor : constructor_info) =
   (* Create fresh type variables for each type parameter *)
   let fresh_params =
-    List.map (fun _ -> new_type_variable ()) ctor.constructor_type_parameters
+    List.map (fun _ -> fresh_var ()) ctor.constructor_type_parameters
   in
   (* Build substitution from old variable IDs to fresh types *)
   let substitution =
@@ -53,22 +49,15 @@ let instantiate_constructor (ctor : constructor_info) =
       (List.map (fun tv -> tv.id) ctor.constructor_type_parameters)
       fresh_params
   in
-  let rec substitute ty =
-    match representative ty with
-    | TypeVariable tv ->
-      begin match List.assoc_opt tv.id substitution with
-      | Some fresh_type -> fresh_type
-      | None -> ty
-      end
-    | TypeConstructor (path, type_args) ->
-      TypeConstructor (path, List.map substitute type_args)
-    | TypeTuple elements ->
-      TypeTuple (List.map substitute elements)
-    | TypeArrow (arg, result) ->
-      TypeArrow (substitute arg, substitute result)
-    | TypeRecord row ->
-      TypeRecord (map_row_types substitute row)
-    | TypeRowEmpty -> TypeRowEmpty
+  let substitute ty =
+    Type_traversal.map (function
+      | TypeVariable tv ->
+        begin match List.assoc_opt tv.id substitution with
+        | Some fresh_type -> fresh_type
+        | None -> TypeVariable tv
+        end
+      | ty -> ty
+    ) ty
   in
   (Option.map substitute ctor.constructor_argument_type,
    substitute ctor.constructor_result_type)
@@ -142,9 +131,9 @@ let rec substitute_path_in_signature ~old_path ~new_path sig_ =
   List.map (fun item ->
     match item with
     | Module_types.SigValue (name, desc) ->
-      let new_type = substitute_path_in_scheme ~old_path ~new_path desc.Module_types.val_type in
-      if new_type == desc.Module_types.val_type then item
-      else Module_types.SigValue (name, { desc with val_type = new_type })
+      let new_type = substitute_path_in_scheme ~old_path ~new_path desc.Module_types.value_type in
+      if new_type == desc.Module_types.value_type then item
+      else Module_types.SigValue (name, { desc with value_type = new_type })
     | Module_types.SigType (name, decl) ->
       let new_decl = substitute_path_in_type_decl ~old_path ~new_path decl in
       if new_decl == decl then item
@@ -169,11 +158,11 @@ and substitute_path_in_module_type ~old_path ~new_path mty =
     if new_sig == sig_ then mty
     else Module_types.ModTypeSig new_sig
   | Module_types.ModTypeFunctor (param, result) ->
-    let new_param_type = substitute_path_in_module_type ~old_path ~new_path param.Module_types.param_type in
+    let new_parameter_type = substitute_path_in_module_type ~old_path ~new_path param.Module_types.parameter_type in
     let new_result = substitute_path_in_module_type ~old_path ~new_path result in
-    if new_param_type == param.Module_types.param_type && new_result == result then mty
+    if new_parameter_type == param.Module_types.parameter_type && new_result == result then mty
     else Module_types.ModTypeFunctor (
-      { param with param_type = new_param_type },
+      { param with parameter_type = new_parameter_type },
       new_result)
   | Module_types.ModTypeIdent path ->
     let new_path = substitute_path_prefix ~old_path ~new_path path in

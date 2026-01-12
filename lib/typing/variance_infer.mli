@@ -33,29 +33,6 @@
 
     Use [merge_variances] to combine explicit annotations with inferred variances. *)
 
-(** {1 Variance Operations} *)
-
-(** Flip variance when entering a contravariant context.
-
-    - [Covariant] becomes [Contravariant]
-    - [Contravariant] becomes [Covariant]
-    - [Invariant] stays [Invariant] *)
-val flip_variance : Types.variance -> Types.variance
-
-(** Combine two variances when a parameter appears in multiple positions.
-
-    - [Covariant] + [Covariant] = [Covariant]
-    - [Contravariant] + [Contravariant] = [Contravariant]
-    - [Covariant] + [Contravariant] = [Invariant]
-    - Anything + [Invariant] = [Invariant] *)
-val combine_variance : Types.variance -> Types.variance -> Types.variance
-
-(** Apply a declared variance to an actual variance.
-
-    When a type constructor declares its parameter as contravariant,
-    the variance of occurrences within that parameter is flipped. *)
-val apply_variance : Types.variance -> Types.variance -> Types.variance
-
 (** {1 Inference} *)
 
 (** Infer the variances of all type parameters in a type declaration.
@@ -90,7 +67,7 @@ val merge_variances :
 
 (** Variance annotation error with details for error messages. *)
 type variance_error = {
-  param_name : string;
+  parameter_name : string;
   explicit_variance : Types.variance;
   inferred_variance : Types.variance;
 }

@@ -10,11 +10,12 @@ open Typing
 (** {1 Helper Functions} *)
 
 let compile_and_check code =
-  Types.reset_level ();
-  Types.set_next_type_variable_id 0;
+  Types.reset_type_variable_id ();
+  Types.reset_type_variable_id ();
   let structure = Parsing.Parse.structure_from_string code in
-  let (_typed, final_env) = Inference.infer_structure Environment.initial structure in
-  final_env
+  let ctx = Typing_context.create Environment.initial in
+  let (_typed, final_ctx) = Inference.infer_structure ctx structure in
+  Typing_context.environment final_ctx
 
 let get_scheme_for name env =
   match Environment.find_value name env with

@@ -28,7 +28,7 @@ type t
 
 val create : Environment.t -> t
 (** [create env] creates a fresh context with the given environment,
-    level set to 1, and fresh type variable ID counter. *)
+    level set to 1. *)
 
 val with_environment : Environment.t -> t -> t
 (** [with_environment env ctx] returns a new context with the given
@@ -94,15 +94,3 @@ val instantiate : t -> Types.type_scheme -> Types.type_expression * t
 (** [instantiate ctx scheme] creates fresh type variables for all
     quantified variables in the scheme. *)
 
-(** {1 Backward Compatibility}
-
-    These functions support gradual migration from global refs.
-    They should be removed once all code uses the context directly. *)
-
-val install_globals : t -> unit
-(** [install_globals ctx] sets the global refs in [Types], [Unification],
-    and [Signature_match] to match this context's state. This allows
-    existing code using global refs to work during migration.
-
-    {b Warning:} This function has side effects and should only be used
-    at top-level entry points during the migration period. *)

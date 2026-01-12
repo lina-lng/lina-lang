@@ -1,9 +1,15 @@
-(** Typing context for type inference. *)
+(** Typing context for type inference.
+
+    The typing context is the sole source of truth for:
+    - Current let-nesting level (for generalization)
+    - Fresh type variable ID generation
+    - Environment access
+
+    All type inference operations should go through this context. *)
 
 type t = {
   env : Environment.t;
   level : int;
-  next_var_id : int;
 }
 
 (* Context Creation *)
@@ -11,7 +17,6 @@ type t = {
 let create env = {
   env;
   level = 1;
-  next_var_id = 0;
 }
 
 let with_environment env ctx = { ctx with env }
@@ -24,15 +29,19 @@ let environment ctx = ctx.env
 
 let current_level ctx = ctx.level
 
-let enter_level ctx = { ctx with level = ctx.level + 1 }
+let enter_level ctx =
+  { ctx with level = ctx.level + 1 }
 
-let leave_level ctx = { ctx with level = ctx.level - 1 }
+let leave_level ctx =
+  { ctx with level = ctx.level - 1 }
 
 (* Type Variable Generation *)
 
 let fresh_type_variable_id ctx =
-  let id = ctx.next_var_id in
-  (id, { ctx with next_var_id = ctx.next_var_id + 1 })
+  (* Use Types.fresh_type_variable_id for globally unique IDs.
+     This ensures type variables have unique IDs even across modules. *)
+  let id = Types.fresh_type_variable_id () in
+  (id, ctx)
 
 let new_type_variable_at_level ctx level =
   let (id, ctx') = fresh_type_variable_id ctx in
@@ -62,7 +71,7 @@ let module_type_lookup ctx path =
   | Types.PathDot (parent_path, name) ->
     begin match Environment.find_module_by_path parent_path ctx.env with
     | Some binding ->
-      begin match binding.Module_types.mod_type with
+      begin match binding.Module_types.binding_type with
       | Module_types.ModTypeSig sig_ ->
         begin match Module_types.find_module_type_in_sig name sig_ with
         | Some (Some mty) -> Some mty
@@ -78,85 +87,20 @@ let module_type_lookup ctx path =
 (* Type Scheme Operations *)
 
 let generalize ctx ty =
-  let current = ctx.level in
-  (* Use Hashtbl for O(1) duplicate checking instead of O(n) List.exists *)
-  let seen = Hashtbl.create 16 in
-  let generalized_vars = ref [] in
-  let rec collect ty =
-    match Types.representative ty with
-    | Types.TypeVariable tv when tv.Types.level > current && not tv.Types.weak ->
-      (* Only generalize non-weak variables above the current level.
-         Weak variables are blocked by value restriction and must remain monomorphic. *)
-      if not (Hashtbl.mem seen tv.Types.id) then begin
-        Hashtbl.add seen tv.Types.id ();
-        tv.Types.level <- Types.generic_level;
-        generalized_vars := tv :: !generalized_vars
-      end
-    | Types.TypeVariable _ -> ()
-    | Types.TypeConstructor (_, args) -> List.iter collect args
-    | Types.TypeTuple elements -> List.iter collect elements
-    | Types.TypeArrow (arg, result) ->
-      collect arg;
-      collect result
-    | Types.TypeRecord row -> collect_row row
-    | Types.TypeRowEmpty -> ()
-  and collect_row row =
-    List.iter (fun (_, field) ->
-      match field with
-      | Types.RowFieldPresent ty -> collect ty
-    ) row.Types.row_fields;
-    collect row.Types.row_more
-  in
-  collect ty;
-  { Types.quantified_variables = !generalized_vars; body = ty }
+  Type_scheme.generalize ~level:ctx.level ty
 
 let instantiate ctx scheme =
   if scheme.Types.quantified_variables = [] then
     (scheme.Types.body, ctx)
   else begin
+    (* Use a ref to track context updates from fresh_var *)
     let ctx_ref = ref ctx in
-    let substitution =
-      List.map (fun tv ->
-        let (fresh_ty, ctx') = new_type_variable !ctx_ref in
-        ctx_ref := ctx';
-        (tv.Types.id, fresh_ty)
-      ) scheme.Types.quantified_variables
+    let fresh_var () =
+      let (ty, ctx') = new_type_variable !ctx_ref in
+      ctx_ref := ctx';
+      ty
     in
-    let rec copy ty =
-      match Types.representative ty with
-      | Types.TypeVariable tv ->
-        begin match List.assoc_opt tv.Types.id substitution with
-        | Some fresh_ty -> fresh_ty
-        | None -> ty
-        end
-      | Types.TypeConstructor (path, args) ->
-        Types.TypeConstructor (path, List.map copy args)
-      | Types.TypeTuple elements ->
-        Types.TypeTuple (List.map copy elements)
-      | Types.TypeArrow (arg, result) ->
-        Types.TypeArrow (copy arg, copy result)
-      | Types.TypeRecord row ->
-        Types.TypeRecord (copy_row row)
-      | Types.TypeRowEmpty ->
-        Types.TypeRowEmpty
-    and copy_row row = {
-      Types.row_fields = List.map (fun (name, field) ->
-        (name, match field with
-          | Types.RowFieldPresent ty -> Types.RowFieldPresent (copy ty))
-      ) row.Types.row_fields;
-      row_more = copy row.Types.row_more;
-    }
-    in
-    (copy scheme.Types.body, !ctx_ref)
+    let result = Type_scheme.instantiate ~fresh_var scheme in
+    (result, !ctx_ref)
   end
 
-(* Backward Compatibility *)
-
-let install_globals ctx =
-  (* Set Types global state *)
-  Types.set_level ctx.level;
-  Types.set_next_type_variable_id ctx.next_var_id;
-  (* Set Unification type lookup *)
-  Unification.set_type_lookup (fun path -> type_lookup ctx path);
-  (* Set Signature_match module type lookup *)
-  Signature_match.set_module_type_lookup (fun path -> module_type_lookup ctx path)

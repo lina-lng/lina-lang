@@ -18,21 +18,27 @@
 
     Pattern inference traverses the pattern structure, generating fresh type
     variables for unknowns and unifying with known types from constructors
-    and literals. Bindings are accumulated in the returned environment. *)
+    and literals. Bindings are accumulated in the returned context.
 
-(** {1 Pattern Inference} *)
+    {2 Context Threading}
 
-(** [infer_pattern env pattern] infers the type of a pattern.
+    The inference functions take a [Typing_context.t] and return an updated
+    context. This threads state (level, next variable ID, environment) through
+    the inference without relying on global mutable state. *)
+
+(** {1 Pattern Inference with Context} *)
+
+(** [infer_pattern ctx pattern] infers the type of a pattern.
 
     Traverses the pattern, introducing bindings for variable patterns and
     unifying with known types for constructors and literals.
 
-    @param env The typing environment
+    @param ctx The typing context
     @param pattern The pattern to infer
-    @return A triple [(typed_pattern, pattern_type, updated_env)] where
+    @return A triple [(typed_pattern, pattern_type, updated_ctx)] where
             [typed_pattern] is the typed pattern, [pattern_type] is its type,
-            and [updated_env] includes any bindings introduced by the pattern *)
+            and [updated_ctx] includes any bindings introduced by the pattern *)
 val infer_pattern :
-  Environment.t ->
+  Typing_context.t ->
   Parsing.Syntax_tree.pattern ->
-  Typed_tree.typed_pattern * Types.type_expression * Environment.t
+  Typed_tree.typed_pattern * Types.type_expression * Typing_context.t

@@ -23,51 +23,9 @@
 
 open Types
 
-(** Flip variance when entering a contravariant position (e.g., function argument). *)
-let flip_variance = function
-  | Covariant -> Contravariant
-  | Contravariant -> Covariant
-  | Invariant -> Invariant
-  | Bivariant -> Bivariant
-
-(** Combine two variances when a variable appears in multiple positions. *)
-let combine_variance variance1 variance2 =
-  match variance1, variance2 with
-  (* Bivariant is the identity for combination *)
-  | Bivariant, other | other, Bivariant -> other
-  (* Same variance stays the same *)
-  | Covariant, Covariant -> Covariant
-  | Contravariant, Contravariant -> Contravariant
-  (* Invariant absorbs everything *)
-  | Invariant, _ | _, Invariant -> Invariant
-  (* Conflicting variances become invariant *)
-  | Covariant, Contravariant | Contravariant, Covariant -> Invariant
-
-(** Apply context variance to a position variance.
-    If we're in a contravariant context, flip the position variance. *)
-let apply_variance declared_variance actual_variance =
-  match declared_variance with
-  | Covariant -> actual_variance
-  | Contravariant -> flip_variance actual_variance
-  | Invariant -> Invariant
-  | Bivariant -> Bivariant
-
 (** Get the declared variances for a type constructor's parameters.
-
-    For built-in types:
-    - ref: invariant (can both read and write)
-    - list, option, etc.: covariant (read-only structure)
-
-    For user-defined types, we would look up the declared variances,
-    but for now we conservatively assume covariant. *)
-let get_declared_variances (path : path) (param_count : int) : variance list =
-  match path with
-  | PathBuiltin BuiltinRef -> [Invariant]
-  | PathBuiltin _ -> []
-  | _ ->
-    (* TODO: Look up declared variances from type declarations.
-       For now, assume covariant which is safe for most types. *)
-    List.init param_count (fun _ -> Covariant)
+    Delegates to {!Variance.get_constructor_variances}. *)
+let get_declared_variances = Variance.get_constructor_variances
 
 (** Infer the variance of a type parameter within a type expression.
 
@@ -92,12 +50,12 @@ let rec infer_variance_in_type
     (* Combine variances from all arguments *)
     List.fold_left2
       (fun accumulated arg param_variance ->
-        let effective_variance = apply_variance param_variance context_variance in
+        let effective_variance = Variance.compose param_variance context_variance in
         let arg_variance = infer_variance_in_type param_id effective_variance arg in
         match accumulated, arg_variance with
         | None, v -> v
         | v, None -> v
-        | Some v1, Some v2 -> Some (combine_variance v1 v2))
+        | Some v1, Some v2 -> Some (Variance.combine v1 v2))
       None
       args
       param_variances
@@ -110,14 +68,14 @@ let rec infer_variance_in_type
         match accumulated, element_variance with
         | None, v -> v
         | v, None -> v
-        | Some v1, Some v2 -> Some (combine_variance v1 v2))
+        | Some v1, Some v2 -> Some (Variance.combine v1 v2))
       None
       elements
 
   | TypeArrow (arg_type, result_type) ->
     (* Argument is contravariant, result is covariant *)
     let arg_variance =
-      infer_variance_in_type param_id (flip_variance context_variance) arg_type
+      infer_variance_in_type param_id (Variance.flip context_variance) arg_type
     in
     let result_variance =
       infer_variance_in_type param_id context_variance result_type
@@ -125,7 +83,7 @@ let rec infer_variance_in_type
     begin match arg_variance, result_variance with
     | None, v -> v
     | v, None -> v
-    | Some v1, Some v2 -> Some (combine_variance v1 v2)
+    | Some v1, Some v2 -> Some (Variance.combine v1 v2)
     end
 
   | TypeRecord row ->
@@ -150,7 +108,7 @@ and infer_variance_in_row
           match accumulated, field_var with
           | None, v -> v
           | v, None -> v
-          | Some v1, Some v2 -> Some (combine_variance v1 v2))
+          | Some v1, Some v2 -> Some (Variance.combine v1 v2))
       None
       row.row_fields
   in
@@ -161,7 +119,7 @@ and infer_variance_in_row
   match field_variance, row_more_variance with
   | None, v -> v
   | v, None -> v
-  | Some v1, Some v2 -> Some (combine_variance v1 v2)
+  | Some v1, Some v2 -> Some (Variance.combine v1 v2)
 
 (** Infer variances for all parameters of a type declaration.
 
@@ -188,7 +146,7 @@ let infer_declaration_variances
             match accumulated, arg_variance with
             | None, v -> v
             | v, None -> v
-            | Some v1, Some v2 -> Some (combine_variance v1 v2)
+            | Some v1, Some v2 -> Some (Variance.combine v1 v2)
         ) None constructors
       in
       (* If the parameter doesn't appear, it's bivariant (phantom type) *)
@@ -203,7 +161,7 @@ let infer_declaration_variances
           match accumulated, field_variance with
           | None, v -> v
           | v, None -> v
-          | Some v1, Some v2 -> Some (combine_variance v1 v2)
+          | Some v1, Some v2 -> Some (Variance.combine v1 v2)
         ) None fields
       in
       (* If the parameter doesn't appear, it's bivariant (phantom type) *)
@@ -260,7 +218,7 @@ let is_annotation_compatible ~explicit ~inferred =
 
 (** Variance annotation error with details for error messages. *)
 type variance_error = {
-  param_name : string;
+  parameter_name : string;
   explicit_variance : variance;
   inferred_variance : variance;
 }
@@ -285,7 +243,7 @@ let validate_annotations
       else begin
         match exp with
         | Some explicit_v ->
-          Error { param_name = name; explicit_variance = explicit_v; inferred_variance = inf }
+          Error { parameter_name = name; explicit_variance = explicit_v; inferred_variance = inf }
         | None ->
           (* Should not happen since no annotation is always compatible *)
           check rest_names rest_exp rest_inf
@@ -312,4 +270,4 @@ let format_variance_error (err : variance_error) : string =
   in
   Printf.sprintf
     "Type parameter '%s is declared as %s but is used as %s in the definition"
-    err.param_name explicit_str inferred_str
+    err.parameter_name explicit_str inferred_str

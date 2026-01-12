@@ -48,17 +48,17 @@ val path_equal : path -> path -> bool
 
     Created when processing [val x : t] declarations in signatures. *)
 type value_description = {
-  val_type : Types.type_scheme;  (** The type scheme of the value *)
-  val_location : Location.t;     (** Source location of the declaration *)
+  value_type : Types.type_scheme;  (** The type scheme of the value *)
+  value_location : Location.t;     (** Source location of the declaration *)
 }
 
 (** Parameter of a functor.
 
     Represents the [X : S] part of [functor (X : S) -> ...]. *)
 type functor_parameter = {
-  param_name : string;               (** Name of the parameter module *)
-  param_id : Common.Identifier.t;    (** Unique identifier for code generation *)
-  param_type : module_type;          (** Required signature of the argument *)
+  parameter_name : string;               (** Name of the parameter module *)
+  parameter_id : Common.Identifier.t;    (** Unique identifier for code generation *)
+  parameter_type : module_type;          (** Required signature of the argument *)
 }
 
 (** {1 Module Types} *)
@@ -126,11 +126,11 @@ type module_expr =
     Created when a module is defined ([module M = ...]) or when
     a functor parameter is introduced. *)
 type module_binding = {
-  mod_name : string;              (** The module's name *)
-  mod_id : Common.Identifier.t;   (** Unique identifier for code generation *)
-  mod_type : module_type;         (** The module's type *)
-  mod_alias : path option;        (** Original path if this is an alias.
-                                      Used for module strengthening. *)
+  binding_name : string;              (** The module's name *)
+  binding_id : Common.Identifier.t;   (** Unique identifier for code generation *)
+  binding_type : module_type;         (** The module's type *)
+  binding_alias : path option;        (** Original path if this is an alias.
+                                          Used for module strengthening. *)
 }
 
 (** {1 Pretty Printing} *)

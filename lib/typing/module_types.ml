@@ -14,15 +14,15 @@ let path_equal = Types.path_equal
 
 (** Value description in a signature *)
 type value_description = {
-  val_type : Types.type_scheme;
-  val_location : Location.t;
+  value_type : Types.type_scheme;
+  value_location : Location.t;
 }
 
 (** Functor parameter *)
 type functor_parameter = {
-  param_name : string;
-  param_id : Common.Identifier.t;  (** Runtime identifier for this parameter *)
-  param_type : module_type;
+  parameter_name : string;
+  parameter_id : Common.Identifier.t;  (** Runtime identifier for this parameter *)
+  parameter_type : module_type;
 }
 
 (** Module types (signatures) *)
@@ -55,10 +55,10 @@ type module_expr =
 
 (** Module binding in the environment *)
 type module_binding = {
-  mod_name : string;
-  mod_id : Common.Identifier.t;  (** Runtime identifier for this module *)
-  mod_type : module_type;
-  mod_alias : path option;  (** If this is an alias, the original path *)
+  binding_name : string;
+  binding_id : Common.Identifier.t;  (** Runtime identifier for this module *)
+  binding_type : module_type;
+  binding_alias : path option;  (** If this is an alias, the original path *)
 }
 
 (** Pretty printing *)
@@ -70,13 +70,13 @@ let rec pp_module_type fmt = function
     Format.fprintf fmt "@]@,end"
   | ModTypeFunctor (param, result) ->
     Format.fprintf fmt "functor (%s : %a) -> %a"
-      param.param_name pp_module_type param.param_type pp_module_type result
+      param.parameter_name pp_module_type param.parameter_type pp_module_type result
   | ModTypeIdent path ->
     Format.fprintf fmt "%s" (path_to_string path)
 
 and pp_signature_item fmt = function
   | SigValue (name, desc) ->
-    Format.fprintf fmt "val %s : %a" name Types.pp_type_scheme desc.val_type
+    Format.fprintf fmt "val %s : %a" name Types.pp_type_scheme desc.value_type
   | SigType (name, _decl) ->
     Format.fprintf fmt "type %s" name
   | SigModule (name, mty) ->

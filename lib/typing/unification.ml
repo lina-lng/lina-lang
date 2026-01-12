@@ -16,10 +16,8 @@ let unification_error location expected actual message =
 
 (** Type expansion: expand type aliases to their definitions *)
 
-(* Global reference for type lookup function - set by inference *)
-let type_lookup_ref : (path -> type_declaration option) ref = ref (fun _ -> None)
-
-let set_type_lookup f = type_lookup_ref := f
+(** Type lookup function type *)
+type type_lookup = path -> type_declaration option
 
 (** Set of paths, used for cycle detection during type alias expansion *)
 module PathSet = Set.Make(struct
@@ -31,10 +29,10 @@ exception Cyclic_type_alias of path
 
 (* Expand a type by following aliases. Returns (expanded_ty, did_expand).
    The 'visiting' parameter tracks paths being expanded to detect cycles. *)
-let rec expand_type_aux visiting ty =
+let rec expand_type_aux ~type_lookup visiting ty =
   match representative ty with
   | TypeConstructor (path, args) ->
-    begin match !type_lookup_ref path with
+    begin match type_lookup path with
     | Some decl when Option.is_some decl.declaration_manifest ->
       (* Check for cycle: if we're already expanding this path, it's cyclic *)
       if PathSet.mem path visiting then
@@ -43,12 +41,12 @@ let rec expand_type_aux visiting ty =
         let visiting' = PathSet.add path visiting in
         let manifest = Option.get decl.declaration_manifest in
         let expanded = Type_utils.substitute_type_params decl.declaration_parameters args manifest in
-        let (final, _) = expand_type_aux visiting' expanded in  (* Recursively expand with cycle check *)
+        let (final, _) = expand_type_aux ~type_lookup visiting' expanded in
         (final, true)
       end
     | _ ->
       (* Not an alias - recursively expand type arguments *)
-      let results = List.map (expand_type_aux visiting) args in
+      let results = List.map (expand_type_aux ~type_lookup visiting) args in
       let any_expanded = List.exists snd results in
       if any_expanded then
         (TypeConstructor (path, List.map fst results), true)
@@ -56,39 +54,43 @@ let rec expand_type_aux visiting ty =
         (ty, false)
     end
   | TypeArrow (arg, result) ->
-    let (arg', arg_exp) = expand_type_aux visiting arg in
-    let (result', result_exp) = expand_type_aux visiting result in
+    let (arg', arg_exp) = expand_type_aux ~type_lookup visiting arg in
+    let (result', result_exp) = expand_type_aux ~type_lookup visiting result in
     if arg_exp || result_exp then
       (TypeArrow (arg', result'), true)
     else
       (ty, false)
   | TypeTuple elements ->
-    let results = List.map (expand_type_aux visiting) elements in
+    let results = List.map (expand_type_aux ~type_lookup visiting) elements in
     let any_expanded = List.exists snd results in
     if any_expanded then
       (TypeTuple (List.map fst results), true)
     else
       (ty, false)
   | TypeRecord row ->
-    let (row', expanded) = expand_row_aux visiting row in
+    let (row', expanded) = expand_row_aux ~type_lookup visiting row in
     if expanded then (TypeRecord row', true) else (ty, false)
   | ty -> (ty, false)
 
-and expand_row_aux visiting row =
+and expand_row_aux ~type_lookup visiting row =
   let results = List.map (fun (name, field) ->
     match field with
     | RowFieldPresent ty ->
-      let (ty', exp) = expand_type_aux visiting ty in
+      let (ty', exp) = expand_type_aux ~type_lookup visiting ty in
       ((name, RowFieldPresent ty'), exp)
   ) row.row_fields in
-  let (row_more', more_exp) = expand_type_aux visiting row.row_more in
+  let (row_more', more_exp) = expand_type_aux ~type_lookup visiting row.row_more in
   let any_expanded = List.exists snd results || more_exp in
   if any_expanded then
     ({ row_fields = List.map fst results; row_more = row_more' }, true)
   else
     (row, false)
 
-let expand_type ty = fst (expand_type_aux PathSet.empty ty)
+(** Expand type by following type aliases.
+
+    @param type_lookup Function to look up type declarations for alias expansion
+    @param ty The type to expand *)
+let expand_type ~type_lookup ty = fst (expand_type_aux ~type_lookup PathSet.empty ty)
 
 (** Enhanced occurs check with path tracking for better error messages.
 
@@ -161,7 +163,23 @@ let occurs_check location tv ty =
 let _occurs_check_row location tv row =
   occurs_check_row_with_path location tv row []
 
-let rec unify location ty1 ty2 =
+(** Type variable factory function type *)
+type fresh_type_var = unit -> type_expression
+
+(** Default type variable factory for row unification.
+    Uses generic_level since these are free variables during unification. *)
+let default_fresh_type_var () =
+  new_type_variable_at_level generic_level
+
+(** Unify two types with explicit type lookup and type variable factory.
+    This is the primary unification function - all unification should go through here.
+
+    @param type_lookup Function to look up type declarations for alias expansion
+    @param fresh_type_var Function to create fresh type variables (for row unification)
+    @param location Source location for error messages
+    @param ty1 First type to unify
+    @param ty2 Second type to unify *)
+let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
   let ty1 = representative ty1 in
   let ty2 = representative ty2 in
   if ty1 == ty2 then ()
@@ -182,15 +200,15 @@ let rec unify location ty1 ty2 =
       if List.length args1 <> List.length args2 then
         unification_error location ty1 ty2
           "Type constructor arity mismatch";
-      List.iter2 (unify location) args1 args2
+      List.iter2 (unify_full ~type_lookup ~fresh_type_var location) args1 args2
     end else begin
       (* Different constructors - try expanding aliases *)
       try
-        let (expanded1, did_expand1) = expand_type_aux PathSet.empty ty1 in
-        let (expanded2, did_expand2) = expand_type_aux PathSet.empty ty2 in
+        let (expanded1, did_expand1) = expand_type_aux ~type_lookup PathSet.empty ty1 in
+        let (expanded2, did_expand2) = expand_type_aux ~type_lookup PathSet.empty ty2 in
         (* Only retry if expansion changed something *)
         if did_expand1 || did_expand2 then
-          unify location expanded1 expanded2
+          unify_full ~type_lookup ~fresh_type_var location expanded1 expanded2
         else
           unification_error location ty1 ty2
             (Printf.sprintf "Type mismatch: expected %s, got %s"
@@ -206,14 +224,14 @@ let rec unify location ty1 ty2 =
       unification_error location ty1 ty2
         (Printf.sprintf "Tuple size mismatch: expected %d elements, got %d"
           (List.length elems1) (List.length elems2));
-    List.iter2 (unify location) elems1 elems2
+    List.iter2 (unify_full ~type_lookup ~fresh_type_var location) elems1 elems2
 
   | TypeArrow (arg1, res1), TypeArrow (arg2, res2) ->
-    unify location arg1 arg2;
-    unify location res1 res2
+    unify_full ~type_lookup ~fresh_type_var location arg1 arg2;
+    unify_full ~type_lookup ~fresh_type_var location res1 res2
 
   | TypeRecord row1, TypeRecord row2 ->
-    unify_rows location row1 row2
+    unify_rows_full ~type_lookup ~fresh_type_var location row1 row2
 
   | TypeRowEmpty, TypeRowEmpty ->
     ()
@@ -225,7 +243,7 @@ let rec unify location ty1 ty2 =
         (type_expression_to_string ty2))
 
 (* Row unification using Leijen's row rewriting algorithm *)
-and unify_rows location row1 row2 =
+and unify_rows_full ~type_lookup ~fresh_type_var location row1 row2 =
   (* Collect all labels from both rows *)
   let labels1 = List.map fst row1.row_fields in
   let labels2 = List.map fst row2.row_fields in
@@ -237,13 +255,13 @@ and unify_rows location row1 row2 =
     let field2 = List.assoc_opt label row2.row_fields in
     match field1, field2 with
     | Some (RowFieldPresent ty1), Some (RowFieldPresent ty2) ->
-      unify location ty1 ty2
+      unify_full ~type_lookup ~fresh_type_var location ty1 ty2
     | Some (RowFieldPresent ty), None ->
       (* Label in row1 but not row2 - unify row2.row_more to include it *)
-      unify_row_with_field location row2.row_more label ty
+      unify_row_with_field_full ~type_lookup ~fresh_type_var location row2.row_more label ty
     | None, Some (RowFieldPresent ty) ->
       (* Label in row2 but not row1 - unify row1.row_more to include it *)
-      unify_row_with_field location row1.row_more label ty
+      unify_row_with_field_full ~type_lookup ~fresh_type_var location row1.row_more label ty
     | None, None ->
       ()  (* Should not happen if we built all_labels correctly *)
   ) all_labels;
@@ -257,21 +275,21 @@ and unify_rows location row1 row2 =
   match remaining1, remaining2 with
   | [], [] ->
     (* All fields matched, unify tails *)
-    unify location row1.row_more row2.row_more
+    unify_full ~type_lookup ~fresh_type_var location row1.row_more row2.row_more
   | _, [] when remaining1 <> [] ->
     (* row1 has extra fields, unify row2.row_more with a record containing them *)
-    unify location row2.row_more (TypeRecord { row_fields = remaining1; row_more = row1.row_more })
+    unify_full ~type_lookup ~fresh_type_var location row2.row_more (TypeRecord { row_fields = remaining1; row_more = row1.row_more })
   | [], _ when remaining2 <> [] ->
     (* row2 has extra fields, unify row1.row_more with a record containing them *)
-    unify location row1.row_more (TypeRecord { row_fields = remaining2; row_more = row2.row_more })
+    unify_full ~type_lookup ~fresh_type_var location row1.row_more (TypeRecord { row_fields = remaining2; row_more = row2.row_more })
   | _, _ ->
     (* Both have extra fields - create fresh row variable and unify both tails *)
-    let fresh_more = new_type_variable () in
-    unify location row1.row_more (TypeRecord { row_fields = remaining2; row_more = fresh_more });
-    unify location row2.row_more (TypeRecord { row_fields = remaining1; row_more = fresh_more })
+    let fresh_more = fresh_type_var () in
+    unify_full ~type_lookup ~fresh_type_var location row1.row_more (TypeRecord { row_fields = remaining2; row_more = fresh_more });
+    unify_full ~type_lookup ~fresh_type_var location row2.row_more (TypeRecord { row_fields = remaining1; row_more = fresh_more })
 
 (* Unify a row tail with a field that should be present *)
-and unify_row_with_field location row_more label field_ty =
+and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more label field_ty =
   match representative row_more with
   | TypeRowEmpty ->
     unification_error location TypeRowEmpty
@@ -279,7 +297,7 @@ and unify_row_with_field location row_more label field_ty =
       (Printf.sprintf "Missing field '%s' in closed record" label)
   | TypeVariable tv ->
     (* Instantiate the row variable to include this field *)
-    let fresh_more = new_type_variable () in
+    let fresh_more = fresh_type_var () in
     let new_row = TypeRecord {
       row_fields = [(label, RowFieldPresent field_ty)];
       row_more = fresh_more;
@@ -290,11 +308,20 @@ and unify_row_with_field location row_more label field_ty =
     (* Check if field is in inner row *)
     begin match List.assoc_opt label inner_row.row_fields with
     | Some (RowFieldPresent inner_ty) ->
-      unify location field_ty inner_ty
+      unify_full ~type_lookup ~fresh_type_var location field_ty inner_ty
     | None ->
-      unify_row_with_field location inner_row.row_more label field_ty
+      unify_row_with_field_full ~type_lookup ~fresh_type_var location inner_row.row_more label field_ty
     end
   | _ ->
     unification_error location row_more
       (TypeRecord { row_fields = [(label, RowFieldPresent field_ty)]; row_more = TypeRowEmpty })
       "Expected row type"
+
+(** Unify two types.
+
+    @param type_lookup Function to look up type declarations for alias expansion
+    @param location Source location for error messages
+    @param ty1 First type to unify
+    @param ty2 Second type to unify *)
+let unify ~type_lookup location ty1 ty2 =
+  unify_full ~type_lookup ~fresh_type_var:default_fresh_type_var location ty1 ty2
