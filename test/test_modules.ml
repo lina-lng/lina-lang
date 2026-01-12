@@ -28,7 +28,10 @@ module M = struct
   let x = 42
 end
 |});
-  [%expect{| local M_12 = {x = 42} |}]
+  [%expect{|
+    local x_11 = 42
+    local M_12 = {x = x_11}
+    |}]
 
 let%expect_test "module with multiple bindings" =
   print_endline (compile {|
@@ -44,6 +47,8 @@ end
     local function sub_18(x_16, y_17)
       return x_16 - y_17
     end
+    local add_15 = add_15
+    local sub_18 = sub_18
     local Math_19 = {add = add_15, sub = sub_18}
     |}]
 
@@ -55,7 +60,8 @@ end
 let y = M.x
 |});
   [%expect{|
-    local M_21 = {x = 42}
+    local x_20 = 42
+    local M_21 = {x = x_20}
     local y_22 = M_21.x
     |}]
 
@@ -79,7 +85,11 @@ module Outer = struct
   end
 end
 |});
-  [%expect{| local Outer_31 = {Inner = {x = 42}} |}]
+  [%expect{|
+    local x_29 = 42
+    local Inner_30 = {x = x_29}
+    local Outer_31 = {Inner = Inner_30}
+    |}]
 
 let%expect_test "nested module access" =
   print_endline (compile_and_run {|
@@ -104,7 +114,11 @@ end = struct
   let hidden = 99
 end
 |});
-  [%expect{| local M_40 = {x = 42, hidden = 99} |}]
+  [%expect{|
+    local x_38 = 42
+    local hidden_39 = 99
+    local M_40 = {x = x_38, hidden = hidden_39}
+    |}]
 
 let%expect_test "signature hides value" =
   print_endline (compile {|
@@ -117,7 +131,9 @@ end
 let y = M.x
 |});
   [%expect{|
-    local M_43 = {x = 42, hidden = 99}
+    local x_41 = 42
+    local hidden_42 = 99
+    local M_43 = {x = x_41, hidden = hidden_42}
     local y_44 = M_43.x
     |}]
 
@@ -228,7 +244,9 @@ open M
 let z = x + y
 |});
   [%expect{|
-    local M_86 = {x = 10, y = 20}
+    local x_84 = 10
+    local y_85 = 20
+    local M_86 = {x = x_84, y = y_85}
     local x_87 = M_86.x
     local y_88 = M_86.y
     local z_89 = x_87 + y_88
@@ -842,3 +860,66 @@ module type S2 = S with type t = int
     ERROR: File "<string>", line 6, characters 17-36:
     Type error: Type t has 1 parameters but constraint has 0
     |}]
+
+(* ==================== Module Binding Inter-Reference Tests ==================== *)
+(* These tests verify that bindings within a module can reference earlier bindings
+   in the same module. This was a bug where the codegen generated inline table
+   literals instead of defining bindings first. *)
+
+let%expect_test "module binding references earlier binding" =
+  print_endline (compile_and_run {|
+module M = struct
+  let id = fun x -> x
+  let applied = id id
+  let value = applied 42
+end
+let _ = print M.value
+|});
+  [%expect{| 42 |}]
+
+let%expect_test "module binding chain" =
+  print_endline (compile_and_run {|
+module M = struct
+  let a = 10
+  let b = a + 5
+  let c = b * 2
+end
+let _ = print M.c
+|});
+  [%expect{| 30 |}]
+
+let%expect_test "module binding references function" =
+  print_endline (compile_and_run {|
+module M = struct
+  let f = fun x -> x + 1
+  let result = f 41
+end
+let _ = print M.result
+|});
+  [%expect{| 42 |}]
+
+let%expect_test "nested module binding references" =
+  print_endline (compile_and_run {|
+module Outer = struct
+  module Inner = struct
+    let f = fun x -> x
+    let g = f f
+    let value = g 100
+  end
+  let result = Inner.value
+end
+let _ = print Outer.result
+|});
+  [%expect{| 100 |}]
+
+let%expect_test "module with multiple inter-references" =
+  print_endline (compile_and_run {|
+module M = struct
+  let add = fun x -> fun y -> x + y
+  let add5 = add 5
+  let add10 = add 10
+  let result = add5 (add10 20)
+end
+let _ = print M.result
+|});
+  [%expect{| 35 |}]

@@ -100,9 +100,9 @@ let type_check_document store uri =
               let error_diagnostics =
                 List.map (fun err ->
                   match err with
-                  | Typing.Inference.CompilerError compiler_err ->
+                  | Typing.Inference_utils.CompilerError compiler_err ->
                       Lsp_types.diagnostic_of_compiler_error compiler_err
-                  | Typing.Inference.UnificationError details ->
+                  | Typing.Inference_utils.UnificationError details ->
                       let full_message =
                         Printf.sprintf "%s\nExpected: %s\nActual: %s" details.message
                           (Typing.Types.type_expression_to_string details.expected)

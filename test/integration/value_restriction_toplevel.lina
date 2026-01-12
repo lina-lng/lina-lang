@@ -1,0 +1,65 @@
+(* Test: Value restriction applied to top-level module bindings *)
+
+(* This test verifies that value restriction is correctly applied when
+   extracting signatures from structure items. Non-value expressions
+   should not be incorrectly generalized. *)
+
+(* A polymorphic identity function *)
+let id = fun x -> x
+
+(* Non-value at top level: (id id) is an application, not a value.
+   The result type ('a -> 'a) is invariant, so under relaxed VR,
+   this should be monomorphic (weak type).
+
+   Key test: once used at int -> int, it should stay int -> int. *)
+let applied_id = id id
+
+(* Use applied_id at int -> int *)
+let r1 = applied_id 42
+let _ = print r1      (* Expected: 42 *)
+
+(* Using it again at the same type should work *)
+let r2 = applied_id 100
+let _ = print r2      (* Expected: 100 *)
+
+(* Module containing a non-value binding *)
+module M = struct
+  let id = fun x -> x
+
+  (* Non-value: application result with invariant type *)
+  let applied = id id
+
+  (* Use it at int -> int within the module *)
+  let value = applied 50
+end
+
+let _ = print M.value      (* Expected: 50 *)
+
+(* Access the applied_id from the module - should work at same type *)
+let r3 = M.applied 200
+let _ = print r3      (* Expected: 200 *)
+
+(* Test that actual polymorphic values in modules work correctly *)
+module Poly = struct
+  (* These are values - should be fully polymorphic *)
+  let identity = fun x -> x
+end
+
+let p1 = Poly.identity 10
+let p2 = Poly.identity 20
+let _ = print p1      (* Expected: 10 *)
+let _ = print p2      (* Expected: 20 *)
+
+(* Nested modules with value restriction *)
+module Outer = struct
+  module Inner = struct
+    let f = fun x -> x
+    (* Non-value at module level *)
+    let g = f f
+  end
+
+  let v1 = Inner.g 100
+end
+
+let _ = print Outer.v1      (* Expected: 100 *)
+

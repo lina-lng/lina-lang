@@ -345,3 +345,72 @@ let%expect_test "relaxed VR: covariant type can be used at multiple types" =
   |} in
   print_endline "compiles";
   [%expect {| compiles |}]
+
+(** {1 Value Restriction in Top-Level Module Bindings} *)
+
+(* These tests verify that value restriction is correctly applied when
+   extracting signatures from structure items. This was a bug where
+   signature_items_of_typed_structure_item used generalize directly
+   instead of compute_binding_scheme. *)
+
+let%expect_test "non-value in module is not incorrectly generalized" =
+  (* The binding `applied = id id` is a non-value because it's an application.
+     The result type 'a -> 'a is invariant (not covariant), so it should NOT
+     be generalized under relaxed value restriction. *)
+  let env = compile_and_check {|
+    module M = struct
+      let id = fun x -> x
+      let applied = id id
+    end
+  |} in
+  (* Check M.applied's type - should be monomorphic *)
+  let m_binding = Environment.find_module "M" env in
+  let m_type = match m_binding with
+    | Some b -> b.Module_types.binding_type
+    | None -> failwith "Module M not found"
+  in
+  let applied_scheme = match m_type with
+    | Module_types.ModTypeSig sig_ ->
+      (match Module_types.find_value_in_sig "applied" sig_ with
+       | Some vd -> vd.Module_types.value_type
+       | None -> failwith "applied not found in M")
+    | _ -> failwith "M is not a signature"
+  in
+  print_endline (if is_polymorphic applied_scheme then "polymorphic (BUG!)" else "monomorphic (correct)");
+  [%expect {| monomorphic (correct) |}]
+
+let%expect_test "value in module IS generalized" =
+  (* The binding `id = fun x -> x` is a syntactic value (lambda),
+     so it should be fully polymorphic. *)
+  let env = compile_and_check {|
+    module M = struct
+      let id = fun x -> x
+    end
+  |} in
+  let m_binding = Environment.find_module "M" env in
+  let m_type = match m_binding with
+    | Some b -> b.Module_types.binding_type
+    | None -> failwith "Module M not found"
+  in
+  let id_scheme = match m_type with
+    | Module_types.ModTypeSig sig_ ->
+      (match Module_types.find_value_in_sig "id" sig_ with
+       | Some vd -> vd.Module_types.value_type
+       | None -> failwith "id not found in M")
+    | _ -> failwith "M is not a signature"
+  in
+  print_endline (if is_polymorphic id_scheme then "polymorphic (correct)" else "monomorphic (BUG!)");
+  [%expect {| polymorphic (correct) |}]
+
+let%expect_test "module value restriction - practical usage" =
+  (* This test verifies the module works correctly at runtime *)
+  let _ = compile_and_check {|
+    module M = struct
+      let id = fun x -> x
+      let applied = id id
+      let value = applied 42
+    end
+    let result = M.applied 100
+  |} in
+  print_endline "compiles and type-checks correctly";
+  [%expect {| compiles and type-checks correctly |}]

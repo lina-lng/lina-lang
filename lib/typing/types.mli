@@ -46,7 +46,12 @@ val reset_type_variable_id : unit -> unit
 
 (** {1 Type Expressions} *)
 
-(** Type variables with mutable link for unification. *)
+(** Type variables with mutable link for unification.
+
+    {b Design note:} Field names intentionally omit a prefix (e.g., [id] instead
+    of [tv_id]) for brevity, as type variables are accessed very frequently
+    throughout the type checker. This differs from other record types in the
+    module which use prefixes for disambiguation. *)
 type type_variable = {
   id : int;                         (** Unique identifier *)
   mutable level : level;            (** Generalization level *)
@@ -80,7 +85,15 @@ and row = {
   row_more : type_expression;              (** Row tail *)
 }
 
-(** Row field presence indicator. *)
+(** Row field presence indicator.
+
+    {b Design note:} Currently only [RowFieldPresent] is implemented.
+    The single-variant wrapper is retained for potential future extensions:
+    - Absent fields for polymorphic variant rows
+    - Optional fields for structural subtyping
+    - Default-valued fields
+
+    The wrapper adds minimal overhead but preserves extensibility. *)
 and row_field =
   | RowFieldPresent of type_expression
 

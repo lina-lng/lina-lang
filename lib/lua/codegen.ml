@@ -596,6 +596,31 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
     let rest_stmts, ctx = generate_top_level_binding ctx target_name second_expr in
     (first_stmts @ rest_stmts, ctx)
 
+  | Lambda.LambdaModule bindings ->
+    (* Generate module bindings as local variables first, then create the table.
+       This ensures bindings that reference earlier bindings work correctly.
+
+       Instead of: local M = {id = ..., applied = id_17(id_17)}
+       Generate:   local id_17 = ...
+                   local applied_18 = id_17(id_17)
+                   local M = {id = id_17, applied = applied_18}
+
+       We use mb_id (the original identifier) so references between bindings resolve correctly.
+    *)
+    let binding_stmts, binding_names, ctx = List.fold_left (fun (stmts, names, ctx) (binding : Lambda.module_binding) ->
+      (* Use the original identifier so references between bindings work *)
+      let binding_var = mangle_identifier binding.mb_id in
+      let inner_stmts, ctx = generate_top_level_binding ctx binding_var binding.mb_value in
+      (stmts @ inner_stmts, (binding.mb_name, binding_var) :: names, ctx)
+    ) ([], [], ctx) bindings in
+    let binding_names = List.rev binding_names in
+    (* Create table with references to the local variables *)
+    let fields = List.map (fun (name, var) ->
+      FieldNamed (name, ExpressionVariable var)
+    ) binding_names in
+    let table_stmt = StatementLocal ([target_name], [ExpressionTable fields]) in
+    (binding_stmts @ [table_stmt], ctx)
+
   | _ ->
     let value_expr, ctx = translate_expression ctx value in
     ([StatementLocal ([target_name], [value_expr])], ctx)

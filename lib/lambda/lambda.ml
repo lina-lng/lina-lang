@@ -60,6 +60,7 @@ type lambda =
   | LambdaAssign of lambda * lambda               (** e1 := e2 - write to mutable cell *)
 
 and module_binding = {
+  mb_id : Identifier.t;  (** Original identifier for internal references *)
   mb_name : string;
   mb_value : lambda;
 }
@@ -334,7 +335,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
         let field_refs = List.filter_map (fun (binding : typed_binding) ->
           match binding.binding_pattern.pattern_desc with
           | TypedPatternVariable id ->
-            Some { mb_name = Identifier.name id; mb_value = LambdaVariable id }
+            Some { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaVariable id }
           | _ -> None
         ) bindings in
         (* For recursive bindings, we need to wrap them with LambdaLetRecursive *)
@@ -354,7 +355,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
       | TypedStructureModule (name_id, inner_mexpr) ->
         let value = translate_module_expression inner_mexpr in
         let new_local = `Single (name_id, value) in
-        let new_field = { mb_name = Identifier.name name_id; mb_value = LambdaVariable name_id } in
+        let new_field = { mb_id = name_id; mb_name = Identifier.name name_id; mb_value = LambdaVariable name_id } in
         process rest (new_local :: local_bindings) (new_field :: module_fields)
       | TypedStructureOpen (module_path, opened_bindings) ->
         let module_expr = translate_module_path module_path in
@@ -362,7 +363,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
           `Single (id, LambdaModuleAccess (module_expr, name))
         ) opened_bindings in
         let new_fields = List.map (fun (_name, id) ->
-          { mb_name = Identifier.name id; mb_value = LambdaVariable id }
+          { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaVariable id }
         ) opened_bindings in
         process rest (List.rev_append new_locals local_bindings) (List.rev_append new_fields module_fields)
       | TypedStructureInclude (mexpr, included_bindings) ->
@@ -375,7 +376,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
           `Single (id, LambdaModuleAccess (LambdaVariable temp_id, name))
         ) included_bindings in
         let new_fields = List.map (fun (_name, id) ->
-          { mb_name = Identifier.name id; mb_value = LambdaVariable id }
+          { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaVariable id }
         ) included_bindings in
         process rest (List.rev_append new_locals (temp_binding :: local_bindings)) (List.rev_append new_fields module_fields)
       | TypedStructureExternal ext ->
@@ -387,7 +388,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
         let ffi_call = LambdaExternalCall (ext.external_spec, arg_vars) in
         let func = if arity = 0 then ffi_call else LambdaFunction (arg_ids, ffi_call) in
         let new_local = `Single (ext.external_id, func) in
-        let new_field = { mb_name = Identifier.name ext.external_id; mb_value = LambdaVariable ext.external_id } in
+        let new_field = { mb_id = ext.external_id; mb_name = Identifier.name ext.external_id; mb_value = LambdaVariable ext.external_id } in
         process rest (new_local :: local_bindings) (new_field :: module_fields)
   in
   process structure [] []
@@ -429,7 +430,7 @@ and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : mo
         | TypedPatternVariable id ->
           let name = Identifier.name id in
           let value = translate_expression binding.binding_expression in
-          Some { mb_name = name; mb_value = value }
+          Some { mb_id = id; mb_name = name; mb_value = value }
         | _ -> None
       ) bindings
     | TypedStructureType _ ->
@@ -438,19 +439,19 @@ and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : mo
       []  (* Module types don't contribute runtime values *)
     | TypedStructureModule (name_id, inner_mexpr) ->
       let value = translate_module_expression inner_mexpr in
-      [{ mb_name = Identifier.name name_id; mb_value = value }]
+      [{ mb_id = name_id; mb_name = Identifier.name name_id; mb_value = value }]
     | TypedStructureOpen (module_path, opened_bindings) ->
       (* Generate local bindings for opened values: local add = Math.add *)
       let module_expr = translate_module_path module_path in
       List.map (fun (name, id) ->
-        { mb_name = Identifier.name id; mb_value = LambdaModuleAccess (module_expr, name) }
+        { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaModuleAccess (module_expr, name) }
       ) opened_bindings
     | TypedStructureInclude (mexpr, included_bindings) ->
       (* For include inside a module, we inline the module's values directly *)
       (* Each included value becomes a field that accesses the included module *)
       let translated_mexpr = translate_module_expression mexpr in
       List.map (fun (name, id) ->
-        { mb_name = Identifier.name id; mb_value = LambdaModuleAccess (translated_mexpr, name) }
+        { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaModuleAccess (translated_mexpr, name) }
       ) included_bindings
     | TypedStructureExternal ext ->
       (* Generate a function that wraps the FFI call *)
@@ -459,7 +460,7 @@ and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : mo
       let arg_vars = List.map (fun id -> LambdaVariable id) arg_ids in
       let ffi_call = LambdaExternalCall (ext.external_spec, arg_vars) in
       let func = if arity = 0 then ffi_call else LambdaFunction (arg_ids, ffi_call) in
-      [{ mb_name = Identifier.name ext.external_id; mb_value = func }]
+      [{ mb_id = ext.external_id; mb_name = Identifier.name ext.external_id; mb_value = func }]
   ) structure
 
 and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =

@@ -122,7 +122,8 @@ type lambda =
 
 (** Module binding in a module expression. *)
 and module_binding = {
-  mb_name : string;    (** Binding name *)
+  mb_id : Common.Identifier.t;  (** Original identifier for internal references *)
+  mb_name : string;    (** Binding name (external module field name) *)
   mb_value : lambda;   (** Bound value *)
 }
 

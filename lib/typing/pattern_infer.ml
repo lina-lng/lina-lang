@@ -26,33 +26,6 @@ let unify ctx loc ty1 ty2 =
   let env = Typing_context.environment ctx in
   Inference_utils.unify_with_env env loc ty1 ty2
 
-(** Helper to instantiate a constructor with fresh type variables using context *)
-let instantiate_constructor ctx ctor =
-  let fresh_params, ctx =
-    List.fold_left (fun (params, ctx) _ ->
-      let tv, ctx = Typing_context.new_type_variable ctx in
-      (params @ [tv], ctx)
-    ) ([], ctx) ctor.Types.constructor_type_parameters
-  in
-  let substitution =
-    List.combine
-      (List.map (fun tv -> tv.id) ctor.Types.constructor_type_parameters)
-      fresh_params
-  in
-  let substitute ty =
-    Type_traversal.map (function
-      | TypeVariable tv ->
-        begin match List.assoc_opt tv.id substitution with
-        | Some fresh_type -> fresh_type
-        | None -> TypeVariable tv
-        end
-      | ty -> ty
-    ) ty
-  in
-  let arg_type = Option.map substitute ctor.Types.constructor_argument_type in
-  let result_type = substitute ctor.Types.constructor_result_type in
-  (arg_type, result_type, ctx)
-
 (** [infer_pattern ctx pattern] infers the type of a pattern.
 
     @param ctx The typing context (used for environment threading)
@@ -118,8 +91,8 @@ let rec infer_pattern ctx (pattern : pattern) =
       Compiler_error.type_error loc
         (Printf.sprintf "Unbound constructor: %s" name)
     | Some constructor_info ->
-      let expected_arg_ty, result_ty, ctx =
-        instantiate_constructor ctx constructor_info
+      let expected_arg_ty, result_ty =
+        Inference_utils.instantiate_constructor_with_ctx ctx constructor_info
       in
       let typed_arg, ctx = match arg_pattern, expected_arg_ty with
         | None, None -> (None, ctx)
@@ -183,15 +156,14 @@ let rec infer_pattern ctx (pattern : pattern) =
       ) ([], [], ctx) pattern_fields
     in
     let typed_field_patterns = List.rev typed_field_patterns in
-    let field_types = List.sort compare (List.rev field_types) in
-    let row_more, ctx =
-      if is_open then Typing_context.new_type_variable ctx
-      else (TypeRowEmpty, ctx)
+    let field_types = List.rev field_types in
+    let record_type, ctx =
+      if is_open then
+        let row_var, ctx = Typing_context.new_type_variable ctx in
+        (Types.type_record_open field_types ~row_var, ctx)
+      else
+        (Types.type_record_closed field_types, ctx)
     in
-    let record_type = TypeRecord {
-      row_fields = field_types;
-      row_more;
-    } in
     let typed_pattern = {
       pattern_desc = TypedPatternRecord (typed_field_patterns, is_open);
       pattern_type = record_type;

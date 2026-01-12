@@ -14,60 +14,9 @@ open Parsing.Syntax_tree
 open Types
 open Typed_tree
 
-(** Create a module type lookup function from the context's environment.
-    This handles both simple paths (PathIdent) and qualified paths (PathDot). *)
-let make_module_type_lookup ctx =
-  let env = Typing_context.environment ctx in
-  let rec lookup_mty_by_path path =
-    match path with
-    | Types.PathIdent id ->
-      (* Simple module type name - look up directly in environment *)
-      begin match Environment.find_module_type (Identifier.name id) env with
-      | Some (Some mty) -> Some mty
-      | Some None -> None  (* Abstract - can't expand *)
-      | None -> None  (* Not found *)
-      end
-    | Types.PathDot (base_path, name) ->
-      (* Qualified path like M.S - resolve module path, then find in signature *)
-      begin match lookup_module_by_path base_path with
-      | Some (Module_types.ModTypeSig sig_) ->
-        begin match Module_types.find_module_type_in_sig name sig_ with
-        | Some (Some mty) -> Some mty
-        | Some None -> None  (* Abstract *)
-        | None -> None  (* Not found in signature *)
-        end
-      | _ -> None
-      end
-    | Types.PathLocal name ->
-      (* Local module type name - look up directly *)
-      begin match Environment.find_module_type name env with
-      | Some (Some mty) -> Some mty
-      | _ -> None
-      end
-    | _ -> None
-  and lookup_module_by_path path =
-    match path with
-    | Types.PathIdent id ->
-      begin match Environment.find_module (Identifier.name id) env with
-      | Some binding -> Some binding.Module_types.binding_type
-      | None -> None
-      end
-    | Types.PathDot (base_path, name) ->
-      begin match lookup_module_by_path base_path with
-      | Some (Module_types.ModTypeSig sig_) ->
-        Module_types.find_module_in_sig name sig_
-      | _ -> None
-      end
-    | _ -> None
-  in
-  lookup_mty_by_path
-
-(** Create a signature matching context from a typing context. *)
-let make_match_context ctx =
-  let env = Typing_context.environment ctx in
-  Signature_match.create_context
-    ~type_lookup:(fun path -> Environment.find_type_by_path path env)
-    ~module_type_lookup:(make_module_type_lookup ctx)
+(** Create a signature matching context from a typing context.
+    Delegates to {!Inference_utils.make_match_context}. *)
+let make_match_context = Inference_utils.make_match_context
 
 (** Check if a type is already an option type. *)
 let is_option_type ty =
@@ -228,18 +177,6 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
   let ctx = Typing_context.with_environment env ctx in
   (type_declaration, ctx)
 
-(** Unification error details for tolerant inference. *)
-type unification_error_details = {
-  expected : Types.type_expression;
-  actual : Types.type_expression;
-  location : Common.Location.t;
-  message : string;
-}
-
-(** Error information from tolerant inference. *)
-type inference_error =
-  | CompilerError of Common.Compiler_error.t
-  | UnificationError of unification_error_details
 
 (** [infer_structure_item ctx item] infers types for a structure item.
 
@@ -515,13 +452,8 @@ and infer_module_expression ctx (mexpr : module_expression) =
     let (typed_func, ctx) = infer_module_expression ctx func_expr in
     let (typed_arg, ctx) = infer_module_expression ctx arg_expr in
     (* Extract paths from typed expressions for applicative semantics *)
-    let extract_path mexpr =
-      match mexpr.Typed_tree.module_desc with
-      | Typed_tree.TypedModulePath path -> Some path
-      | _ -> None
-    in
-    let func_path_opt = extract_path typed_func in
-    let arg_path_opt = extract_path typed_arg in
+    let func_path_opt = Inference_utils.extract_typed_module_path typed_func in
+    let arg_path_opt = Inference_utils.extract_typed_module_path typed_arg in
     (* Check that func has functor type *)
     begin match typed_func.module_type with
     | Module_types.ModTypeFunctor (param, result_mty) ->
@@ -602,8 +534,9 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
       match binding.binding_pattern.pattern_desc with
       | TypedPatternVariable id ->
         let name = Identifier.name id in
-        (* Use base level for top-level generalization *)
-        let scheme = Type_scheme.generalize ~level:1 binding.binding_expression.expression_type in
+        (* Apply value restriction for top-level generalization *)
+        let scheme = Inference_utils.compute_binding_scheme ~level:1
+          binding.binding_expression binding.binding_expression.expression_type in
         let val_desc = Module_types.{
           value_type = scheme;
           value_location = item.structure_item_location;
@@ -637,7 +570,8 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
   | TypedStructureExternal ext ->
     (* External contributes a value to the signature *)
     let name = Identifier.name ext.external_id in
-    (* Use base level for top-level generalization *)
+    (* Externals are always syntactic values (primitives), so full generalization
+       is safe - no need for value restriction check *)
     let scheme = Type_scheme.generalize ~level:1 ext.external_type in
     let val_desc = Module_types.{
       value_type = scheme;
@@ -679,11 +613,11 @@ and infer_structure_tolerant ctx structure =
       with
       | Common.Compiler_error.Error compiler_err ->
           (* Record error and continue with current ctx *)
-          (items, ctx, CompilerError compiler_err :: errors)
+          (items, ctx, Inference_utils.CompilerError compiler_err :: errors)
       | Unification.Unification_error { expected; actual; location; message } ->
           (* Record error and continue with current ctx *)
-          let err_details = { expected; actual; location; message } in
-          (items, ctx, UnificationError err_details :: errors)
+          let err_details : Inference_utils.unification_error_details = { expected; actual; location; message } in
+          (items, ctx, Inference_utils.UnificationError err_details :: errors)
     ) ([], ctx, []) structure
   in
   let typed_ast = if errors <> [] then None else Some (List.rev typed_items) in

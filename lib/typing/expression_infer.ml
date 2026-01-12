@@ -24,6 +24,30 @@ let unify ctx loc ty1 ty2 =
 (** Type of constant literals *)
 let type_of_constant = Inference_utils.type_of_constant
 
+(** Extract a module path from nested record access expressions.
+
+    Given [M.N.x], this extracts [["M"; "N"]] when [M] and [M.N] are modules.
+    Returns [None] if the expression is not a module path.
+
+    @param env The typing environment for module lookups
+    @param expr The expression to extract from
+    @return [Some path_components] if expr is a module path, [None] otherwise *)
+let rec extract_module_path env expr =
+  match expr.Location.value with
+  | ExpressionConstructor (name, None) ->
+    (* Check if this is a module *)
+    begin match Environment.find_module name env with
+    | Some _ -> Some [name]
+    | None -> None
+    end
+  | ExpressionRecordAccess (inner, component) ->
+    (* Recursively check if inner is a module path *)
+    begin match extract_module_path env inner with
+    | Some path -> Some (path @ [component])
+    | None -> None
+    end
+  | _ -> None
+
 (** [infer_expression ctx expr] infers the type of an expression.
 
     @param ctx The typing context
@@ -66,8 +90,8 @@ let rec infer_expression ctx (expr : expression) =
     begin match Environment.find_constructor name env with
     | None -> Inference_utils.error_unbound_constructor loc name
     | Some constructor_info ->
-      let expected_arg_ty, result_ty, ctx =
-        instantiate_constructor ctx constructor_info
+      let expected_arg_ty, result_ty =
+        Inference_utils.instantiate_constructor_with_ctx ctx constructor_info
       in
       Inference_utils.check_constructor_arity loc name
         ~has_arg:(Option.is_some arg_expr)
@@ -186,10 +210,7 @@ let rec infer_expression ctx (expr : expression) =
       (typed_field.Typed_tree.typed_field_name,
        RowFieldPresent typed_field.typed_field_value.expression_type)
     ) typed_record_fields in
-    let record_type = TypeRecord {
-      row_fields = List.sort compare row_field_types;
-      row_more = TypeRowEmpty;  (* Record literals are closed *)
-    } in
+    let record_type = Types.type_record_closed row_field_types in
     ({
       expression_desc = TypedExpressionRecord typed_record_fields;
       expression_type = record_type;
@@ -197,25 +218,8 @@ let rec infer_expression ctx (expr : expression) =
     }, ctx)
 
   | ExpressionRecordAccess (record_expression, field_name) ->
-    (* Try to extract a module path from nested record accesses *)
-    let rec extract_module_path expr =
-      match expr.Location.value with
-      | ExpressionConstructor (name, None) ->
-        (* Check if this is a module *)
-        begin match Environment.find_module name env with
-        | Some _ -> Some [name]
-        | None -> None
-        end
-      | ExpressionRecordAccess (inner, component) ->
-        (* Recursively check if inner is a module path *)
-        begin match extract_module_path inner with
-        | Some path -> Some (path @ [component])
-        | None -> None
-        end
-      | _ -> None
-    in
     (* Check if record_expression is a module path *)
-    begin match extract_module_path record_expression with
+    begin match extract_module_path env record_expression with
     | Some path_components ->
       (* This is module access: look up field in the module at path *)
       let (base_binding, mod_binding) = Module_type_check.lookup_module_path env path_components loc in
@@ -264,10 +268,8 @@ let rec infer_expression ctx (expr : expression) =
       let typed_record_expression, ctx = infer_expression ctx record_expression in
       let field_type, ctx = Typing_context.new_type_variable ctx in
       let row_tail, ctx = Typing_context.new_type_variable ctx in
-      let expected_record_type = TypeRecord {
-        row_fields = [(field_name, RowFieldPresent field_type)];
-        row_more = row_tail;
-      } in
+      let expected_record_type = Types.type_record_open
+        [(field_name, RowFieldPresent field_type)] ~row_var:row_tail in
       unify ctx loc expected_record_type typed_record_expression.expression_type;
       ({
         expression_desc = TypedExpressionRecordAccess (typed_record_expression, field_name);
@@ -296,10 +298,7 @@ let rec infer_expression ctx (expr : expression) =
        RowFieldPresent typed_field.typed_field_value.expression_type)
     ) typed_update_fields in
     let row_tail, ctx = Typing_context.new_type_variable ctx in
-    let expected_base_type = TypeRecord {
-      row_fields = List.sort compare update_field_types;
-      row_more = row_tail;
-    } in
+    let expected_base_type = Types.type_record_open update_field_types ~row_var:row_tail in
     unify ctx loc expected_base_type typed_base_expression.expression_type;
     (* Result type is same as base type *)
     ({
@@ -417,33 +416,6 @@ and infer_expression_list ctx exprs =
     let typed_expr, ctx = infer_expression ctx expr in
     (typed_exprs @ [typed_expr], ctx)
   ) ([], ctx) exprs
-
-(** Helper to instantiate a constructor with fresh type variables *)
-and instantiate_constructor ctx ctor =
-  let fresh_params, ctx =
-    List.fold_left (fun (params, ctx) _ ->
-      let tv, ctx = Typing_context.new_type_variable ctx in
-      (params @ [tv], ctx)
-    ) ([], ctx) ctor.Types.constructor_type_parameters
-  in
-  let substitution =
-    List.combine
-      (List.map (fun tv -> tv.id) ctor.Types.constructor_type_parameters)
-      fresh_params
-  in
-  let substitute ty =
-    Type_traversal.map (function
-      | TypeVariable tv ->
-        begin match List.assoc_opt tv.id substitution with
-        | Some fresh_type -> fresh_type
-        | None -> TypeVariable tv
-        end
-      | ty -> ty
-    ) ty
-  in
-  let arg_type = Option.map substitute ctor.Types.constructor_argument_type in
-  let result_type = substitute ctor.Types.constructor_result_type in
-  (arg_type, result_type, ctx)
 
 (** [infer_bindings ctx rec_flag bindings] infers types for a list of bindings.
 

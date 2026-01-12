@@ -50,19 +50,6 @@ val infer_structure :
   Parsing.Syntax_tree.structure ->
   Typed_tree.typed_structure * Typing_context.t
 
-(** Unification error details for tolerant inference. *)
-type unification_error_details = {
-  expected : Types.type_expression;
-  actual : Types.type_expression;
-  location : Common.Location.t;
-  message : string;
-}
-
-(** Error information from tolerant inference. *)
-type inference_error =
-  | CompilerError of Common.Compiler_error.t
-  | UnificationError of unification_error_details
-
 (** [infer_structure_tolerant ctx structure] infers types for a structure,
     continuing after errors to accumulate as much context as possible.
 
@@ -81,7 +68,7 @@ type inference_error =
 val infer_structure_tolerant :
   Typing_context.t ->
   Parsing.Syntax_tree.structure ->
-  Typed_tree.typed_structure option * Typing_context.t * inference_error list
+  Typed_tree.typed_structure option * Typing_context.t * Inference_utils.inference_error list
 
 (** [infer_structure_item ctx item] infers types for a single structure item.
 
