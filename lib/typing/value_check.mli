@@ -81,11 +81,8 @@ val is_syntax_value : Parsing.Syntax_tree.expression -> bool
 
 (** Variance of a type variable in a type expression.
 
-    - [Covariant]: Variable appears only in "output" positions
-    - [Contravariant]: Variable appears only in "input" positions
-    - [Invariant]: Variable appears in both positions (unsafe to generalize)
-    - [Bivariant]: Variable does not appear (vacuously safe) *)
-type variance =
+    Re-exported from {!module:Types} for convenience. *)
+type variance = Types.variance =
   | Covariant
   | Contravariant
   | Invariant

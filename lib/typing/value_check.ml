@@ -131,37 +131,17 @@ let rec is_syntax_value (expression : Parsing.Syntax_tree.expression) : bool =
 
 (** {1 Relaxed Value Restriction - Variance Checking} *)
 
-(** Variance of a type variable in a type expression. *)
-type variance =
+(** Re-export variance type from Types for backward compatibility. *)
+type variance = Types.variance =
   | Covariant
   | Contravariant
   | Invariant
   | Bivariant
 
-(** Flip variance when entering a contravariant position (left side of arrow). *)
-let flip_variance = function
-  | Covariant -> Contravariant
-  | Contravariant -> Covariant
-  | Invariant -> Invariant
-  | Bivariant -> Bivariant
-
-(** Combine two variances when a variable appears in multiple positions. *)
-let combine_variance variance1 variance2 =
-  match variance1, variance2 with
-  | Bivariant, other | other, Bivariant -> other
-  | Covariant, Covariant -> Covariant
-  | Contravariant, Contravariant -> Contravariant
-  | Invariant, _ | _, Invariant -> Invariant
-  | Covariant, Contravariant | Contravariant, Covariant -> Invariant
-
-(** Apply context variance to a position variance.
-    If we're in a contravariant context, flip the position variance. *)
-let apply_context_variance context_variance position_variance =
-  match context_variance with
-  | Covariant -> position_variance
-  | Contravariant -> flip_variance position_variance
-  | Invariant -> Invariant
-  | Bivariant -> Bivariant
+(** Use Variance module for operations. *)
+let flip_variance = Variance.flip
+let combine_variance = Variance.combine
+let apply_context_variance = Variance.compose
 
 (** Get the variance of type parameters for a type constructor.
 

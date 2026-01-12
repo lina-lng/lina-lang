@@ -1,0 +1,163 @@
+(* Test: Valid recursive type definitions *)
+
+(* This test verifies that well-founded recursive types compile and work correctly.
+   Recursive types must be guarded by data constructors to be valid.
+
+   VALID examples:
+   - type 'a list = Nil | Cons of 'a * 'a list  (guarded by Cons constructor)
+   - type 'a tree = Leaf of 'a | Node of 'a tree * 'a tree  (guarded by Node)
+
+   INVALID examples (would be rejected at compile time):
+   - type t = t                    (direct unguarded cycle)
+   - type t = int -> t             (cycle through arrow, not guarded)
+*)
+
+(* Standard recursive list - guarded by constructors *)
+type 'a list = Nil | Cons of 'a * 'a list
+
+let my_list = Cons (1, Cons (2, Cons (3, Nil)))
+
+let rec length = fun lst ->
+  match lst with
+  | Nil -> 0
+  | Cons (_, tail) -> 1 + length tail
+
+let len = length my_list
+let _ = print len    (* Expected: 3 *)
+
+(* Recursive tree type - guarded by Node constructor *)
+type 'a tree = Leaf of 'a | Node of 'a tree * 'a tree
+
+let my_tree = Node (
+  Node (Leaf 1, Leaf 2),
+  Leaf 3
+)
+
+let rec tree_size = fun t ->
+  match t with
+  | Leaf _ -> 1
+  | Node (left, right) -> tree_size left + tree_size right
+
+let size = tree_size my_tree
+let _ = print size    (* Expected: 3 *)
+
+(* Binary search tree with value at nodes *)
+type 'a bst = Empty | BstNode of 'a * 'a bst * 'a bst
+
+let bst = BstNode (5,
+  BstNode (3, Empty, Empty),
+  BstNode (7, Empty, Empty)
+)
+
+let rec bst_sum = fun t ->
+  match t with
+  | Empty -> 0
+  | BstNode (val_, left, right) -> val_ + bst_sum left + bst_sum right
+
+let bst_total = bst_sum bst
+let _ = print bst_total    (* Expected: 15 (5+3+7) *)
+
+(* Rose tree / N-ary tree - recursion through another recursive type *)
+(* This tests nested recursion that's still well-guarded *)
+type 'a rose = Rose of 'a * 'a rose list
+
+let rose_tree = Rose (1, Cons (
+  Rose (2, Nil),
+  Cons (
+    Rose (3, Nil),
+    Nil
+  )
+))
+
+let rec rose_sum = fun r ->
+  match r with
+  | Rose (val_, children) -> val_ + sum_children children
+
+and sum_children = fun lst ->
+  match lst with
+  | Nil -> 0
+  | Cons (child, rest) -> rose_sum child + sum_children rest
+
+let rose_total = rose_sum rose_tree
+let _ = print rose_total    (* Expected: 6 (1+2+3) *)
+
+(* Expression type - deeply recursive with multiple constructors *)
+type expr =
+  | Num of int
+  | Add of expr * expr
+  | Mul of expr * expr
+
+let expression = Add (
+  Mul (Num 2, Num 3),
+  Num 4
+)
+
+let rec eval = fun e ->
+  match e with
+  | Num n -> n
+  | Add (e1, e2) -> eval e1 + eval e2
+  | Mul (e1, e2) -> eval e1 * eval e2
+
+let result = eval expression
+let _ = print result    (* Expected: 10 ((2*3)+4) *)
+
+(* Nested option - recursion through option type *)
+type 'a nested_option = NoValue | HasValue of 'a | Nested of 'a nested_option
+
+let deep = Nested (Nested (HasValue 42))
+
+let rec get_value = fun n ->
+  match n with
+  | NoValue -> 0
+  | HasValue x -> x
+  | Nested inner -> get_value inner
+
+let extracted = get_value deep
+let _ = print extracted    (* Expected: 42 *)
+
+(* Stream-like type with lazy thunks (simulated) *)
+type 'a stream = StreamEnd | StreamNext of 'a * (unit -> 'a stream)
+
+let make_counter = fun start ->
+  let rec go = fun n ->
+    if n > 3 then StreamEnd
+    else StreamNext (n, fun _ -> go (n + 1))
+  in go start
+
+let counter = make_counter 1
+
+let rec stream_sum = fun s ->
+  match s with
+  | StreamEnd -> 0
+  | StreamNext (val_, thunk) -> val_ + stream_sum (thunk ())
+
+let stream_total = stream_sum counter
+let _ = print stream_total    (* Expected: 6 (1+2+3) *)
+
+(* JSON-like value type - multiple recursive paths *)
+type json_value =
+  | JsonNull
+  | JsonInt of int
+  | JsonArray of json_value list
+
+let json = JsonArray (Cons (
+  JsonInt 1,
+  Cons (
+    JsonArray (Cons (JsonInt 2, Cons (JsonInt 3, Nil))),
+    Nil
+  )
+))
+
+let rec count_ints = fun j ->
+  match j with
+  | JsonNull -> 0
+  | JsonInt _ -> 1
+  | JsonArray lst -> count_ints_list lst
+
+and count_ints_list = fun lst ->
+  match lst with
+  | Nil -> 0
+  | Cons (head, tail) -> count_ints head + count_ints_list tail
+
+let int_count = count_ints json
+let _ = print int_count    (* Expected: 3 *)

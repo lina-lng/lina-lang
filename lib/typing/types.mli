@@ -125,11 +125,13 @@ and builtin_type =
     (or in ML, how it affects generalization under the value restriction):
     - [Covariant]: parameter appears in output positions only
     - [Contravariant]: parameter appears in input positions only
-    - [Invariant]: parameter appears in both positions *)
+    - [Invariant]: parameter appears in both positions
+    - [Bivariant]: parameter doesn't appear (phantom type) *)
 type variance =
   | Covariant
   | Contravariant
   | Invariant
+  | Bivariant
 
 val pp_variance : Format.formatter -> variance -> unit
 val equal_variance : variance -> variance -> bool

@@ -169,3 +169,35 @@
  (modules test_value_restriction)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Variance inference tests
+(library
+ (name test_variance_infer)
+ (libraries typing common)
+ (modules test_variance_infer)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Variance operations tests
+(library
+ (name test_variance)
+ (libraries typing common)
+ (modules test_variance)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Cycle detection tests
+(library
+ (name test_cycle_check)
+ (libraries typing common)
+ (modules test_cycle_check)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Module expansion tests
+(library
+ (name test_module_expansion)
+ (libraries typing common)
+ (modules test_module_expansion)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

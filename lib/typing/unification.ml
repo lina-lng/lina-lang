@@ -90,33 +90,76 @@ and expand_row_aux visiting row =
 
 let expand_type ty = fst (expand_type_aux PathSet.empty ty)
 
-let rec occurs_check location tv ty =
+(** Enhanced occurs check with path tracking for better error messages.
+
+    When a cycle is detected, the path shows which type constructors
+    lead to the cycle, making it easier to understand the error.
+
+    @param location Source location for error messages
+    @param tv The type variable we're checking for
+    @param ty The type expression to search
+    @param path Stack of type expressions leading to current position *)
+let rec occurs_check_with_path location tv ty path =
   match representative ty with
   | TypeVariable tv' ->
-    if tv.id = tv'.id then
-      unification_error location
-        (TypeVariable tv) ty
-        "Infinite type: type variable occurs in its own definition"
-    else
+    if tv.id = tv'.id then begin
+      (* Build a readable path string showing the cycle *)
+      let path_str = String.concat " contains " (List.rev_map (fun path_ty ->
+        type_expression_to_string path_ty
+      ) path) in
+      let var_name = Printf.sprintf "'t%d" tv.id in
+      let message =
+        if path = [] then
+          Printf.sprintf
+            "Infinite type: %s occurs in its own definition"
+            var_name
+        else
+          Printf.sprintf
+            "Infinite type: %s occurs within %s\n\n\
+             This would create an infinite type. Consider using an explicit \
+             recursive type with a data constructor."
+            var_name path_str
+      in
+      unification_error location (TypeVariable tv) ty message
+    end else begin
+      (* Level adjustment for generalization *)
       if tv'.level > tv.level then tv'.level <- tv.level
+    end
+
   | TypeConstructor (_, args) ->
-    List.iter (occurs_check location tv) args
+    let new_path = ty :: path in
+    List.iter (fun arg -> occurs_check_with_path location tv arg new_path) args
+
   | TypeTuple elements ->
-    List.iter (occurs_check location tv) elements
+    let new_path = ty :: path in
+    List.iter (fun elem -> occurs_check_with_path location tv elem new_path) elements
+
   | TypeArrow (arg, result) ->
-    occurs_check location tv arg;
-    occurs_check location tv result
+    let new_path = ty :: path in
+    occurs_check_with_path location tv arg new_path;
+    occurs_check_with_path location tv result new_path
+
   | TypeRecord row ->
-    occurs_check_row location tv row
+    let new_path = ty :: path in
+    occurs_check_row_with_path location tv row new_path
+
   | TypeRowEmpty ->
     ()
 
-and occurs_check_row location tv row =
+and occurs_check_row_with_path location tv row path =
   List.iter (fun (_, field) ->
     match field with
-    | RowFieldPresent ty -> occurs_check location tv ty
+    | RowFieldPresent ty -> occurs_check_with_path location tv ty path
   ) row.row_fields;
-  occurs_check location tv row.row_more
+  occurs_check_with_path location tv row.row_more path
+
+(** Original occurs check interface - delegates to enhanced version. *)
+let occurs_check location tv ty =
+  occurs_check_with_path location tv ty []
+
+(** Row-specific occurs check for backward compatibility. *)
+let _occurs_check_row location tv row =
+  occurs_check_row_with_path location tv row []
 
 let rec unify location ty1 ty2 =
   let ty1 = representative ty1 in

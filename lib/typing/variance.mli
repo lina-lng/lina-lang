@@ -1,0 +1,98 @@
+(** Variance operations for type parameters.
+
+    This module provides operations for manipulating type parameter variances.
+    Variance describes how a type constructor relates to subtyping:
+    - Covariant (+): parameter appears in output positions only
+    - Contravariant (-): parameter appears in input positions only
+    - Invariant: parameter appears in both positions
+    - Bivariant: parameter doesn't appear (phantom type)
+
+    {2 Variance Composition Rules}
+
+    When type constructors are nested, variances compose:
+    {v
+    compose   | +    -    inv  biv
+    ----------|--------------------
+    +         | +    -    inv  biv
+    -         | -    +    inv  biv
+    inv       | inv  inv  inv  inv
+    biv       | biv  biv  inv  biv
+    v}
+
+    {2 Variance Combination Rules}
+
+    When a type variable appears in multiple positions:
+    {v
+    combine   | +    -    inv  biv
+    ----------|--------------------
+    +         | +    inv  inv  +
+    -         | inv  -    inv  -
+    inv       | inv  inv  inv  inv
+    biv       | +    -    inv  biv
+    v} *)
+
+(** Re-export the variance type from Types for convenience. *)
+type t = Types.variance =
+  | Covariant
+  | Contravariant
+  | Invariant
+  | Bivariant
+
+(** {1 Variance Operations} *)
+
+(** [flip variance] returns the flipped variance.
+    Used when entering a contravariant position (e.g., function argument).
+
+    - [flip Covariant = Contravariant]
+    - [flip Contravariant = Covariant]
+    - [flip Invariant = Invariant]
+    - [flip Bivariant = Bivariant] *)
+val flip : t -> t
+
+(** [combine v1 v2] combines two variances when a variable appears
+    in multiple positions.
+
+    The result is:
+    - Covariant if both are covariant or one is bivariant and other is covariant
+    - Contravariant if both are contravariant or one is bivariant and other is contra
+    - Invariant if variances conflict (one covariant, one contravariant)
+    - Bivariant only if both are bivariant *)
+val combine : t -> t -> t
+
+(** [compose context position] applies context variance to position variance.
+    This is used when a type variable appears inside a type constructor
+    whose parameter has a declared variance.
+
+    For example, if we have [type 'a t = ... 'a list ...] where [list] is
+    covariant, and we're checking variance in a contravariant context,
+    the effective variance is [compose Contravariant Covariant = Contravariant]. *)
+val compose : t -> t -> t
+
+(** {1 Variance Compatibility} *)
+
+(** [compatible ~impl ~decl] checks if implementation variance is compatible
+    with declared variance.
+
+    The implementation variance must be at least as restrictive as declared:
+    - Bivariant (impl) is compatible with any declaration (parameter unused)
+    - Any declaration of Bivariant accepts any implementation
+    - Covariant impl only compatible with Covariant or Bivariant decl
+    - Contravariant impl only compatible with Contravariant or Bivariant decl
+    - Invariant impl is compatible with any declaration *)
+val compatible : impl:t -> decl:t -> bool
+
+(** {1 Pretty Printing} *)
+
+(** [to_string v] returns the variance as a string annotation.
+    - Covariant: "+"
+    - Contravariant: "-"
+    - Invariant: "" (no annotation)
+    - Bivariant: "_" *)
+val to_string : t -> string
+
+(** [pp fmt v] pretty-prints a variance. *)
+val pp : Format.formatter -> t -> unit
+
+(** [to_annotation v] returns the variance as it would appear in source code.
+    Same as [to_string] but with descriptions for documentation. *)
+val to_annotation : t -> string

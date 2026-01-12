@@ -155,6 +155,19 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
   let inferred_variances = Variance_infer.infer_declaration_variances
     type_params declaration_kind in
 
+  (* Validate that explicit annotations are compatible with inferred variances *)
+  let () =
+    match Variance_infer.validate_annotations
+      ~param_names:param_names
+      ~explicit:explicit_variances
+      ~inferred:inferred_variances
+    with
+    | Ok () -> ()
+    | Error err ->
+      Compiler_error.type_error type_decl.type_location
+        (Variance_infer.format_variance_error err)
+  in
+
   (* Merge explicit annotations with inferred variances *)
   let final_variances = Variance_infer.merge_variances
     explicit_variances inferred_variances in
@@ -166,6 +179,22 @@ let process_type_declaration env (type_decl : Parsing.Syntax_tree.type_declarati
     declaration_manifest = manifest;
     declaration_kind;
   } in
+
+  (* Check for type alias cycles *)
+  let () =
+    try
+      Cycle_check.check_type_definition
+        ~env:env_with_type
+        ~loc:type_decl.type_location
+        type_decl.type_name.Location.value
+        type_params
+        declaration_kind
+        manifest
+    with Cycle_check.Cycle_detected err ->
+      Compiler_error.type_error type_decl.type_location
+        (Cycle_check.format_error err)
+  in
+
   (* Update the environment with the final declaration (replaces preliminary) *)
   let env = Environment.add_type type_decl.type_name.Location.value type_declaration env in
   let env = match declaration_kind with

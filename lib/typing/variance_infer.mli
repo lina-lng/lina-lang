@@ -85,3 +85,30 @@ val merge_variances :
   Types.variance option list ->
   Types.variance list ->
   Types.variance list
+
+(** {1 Variance Validation} *)
+
+(** Variance annotation error with details for error messages. *)
+type variance_error = {
+  param_name : string;
+  explicit_variance : Types.variance;
+  inferred_variance : Types.variance;
+}
+
+(** Validate that explicit variance annotations are compatible with inferred variances.
+
+    Returns [Ok ()] if all annotations are compatible, or [Error err] with details
+    about which parameter has an incompatible annotation.
+
+    An annotation is compatible if:
+    - The explicit variance matches the inferred variance
+    - The explicit variance is more restrictive (e.g., Invariant for any inferred)
+    - The inferred variance is Bivariant (parameter unused, any annotation OK) *)
+val validate_annotations :
+  param_names:string list ->
+  explicit:Types.variance option list ->
+  inferred:Types.variance list ->
+  (unit, variance_error) result
+
+(** Format a variance error for display. *)
+val format_variance_error : variance_error -> string

@@ -14,15 +14,26 @@ let module_type_lookup_ref : (path -> Module_types.module_type option) ref = ref
 (** Set the module type lookup function *)
 let set_module_type_lookup f = module_type_lookup_ref := f
 
-(** Expand a ModTypeIdent to its definition if available *)
-let rec expand_module_type mty =
-  match mty with
-  | Module_types.ModTypeIdent path ->
-    begin match !module_type_lookup_ref path with
-    | Some expanded_mty -> expand_module_type expanded_mty
-    | None -> mty  (* Can't expand - leave as is *)
-    end
-  | _ -> mty
+(** Create an expansion state from the current lookup function. *)
+let create_expansion_state () =
+  Module_expansion.create_state ~env_lookup:!module_type_lookup_ref
+
+(** Expand a ModTypeIdent to its definition if available.
+
+    Uses the robust Module_expansion module for cycle detection and
+    better error handling. Falls back to the unexpanded type if expansion fails. *)
+let expand_module_type mty =
+  let state = create_expansion_state () in
+  match Module_expansion.try_expand state mty with
+  | Some expanded -> expanded
+  | None -> mty  (* Can't expand - leave as is *)
+
+(** Expand module type, raising on cycle detection.
+
+    Use this when you want to catch and report expansion errors. *)
+let _expand_module_type_exn mty =
+  let state = create_expansion_state () in
+  Module_expansion.expand state mty
 
 (** Module strengthening: Makes abstract types concrete by binding them
     to their path. This ensures that `module N = M` makes N.t = M.t. *)

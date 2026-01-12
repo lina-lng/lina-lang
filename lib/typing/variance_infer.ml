@@ -28,13 +28,19 @@ let flip_variance = function
   | Covariant -> Contravariant
   | Contravariant -> Covariant
   | Invariant -> Invariant
+  | Bivariant -> Bivariant
 
 (** Combine two variances when a variable appears in multiple positions. *)
 let combine_variance variance1 variance2 =
   match variance1, variance2 with
+  (* Bivariant is the identity for combination *)
+  | Bivariant, other | other, Bivariant -> other
+  (* Same variance stays the same *)
   | Covariant, Covariant -> Covariant
   | Contravariant, Contravariant -> Contravariant
+  (* Invariant absorbs everything *)
   | Invariant, _ | _, Invariant -> Invariant
+  (* Conflicting variances become invariant *)
   | Covariant, Contravariant | Contravariant, Covariant -> Invariant
 
 (** Apply context variance to a position variance.
@@ -44,6 +50,7 @@ let apply_variance declared_variance actual_variance =
   | Covariant -> actual_variance
   | Contravariant -> flip_variance actual_variance
   | Invariant -> Invariant
+  | Bivariant -> Bivariant
 
 (** Get the declared variances for a type constructor's parameters.
 
@@ -184,8 +191,8 @@ let infer_declaration_variances
             | Some v1, Some v2 -> Some (combine_variance v1 v2)
         ) None constructors
       in
-      (* If the parameter doesn't appear, it's bivariant, which we treat as covariant *)
-      Option.value variance_from_ctors ~default:Covariant
+      (* If the parameter doesn't appear, it's bivariant (phantom type) *)
+      Option.value variance_from_ctors ~default:Bivariant
     ) params
 
   | DeclarationRecord fields ->
@@ -199,8 +206,8 @@ let infer_declaration_variances
           | Some v1, Some v2 -> Some (combine_variance v1 v2)
         ) None fields
       in
-      (* If the parameter doesn't appear, it's bivariant, which we treat as covariant *)
-      Option.value variance_from_fields ~default:Covariant
+      (* If the parameter doesn't appear, it's bivariant (phantom type) *)
+      Option.value variance_from_fields ~default:Bivariant
     ) params
 
 (** Merge explicit variance annotations with inferred variances.
@@ -219,3 +226,90 @@ let merge_variances
     | Some v -> v  (* Explicit annotation takes precedence *)
     | None -> inf  (* Fall back to inferred *)
   ) explicit inferred
+
+(** Check if an explicit variance annotation is compatible with inferred variance.
+
+    The explicit annotation must be at least as restrictive as the inferred variance:
+    - Bivariant (inferred) is compatible with any annotation (parameter unused)
+    - Invariant (inferred) requires Invariant annotation (or none)
+    - Covariant (inferred) is compatible with Covariant or Invariant annotation
+    - Contravariant (inferred) is compatible with Contravariant or Invariant annotation *)
+let is_annotation_compatible ~explicit ~inferred =
+  match explicit, inferred with
+  (* Bivariant inferred: parameter unused, any annotation is fine *)
+  | _, Bivariant -> true
+  (* No explicit annotation is always compatible (we use inferred) *)
+  | None, _ -> true
+  (* Same variance is compatible *)
+  | Some Covariant, Covariant -> true
+  | Some Contravariant, Contravariant -> true
+  | Some Invariant, Invariant -> true
+  (* Invariant annotation is compatible with any inferred variance
+     (more restrictive than needed is OK) *)
+  | Some Invariant, _ -> true
+  (* Bivariant annotation is only OK for bivariant inferred (handled above)
+     or covariant/contravariant (declaring phantom is OK) *)
+  | Some Bivariant, (Covariant | Contravariant) -> true
+  (* Bivariant annotation is NOT compatible with Invariant inferred
+     (can't declare phantom if parameter is used in both positions) *)
+  | Some Bivariant, Invariant -> false
+  (* Covariant annotation requires covariant or bivariant inferred *)
+  | Some Covariant, (Contravariant | Invariant) -> false
+  (* Contravariant annotation requires contravariant or bivariant inferred *)
+  | Some Contravariant, (Covariant | Invariant) -> false
+
+(** Variance annotation error with details for error messages. *)
+type variance_error = {
+  param_name : string;
+  explicit_variance : variance;
+  inferred_variance : variance;
+}
+
+(** Validate that explicit variance annotations are compatible with inferred variances.
+
+    @param param_names Names of type parameters for error messages
+    @param explicit Optional explicit variances from the source
+    @param inferred Inferred variances from the definition
+    @return [Ok ()] if all annotations are compatible, or [Error err] with details *)
+let validate_annotations
+    ~(param_names : string list)
+    ~(explicit : variance option list)
+    ~(inferred : variance list)
+  : (unit, variance_error) result =
+  let rec check names expls infs =
+    match names, expls, infs with
+    | [], [], [] -> Ok ()
+    | name :: rest_names, exp :: rest_exp, inf :: rest_inf ->
+      if is_annotation_compatible ~explicit:exp ~inferred:inf then
+        check rest_names rest_exp rest_inf
+      else begin
+        match exp with
+        | Some explicit_v ->
+          Error { param_name = name; explicit_variance = explicit_v; inferred_variance = inf }
+        | None ->
+          (* Should not happen since no annotation is always compatible *)
+          check rest_names rest_exp rest_inf
+      end
+    | _ ->
+      (* Length mismatch - should not happen with well-formed inputs *)
+      Ok ()
+  in
+  check param_names explicit inferred
+
+(** Format a variance error for display. *)
+let format_variance_error (err : variance_error) : string =
+  let explicit_str = match err.explicit_variance with
+    | Covariant -> "covariant (+)"
+    | Contravariant -> "contravariant (-)"
+    | Invariant -> "invariant"
+    | Bivariant -> "bivariant (_)"
+  in
+  let inferred_str = match err.inferred_variance with
+    | Covariant -> "covariant (output position only)"
+    | Contravariant -> "contravariant (input position only)"
+    | Invariant -> "invariant (both input and output positions)"
+    | Bivariant -> "bivariant (unused)"
+  in
+  Printf.sprintf
+    "Type parameter '%s is declared as %s but is used as %s in the definition"
+    err.param_name explicit_str inferred_str

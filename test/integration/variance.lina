@@ -1,0 +1,126 @@
+(* Test: Variance inference and type system behavior *)
+
+(* This test verifies that variance is correctly inferred for type parameters
+   and that the type system behaves correctly with variant types. *)
+
+(* Covariant type: 'a only appears in output positions *)
+type 'a box = Box of 'a
+
+(* Use a covariant type - should work with any types *)
+let int_box = Box 42
+let int_box2 = Box 100
+
+(* Extract values from boxes *)
+let unbox = fun b -> match b with Box x -> x
+let v1 = unbox int_box
+let v2 = unbox int_box2
+let _ = print v1    (* Expected: 42 *)
+let _ = print v2    (* Expected: 100 *)
+
+(* Covariant option type *)
+type 'a option = None | Some of 'a
+
+let some_int = Some 100
+let some_int2 = Some 200
+let none_val = None
+
+(* Use uncurried style to avoid curried function application issue *)
+let get_or_default_int = fun opt ->
+  match opt with
+  | None -> 0
+  | Some x -> x
+
+let w1 = get_or_default_int some_int
+let w2 = get_or_default_int some_int2
+let _ = print w1    (* Expected: 100 *)
+let _ = print w2    (* Expected: 200 *)
+
+(* List type - covariant in element type *)
+type 'a list = Nil | Cons of 'a * 'a list
+
+let empty_list = Nil
+let int_list = Cons (1, Cons (2, Cons (3, Nil)))
+let int_list2 = Cons (10, Cons (20, Nil))
+
+(* Polymorphic list functions *)
+let rec length = fun lst ->
+  match lst with
+  | Nil -> 0
+  | Cons (_, tail) -> 1 + length tail
+
+let len1 = length int_list
+let len2 = length int_list2
+let len3 = length empty_list
+let _ = print len1    (* Expected: 3 *)
+let _ = print len2    (* Expected: 2 *)
+let _ = print len3    (* Expected: 0 *)
+
+(* Sum function for list of ints *)
+let rec sum_list = fun lst ->
+  match lst with
+  | Nil -> 0
+  | Cons (hd, tl) -> hd + sum_list tl
+
+let s1 = sum_list int_list
+let _ = print s1    (* Expected: 6 (1+2+3) *)
+
+(* Either type - both parameters are covariant *)
+type ('a, 'b) either = Left of 'a | Right of 'b
+
+let left_int = Left 42
+let right_int = Right 999
+
+let get_left_int = fun e ->
+  match e with
+  | Left x -> x
+  | Right _ -> 0
+
+let e1 = get_left_int left_int
+let e2 = get_left_int right_int
+let _ = print e1    (* Expected: 42 *)
+let _ = print e2    (* Expected: 0 *)
+
+(* Tree type - 'a is covariant (appears in data positions) *)
+type 'a tree = Leaf of 'a | Node of 'a tree * 'a tree
+
+let small_tree = Node (Leaf 1, Leaf 2)
+let big_tree = Node (small_tree, Leaf 3)
+
+let rec tree_sum = fun t ->
+  match t with
+  | Leaf x -> x
+  | Node (left, right) -> tree_sum left + tree_sum right
+
+let ts = tree_sum big_tree
+let _ = print ts    (* Expected: 6 (1+2+3) *)
+
+(* Phantom type - parameter doesn't appear in constructors *)
+type 'a phantom = Phantom of int
+
+let phantom_int = Phantom 100
+let phantom_int2 = Phantom 200
+
+let get_phantom_value = fun p ->
+  match p with
+  | Phantom x -> x
+
+let p1 = get_phantom_value phantom_int
+let p2 = get_phantom_value phantom_int2
+let _ = print p1    (* Expected: 100 *)
+let _ = print p2    (* Expected: 200 *)
+
+(* Test function types *)
+let add5 = fun x -> x + 5
+let add10 = fun x -> add5 (add5 x)
+let result = add10 10
+let _ = print result    (* Expected: 20 (10+5+5) *)
+
+(* Nested type applications *)
+let nested_opt = Some (Some 42)
+let inner = match nested_opt with
+  | None -> None
+  | Some x -> x
+let final = match inner with
+  | None -> 0
+  | Some x -> x
+let _ = print final    (* Expected: 42 *)
