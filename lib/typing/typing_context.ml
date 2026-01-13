@@ -57,32 +57,7 @@ let type_lookup ctx path =
   Environment.find_type_by_path path ctx.env
 
 let module_type_lookup ctx path =
-  match path with
-  | Types.PathLocal name ->
-    begin match Environment.find_module_type name ctx.env with
-    | Some (Some mty) -> Some mty
-    | _ -> None
-    end
-  | Types.PathIdent id ->
-    begin match Environment.find_module_type (Common.Identifier.name id) ctx.env with
-    | Some (Some mty) -> Some mty
-    | _ -> None
-    end
-  | Types.PathDot (parent_path, name) ->
-    begin match Environment.find_module_by_path parent_path ctx.env with
-    | Some binding ->
-      begin match binding.Module_types.binding_type with
-      | Module_types.ModTypeSig sig_ ->
-        begin match Module_types.find_module_type_in_sig name sig_ with
-        | Some (Some mty) -> Some mty
-        | _ -> None
-        end
-      | _ -> None
-      end
-    | None -> None
-    end
-  | Types.PathBuiltin _ | Types.PathApply _ ->
-    None
+  Environment.find_module_type_by_path path ctx.env
 
 (* Type Scheme Operations *)
 

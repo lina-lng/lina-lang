@@ -23,7 +23,7 @@ type constant =
   | ConstantBool of bool
   | ConstantUnit
 
-type construconstructor_tag_index = {
+type constructor_tag_index = {
   tag_name : string;
   tag_index : int;
   tag_type_name : string;
@@ -43,7 +43,7 @@ type lambda =
   | LambdaMakeBlock of int * lambda list
   | LambdaGetField of int * lambda
   | LambdaSwitch of lambda * switch_case list * lambda option
-  | LambdaConstructor of construconstructor_tag_index * lambda option
+  | LambdaConstructor of constructor_tag_index * lambda option
   | LambdaMakeRecord of (string * lambda) list
   | LambdaGetRecordField of string * lambda
   | LambdaRecordUpdate of lambda * (string * lambda) list
@@ -61,14 +61,18 @@ type lambda =
 
 and module_binding = {
   mb_id : Identifier.t;  (** Original identifier for internal references *)
-  mb_name : string;
-  mb_value : lambda;
+  mb_value : lambda;     (** Bound value *)
 }
 
 and switch_case = {
   switch_tag : int;
   switch_body : lambda;
 }
+
+(** Get the binding name for a module binding.
+    This is the name used for the module field in generated code. *)
+let module_binding_name (binding : module_binding) : string =
+  Identifier.name binding.mb_id
 
 let primitive_of_operator = function
   | "+" -> Some PrimitiveAddInt
@@ -90,6 +94,16 @@ let translate_constant = function
   | Parsing.Syntax_tree.ConstantString s -> ConstantString s
   | Parsing.Syntax_tree.ConstantBoolean b -> ConstantBool b
   | Parsing.Syntax_tree.ConstantUnit -> ConstantUnit
+
+(** Create a lambda expression wrapping an FFI call.
+    For arity 0, returns the FFI call directly.
+    For arity > 0, wraps it in a function taking the required arguments. *)
+let make_ffi_wrapper (spec : Typing_ffi.Types.ffi_spec) : lambda =
+  let arity = spec.ffi_arity in
+  let arg_ids = List.init arity (fun index -> Identifier.create (Printf.sprintf "arg%d" index)) in
+  let arg_vars = List.map (fun id -> LambdaVariable id) arg_ids in
+  let ffi_call = LambdaExternalCall (spec, arg_vars) in
+  if arity = 0 then ffi_call else LambdaFunction (arg_ids, ffi_call)
 
 (* --- Decision tree translation to Lambda IR --- *)
 
@@ -335,7 +349,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
         let field_refs = List.filter_map (fun (binding : typed_binding) ->
           match binding.binding_pattern.pattern_desc with
           | TypedPatternVariable id ->
-            Some { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaVariable id }
+            Some { mb_id = id; mb_value = LambdaVariable id }
           | _ -> None
         ) bindings in
         (* For recursive bindings, we need to wrap them with LambdaLetRecursive *)
@@ -355,7 +369,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
       | TypedStructureModule (name_id, inner_mexpr) ->
         let value = translate_module_expression inner_mexpr in
         let new_local = `Single (name_id, value) in
-        let new_field = { mb_id = name_id; mb_name = Identifier.name name_id; mb_value = LambdaVariable name_id } in
+        let new_field = { mb_id = name_id; mb_value = LambdaVariable name_id } in
         process rest (new_local :: local_bindings) (new_field :: module_fields)
       | TypedStructureOpen (module_path, opened_bindings) ->
         let module_expr = translate_module_path module_path in
@@ -363,7 +377,7 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
           `Single (id, LambdaModuleAccess (module_expr, name))
         ) opened_bindings in
         let new_fields = List.map (fun (_name, id) ->
-          { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaVariable id }
+          { mb_id = id; mb_value = LambdaVariable id }
         ) opened_bindings in
         process rest (List.rev_append new_locals local_bindings) (List.rev_append new_fields module_fields)
       | TypedStructureInclude (mexpr, included_bindings) ->
@@ -376,19 +390,13 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
           `Single (id, LambdaModuleAccess (LambdaVariable temp_id, name))
         ) included_bindings in
         let new_fields = List.map (fun (_name, id) ->
-          { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaVariable id }
+          { mb_id = id; mb_value = LambdaVariable id }
         ) included_bindings in
         process rest (List.rev_append new_locals (temp_binding :: local_bindings)) (List.rev_append new_fields module_fields)
       | TypedStructureExternal ext ->
-        (* Generate a function that wraps the FFI call:
-           function(arg0, arg1, ...) return LambdaExternalCall(spec, [arg0, arg1, ...]) end *)
-        let arity = ext.external_spec.Typing_ffi.Types.ffi_arity in
-        let arg_ids = List.init arity (fun i -> Identifier.create (Printf.sprintf "arg%d" i)) in
-        let arg_vars = List.map (fun id -> LambdaVariable id) arg_ids in
-        let ffi_call = LambdaExternalCall (ext.external_spec, arg_vars) in
-        let func = if arity = 0 then ffi_call else LambdaFunction (arg_ids, ffi_call) in
+        let func = make_ffi_wrapper ext.external_spec in
         let new_local = `Single (ext.external_id, func) in
-        let new_field = { mb_id = ext.external_id; mb_name = Identifier.name ext.external_id; mb_value = LambdaVariable ext.external_id } in
+        let new_field = { mb_id = ext.external_id; mb_value = LambdaVariable ext.external_id } in
         process rest (new_local :: local_bindings) (new_field :: module_fields)
   in
   process structure [] []
@@ -428,9 +436,8 @@ and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : mo
       List.filter_map (fun (binding : typed_binding) ->
         match binding.binding_pattern.pattern_desc with
         | TypedPatternVariable id ->
-          let name = Identifier.name id in
           let value = translate_expression binding.binding_expression in
-          Some { mb_id = id; mb_name = name; mb_value = value }
+          Some { mb_id = id; mb_value = value }
         | _ -> None
       ) bindings
     | TypedStructureType _ ->
@@ -439,28 +446,23 @@ and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : mo
       []  (* Module types don't contribute runtime values *)
     | TypedStructureModule (name_id, inner_mexpr) ->
       let value = translate_module_expression inner_mexpr in
-      [{ mb_id = name_id; mb_name = Identifier.name name_id; mb_value = value }]
+      [{ mb_id = name_id; mb_value = value }]
     | TypedStructureOpen (module_path, opened_bindings) ->
       (* Generate local bindings for opened values: local add = Math.add *)
       let module_expr = translate_module_path module_path in
       List.map (fun (name, id) ->
-        { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaModuleAccess (module_expr, name) }
+        { mb_id = id; mb_value = LambdaModuleAccess (module_expr, name) }
       ) opened_bindings
     | TypedStructureInclude (mexpr, included_bindings) ->
       (* For include inside a module, we inline the module's values directly *)
       (* Each included value becomes a field that accesses the included module *)
       let translated_mexpr = translate_module_expression mexpr in
       List.map (fun (name, id) ->
-        { mb_id = id; mb_name = Identifier.name id; mb_value = LambdaModuleAccess (translated_mexpr, name) }
+        { mb_id = id; mb_value = LambdaModuleAccess (translated_mexpr, name) }
       ) included_bindings
     | TypedStructureExternal ext ->
-      (* Generate a function that wraps the FFI call *)
-      let arity = ext.external_spec.Typing_ffi.Types.ffi_arity in
-      let arg_ids = List.init arity (fun i -> Identifier.create (Printf.sprintf "arg%d" i)) in
-      let arg_vars = List.map (fun id -> LambdaVariable id) arg_ids in
-      let ffi_call = LambdaExternalCall (ext.external_spec, arg_vars) in
-      let func = if arity = 0 then ffi_call else LambdaFunction (arg_ids, ffi_call) in
-      [{ mb_id = ext.external_id; mb_name = Identifier.name ext.external_id; mb_value = func }]
+      let func = make_ffi_wrapper ext.external_spec in
+      [{ mb_id = ext.external_id; mb_value = func }]
   ) structure
 
 and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
@@ -657,12 +659,7 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
     module_binding :: value_bindings
 
   | TypedStructureExternal ext ->
-    (* Generate a function that wraps the FFI call *)
-    let arity = ext.external_spec.Typing_ffi.Types.ffi_arity in
-    let arg_ids = List.init arity (fun i -> Identifier.create (Printf.sprintf "arg%d" i)) in
-    let arg_vars = List.map (fun id -> LambdaVariable id) arg_ids in
-    let ffi_call = LambdaExternalCall (ext.external_spec, arg_vars) in
-    let func = if arity = 0 then ffi_call else LambdaFunction (arg_ids, ffi_call) in
+    let func = make_ffi_wrapper ext.external_spec in
     [LambdaLet (ext.external_id, func, LambdaConstant ConstantUnit)]
 
 let translate_structure structure =

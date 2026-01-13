@@ -57,7 +57,7 @@ type constant =
 
     Tags are integers used for efficient pattern matching via dispatch tables
     or numeric comparisons. *)
-type construconstructor_tag_index = {
+type constructor_tag_index = {
   tag_name : string;       (** Constructor name (e.g., "Some") *)
   tag_index : int;         (** Numeric tag (0-based within type) *)
   tag_type_name : string;  (** Parent type name (e.g., "option") *)
@@ -95,7 +95,7 @@ type lambda =
       (** Tuple field access (0-based index) *)
   | LambdaSwitch of lambda * switch_case list * lambda option
       (** Switch on integer tag: [switch scrutinee { cases } default] *)
-  | LambdaConstructor of construconstructor_tag_index * lambda option
+  | LambdaConstructor of constructor_tag_index * lambda option
       (** Variant constructor: [Tag] or [Tag(arg)] *)
   | LambdaMakeRecord of (string * lambda) list
       (** Record literal: [{x = e1; y = e2}] *)
@@ -123,8 +123,7 @@ type lambda =
 (** Module binding in a module expression. *)
 and module_binding = {
   mb_id : Common.Identifier.t;  (** Original identifier for internal references *)
-  mb_name : string;    (** Binding name (external module field name) *)
-  mb_value : lambda;   (** Bound value *)
+  mb_value : lambda;            (** Bound value *)
 }
 
 (** A case in a switch expression. *)
@@ -132,6 +131,12 @@ and switch_case = {
   switch_tag : int;    (** Tag to match *)
   switch_body : lambda;  (** Body to execute on match *)
 }
+
+(** {1 Helper Functions} *)
+
+(** Get the binding name for a module binding.
+    This is the name used for the module field in generated code. *)
+val module_binding_name : module_binding -> string
 
 (** {1 Translation} *)
 

@@ -136,6 +136,16 @@ val add_module_type : string -> Module_types.module_type option -> t -> t
             [None] if not found *)
 val find_module_type : string -> t -> Module_types.module_type option option
 
+(** [find_module_type_by_path path env] looks up a module type by path.
+
+    Handles qualified paths like [M.S] by looking up module [M]
+    and then finding module type [S] in its signature.
+
+    @param path The module type path
+    @param env The environment to search
+    @return [Some mty] if found and concrete, [None] if not found or abstract *)
+val find_module_type_by_path : Types.path -> t -> Module_types.module_type option
+
 (** [find_module_by_path path env] looks up a module by path.
 
     Handles qualified paths like [M.N] by traversing module signatures.

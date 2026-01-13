@@ -83,49 +83,7 @@ let instantiate_constructor_with_ctx ctx ctor =
     Handles both simple paths (PathIdent) and qualified paths (PathDot). *)
 let make_module_type_lookup ctx =
   let env = Typing_context.environment ctx in
-  let rec lookup_mty_by_path path =
-    match path with
-    | Types.PathIdent id ->
-      (* Simple module type name - look up directly in environment *)
-      begin match Environment.find_module_type (Identifier.name id) env with
-      | Some (Some mty) -> Some mty
-      | Some None -> None  (* Abstract - can't expand *)
-      | None -> None  (* Not found *)
-      end
-    | Types.PathDot (base_path, name) ->
-      (* Qualified path like M.S - resolve module path, then find in signature *)
-      begin match lookup_module_by_path base_path with
-      | Some (Module_types.ModTypeSig sig_) ->
-        begin match Module_types.find_module_type_in_sig name sig_ with
-        | Some (Some mty) -> Some mty
-        | Some None -> None  (* Abstract *)
-        | None -> None  (* Not found in signature *)
-        end
-      | _ -> None
-      end
-    | Types.PathLocal name ->
-      (* Local module type name - look up directly *)
-      begin match Environment.find_module_type name env with
-      | Some (Some mty) -> Some mty
-      | _ -> None
-      end
-    | _ -> None
-  and lookup_module_by_path path =
-    match path with
-    | Types.PathIdent id ->
-      begin match Environment.find_module (Identifier.name id) env with
-      | Some binding -> Some binding.Module_types.binding_type
-      | None -> None
-      end
-    | Types.PathDot (base_path, name) ->
-      begin match lookup_module_by_path base_path with
-      | Some (Module_types.ModTypeSig sig_) ->
-        Module_types.find_module_in_sig name sig_
-      | _ -> None
-      end
-    | _ -> None
-  in
-  lookup_mty_by_path
+  fun path -> Environment.find_module_type_by_path path env
 
 (** Create a signature matching context from a typing context. *)
 let make_match_context ctx =

@@ -147,6 +147,36 @@ and find_module_in_module_type name mty =
   | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
     None
 
+(** Look up a module type definition by path.
+    Returns [Some mty] if found and concrete, [None] if not found or abstract. *)
+let find_module_type_by_path path env =
+  match path with
+  | Types.PathLocal name ->
+    begin match find_module_type name env with
+    | Some (Some mty) -> Some mty
+    | _ -> None
+    end
+  | Types.PathIdent id ->
+    begin match find_module_type (Identifier.name id) env with
+    | Some (Some mty) -> Some mty
+    | _ -> None
+    end
+  | Types.PathDot (parent_path, name) ->
+    begin match find_module_by_path parent_path env with
+    | Some binding ->
+      begin match binding.Module_types.binding_type with
+      | Module_types.ModTypeSig sig_ ->
+        begin match Module_types.find_module_type_in_sig name sig_ with
+        | Some (Some mty) -> Some mty
+        | _ -> None
+        end
+      | _ -> None
+      end
+    | None -> None
+    end
+  | Types.PathBuiltin _ | Types.PathApply _ ->
+    None
+
 (* Iteration functions for LSP features *)
 
 let fold_values f env acc =

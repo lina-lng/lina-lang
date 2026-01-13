@@ -252,7 +252,7 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     (* Module as a Lua table with named fields *)
     let fields, ctx = List.fold_left (fun (acc, ctx) (binding : Lambda.module_binding) ->
       let translated, ctx = translate_expression ctx binding.mb_value in
-      (FieldNamed (binding.mb_name, translated) :: acc, ctx)
+      (FieldNamed (Lambda.module_binding_name binding, translated) :: acc, ctx)
     ) ([], ctx) bindings in
     (ExpressionTable (List.rev fields), ctx)
 
@@ -448,15 +448,15 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
   | Lambda.LambdaLetRecursive (bindings, body) ->
     let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
     let forward_decl = StatementLocal (names, []) in
-    let assignments, ctx =
+    let rev_assignments, ctx =
       List.fold_left (fun (acc, ctx) (id, value) ->
         let name = mangle_identifier id in
         let value_expr, ctx = translate_expression ctx value in
-        (acc @ [StatementAssign ([LvalueVariable name], [value_expr])], ctx)
+        (StatementAssign ([LvalueVariable name], [value_expr]) :: acc, ctx)
       ) ([], ctx) bindings
     in
     let rest, ctx = translate_to_statements ctx body in
-    (forward_decl :: assignments @ rest, ctx)
+    (forward_decl :: List.rev_append rev_assignments rest, ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
     let cond_expr, ctx = translate_expression ctx cond in
@@ -480,14 +480,15 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
       let stmts, ctx = translate_switch_as_dispatch ctx temp_name tag_access cases default in
       (local_stmt :: stmts, ctx)
     else
-      let branches, ctx =
+      let rev_branches, ctx =
         List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
           let body, ctx = translate_to_statements ctx case.switch_body in
           let cond = ExpressionBinaryOp (OpEqual, tag_access,
             ExpressionNumber (float_of_int case.switch_tag)) in
-          (acc @ [(cond, body)], ctx)
+          ((cond, body) :: acc, ctx)
         ) ([], ctx) cases
       in
+      let branches = List.rev rev_branches in
       let default_stmts, ctx = match default with
         | Some d ->
           let stmts, ctx = translate_to_statements ctx d in
@@ -506,11 +507,12 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
       [ExpressionCall (ExpressionVariable "pairs", [base_expr])],
       [StatementAssign ([LvalueIndex (ExpressionVariable result_name, ExpressionVariable key_name)],
                         [ExpressionVariable value_name])]) in
-    let update_stmts, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
+    let rev_update_stmts, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
       let translated, ctx = translate_expression ctx field_value in
-      (acc @ [StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
-                              [translated])], ctx)
+      (StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
+                        [translated]) :: acc, ctx)
     ) ([], ctx) update_fields in
+    let update_stmts = List.rev rev_update_stmts in
     (copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]], ctx)
 
   | _ ->
@@ -543,15 +545,15 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
   | Lambda.LambdaLetRecursive (bindings, body) ->
     let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
     let forward_decl = StatementLocal (names, []) in
-    let assignments, ctx =
+    let rev_assignments, ctx =
       List.fold_left (fun (acc, ctx) (id, value) ->
         let name = mangle_identifier id in
         let value_expr, ctx = translate_expression ctx value in
-        (acc @ [StatementAssign ([LvalueVariable name], [value_expr])], ctx)
+        (StatementAssign ([LvalueVariable name], [value_expr]) :: acc, ctx)
       ) ([], ctx) bindings
     in
     let rest, ctx = translate_to_effect ctx body in
-    (forward_decl :: assignments @ rest, ctx)
+    (forward_decl :: List.rev_append rev_assignments rest, ctx)
 
   | _ ->
     let expr, ctx = translate_expression ctx lambda in
@@ -611,7 +613,7 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
       (* Use the original identifier so references between bindings work *)
       let binding_var = mangle_identifier binding.mb_id in
       let inner_stmts, ctx = generate_top_level_binding ctx binding_var binding.mb_value in
-      (stmts @ inner_stmts, (binding.mb_name, binding_var) :: names, ctx)
+      (stmts @ inner_stmts, (Lambda.module_binding_name binding, binding_var) :: names, ctx)
     ) ([], [], ctx) bindings in
     let binding_names = List.rev binding_names in
     (* Create table with references to the local variables *)
@@ -635,7 +637,7 @@ let generate_top_level ctx (lambda : Lambda.lambda) : block * context =
   | Lambda.LambdaLetRecursive (bindings, Lambda.LambdaConstant Lambda.ConstantUnit) ->
     let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
     let forward_decl = StatementLocal (names, []) in
-    let function_defs, ctx =
+    let rev_function_defs, ctx =
       List.fold_left (fun (acc, ctx) (id, value) ->
         let name = mangle_identifier id in
         match value with
@@ -644,14 +646,14 @@ let generate_top_level ctx (lambda : Lambda.lambda) : block * context =
           let body_stmts, ctx = translate_to_statements ctx body in
           let stmt = StatementAssign ([LvalueVariable name],
             [ExpressionFunction (param_names, body_stmts)]) in
-          (acc @ [stmt], ctx)
+          (stmt :: acc, ctx)
         | _ ->
           let value_expr, ctx = translate_expression ctx value in
           let stmt = StatementAssign ([LvalueVariable name], [value_expr]) in
-          (acc @ [stmt], ctx)
+          (stmt :: acc, ctx)
       ) ([], ctx) bindings
     in
-    (forward_decl :: function_defs, ctx)
+    (forward_decl :: List.rev rev_function_defs, ctx)
 
   | _ ->
     translate_to_effect ctx lambda
