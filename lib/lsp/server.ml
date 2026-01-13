@@ -66,6 +66,13 @@ class lina_server =
     (** Enable go-to-definition. *)
     method! config_definition = Some (`Bool true)
 
+    (** Enable code actions. *)
+    method! config_code_action_provider =
+      `CodeActionOptions
+        (CodeActionOptions.create
+           ~codeActionKinds:[ CodeActionKind.QuickFix ]
+           ())
+
     (** Advertise formatting and semantic tokens capabilities. *)
     method! config_modify_capabilities caps =
       let legend =
@@ -271,6 +278,8 @@ class lina_server =
                 let tokens = Lsp_semantic_tokens.collect_tokens typed_ast in
                 let data = Lsp_semantic_tokens.encode_tokens tokens in
                 Some (SemanticTokens.create ~data:(Array.of_list data) ()))
+        | Lsp.Client_request.CodeAction params ->
+            Lsp_code_actions.get_code_actions params
         | _ ->
             super#on_request_unhandled ~notify_back ~id req
   end

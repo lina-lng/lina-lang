@@ -200,6 +200,20 @@ let fold_constructors f env acc =
 let fold_modules f env acc =
   StringMap.fold f env.modules acc
 
+(** [polymorphic_print_type] creates the type scheme ['a -> unit] for print.
+    The type variable is created at generic level so it can be instantiated
+    to any type. *)
+let polymorphic_print_type =
+  (* Create a type variable at generic level for polymorphism *)
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ -> failwith "new_type_variable_at_level must return TypeVariable"
+  in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (TypeVariable alpha, type_unit);
+  }
+
 let initial =
   let env = empty in
   let env = add_builtin "+" binary_int_op_type env in
@@ -212,5 +226,5 @@ let initial =
   let env = add_builtin ">=" comparison_int_type env in
   let env = add_builtin "==" comparison_int_type env in
   let env = add_builtin "!=" comparison_int_type env in
-  let env = add_builtin "print" (trivial_scheme (TypeArrow (type_int, type_unit))) env in
+  let env = add_builtin "print" polymorphic_print_type env in
   env

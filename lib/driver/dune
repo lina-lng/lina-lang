@@ -1,4 +1,4 @@
 (library
  (name driver)
  (public_name lina.driver)
- (libraries common parsing typing lambda lua))
+ (libraries common parsing typing lambda lua yojson unix toml))

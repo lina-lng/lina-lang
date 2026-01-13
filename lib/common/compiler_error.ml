@@ -100,3 +100,135 @@ let report_warning fmt { warning; warning_location = loc } =
 
 let report_warning_to_string w =
   Format.asprintf "%a" report_warning w
+
+(** Report a warning as an error (for warnings promoted to errors). *)
+let report_warning_as_error fmt { warning; warning_location = loc } =
+  if Location.is_none loc then
+    Format.fprintf fmt "@[<v>Error: %s@]" (warning_to_string warning)
+  else
+    Format.fprintf fmt "@[<v>File \"%s\", line %d, characters %d-%d:@,Error: %s@]"
+      loc.start_pos.filename
+      loc.start_pos.line
+      loc.start_pos.column
+      loc.end_pos.column
+      (warning_to_string warning)
+
+let report_warning_as_error_to_string w =
+  Format.asprintf "%a" report_warning_as_error w
+
+(* Enhanced Diagnostic System *)
+
+type severity =
+  | Error
+  | Warning
+  | Info
+  | Hint
+
+type applicability =
+  | MachineApplicable
+  | MaybeIncorrect
+  | HasPlaceholders
+  | Unspecified
+
+type suggestion = {
+  suggestion_message : string;
+  replacement : string;
+  suggestion_span : Location.t;
+  applicability : applicability;
+}
+
+type label = {
+  label_span : Location.t;
+  label_message : string option;
+  is_primary : bool;
+}
+
+type diagnostic = {
+  severity : severity;
+  code : Error_code.t option;
+  message : string;
+  labels : label list;
+  notes : string list;
+  suggestions : suggestion list;
+}
+
+let make_diagnostic ~severity ~message ?code ?(labels = []) ?(notes = [])
+    ?(suggestions = []) () =
+  { severity; code; message; labels; notes; suggestions }
+
+let code_of_kind = function
+  | LexerError _ -> Error_code.e_lexer_error
+  | ParserError _ -> Error_code.e_syntax_error
+  | TypeError _ -> Error_code.e_type_mismatch
+  | InternalError _ -> Error_code.e_type_mismatch
+
+let diagnostic_of_error err =
+  let label = {
+    label_span = err.location;
+    label_message = None;
+    is_primary = true;
+  } in
+  let labels = if Location.is_none err.location then [] else [label] in
+  {
+    severity = Error;
+    code = Some (code_of_kind err.kind);
+    message = kind_message err.kind;
+    labels;
+    notes = err.hints;
+    suggestions = [];
+  }
+
+let warning_code_of_warning = function
+  | NonExhaustiveMatch _ -> Error_code.w_non_exhaustive
+  | RedundantPattern -> Error_code.w_redundant_pattern
+
+(** Get the error code for a warning_info. *)
+let warning_code { warning; _ } = warning_code_of_warning warning
+
+let diagnostic_of_warning { warning; warning_location } =
+  let label = {
+    label_span = warning_location;
+    label_message = None;
+    is_primary = true;
+  } in
+  let labels = if Location.is_none warning_location then [] else [label] in
+  {
+    severity = Warning;
+    code = Some (warning_code_of_warning warning);
+    message = warning_to_string warning;
+    labels;
+    notes = [];
+    suggestions = [];
+  }
+
+let error ?code message =
+  { severity = Error; code; message; labels = []; notes = []; suggestions = [] }
+
+let warning ?code message =
+  { severity = Warning; code; message; labels = []; notes = []; suggestions = [] }
+
+let with_label ~span ?message ?primary diag =
+  let is_primary = match primary with
+    | Some primary -> primary
+    | None -> diag.labels = []
+  in
+  let label = { label_span = span; label_message = message; is_primary } in
+  { diag with labels = diag.labels @ [label] }
+
+let with_primary_label ~span ?message diag =
+  with_label ~span ?message ~primary:true diag
+
+let with_secondary_label ~span ?message diag =
+  with_label ~span ?message ~primary:false diag
+
+let with_note note diag =
+  { diag with notes = diag.notes @ [note] }
+
+let with_suggestion ~span ~message ~replacement ?(applicability = Unspecified) diag =
+  let suggestion = {
+    suggestion_message = message;
+    replacement;
+    suggestion_span = span;
+    applicability;
+  } in
+  { diag with suggestions = diag.suggestions @ [suggestion] }

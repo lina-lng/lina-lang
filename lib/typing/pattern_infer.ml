@@ -130,8 +130,20 @@ let rec infer_pattern ctx (pattern : pattern) =
     } in
     (typed_pattern, ty, ctx)
 
-  | PatternConstraint (inner_pattern, _type_expr) ->
-    infer_pattern ctx inner_pattern
+  | PatternConstraint (inner_pattern, type_expr) ->
+    (* Infer type of inner pattern *)
+    let typed_inner, inferred_ty, ctx = infer_pattern ctx inner_pattern in
+    (* Convert the type annotation to a type *)
+    let annotated_ty, ctx = Module_type_check.check_type_expression ctx type_expr in
+    (* Unify the inferred type with the annotation *)
+    unify ctx loc inferred_ty annotated_ty;
+    (* Return the typed pattern with the annotated type *)
+    let typed_pattern = {
+      pattern_desc = typed_inner.pattern_desc;
+      pattern_type = annotated_ty;
+      pattern_location = loc;
+    } in
+    (typed_pattern, annotated_ty, ctx)
 
   | PatternRecord (pattern_fields, is_open) ->
     (* Infer types for each field pattern and collect bindings *)

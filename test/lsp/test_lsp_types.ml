@@ -171,7 +171,7 @@ let%expect_test "diagnostic_of_compiler_error - lexer error" =
   Printf.printf "severity=%s code=%s"
     (match diag.severity with Lsp_types.Error -> "Error" | _ -> "Other")
     (Option.value ~default:"none" diag.code);
-  [%expect {| severity=Error code=lexer |}]
+  [%expect {| severity=Error code=E0012 |}]
 
 let%expect_test "diagnostic_of_compiler_error - parser error" =
   let err : Common.Compiler_error.t =
@@ -188,7 +188,7 @@ let%expect_test "diagnostic_of_compiler_error - parser error" =
   Printf.printf "code=%s message=%s"
     (Option.value ~default:"none" diag.code)
     diag.message;
-  [%expect {| code=parser message=Unexpected token |}]
+  [%expect {| code=E0011 message=Unexpected token |}]
 
 let%expect_test "diagnostic_of_compiler_error - type error" =
   let err : Common.Compiler_error.t =
@@ -205,7 +205,7 @@ let%expect_test "diagnostic_of_compiler_error - type error" =
   Printf.printf "code=%s\n" (Option.value ~default:"none" diag.code);
   print_endline diag.message;
   [%expect {|
-    code=type
+    code=E0001
     Type mismatch
     Hint: Expected int, got string
     |}]

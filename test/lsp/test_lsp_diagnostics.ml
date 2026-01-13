@@ -92,7 +92,7 @@ let%expect_test "type error - type mismatch in annotation" =
       (starts_with "Cannot unify" d.message ||
        starts_with "Type error" d.message)) diags in
     Printf.printf "has_type_error=%b count=%d" has_type_error (List.length diags));
-  [%expect {| has_type_error=false count=0 |}]
+  [%expect {| has_type_error=false count=1 |}]
 
 let%expect_test "type error - unification error in expression" =
   reset ();
@@ -110,7 +110,7 @@ let%expect_test "type error - unbound type" =
     let error_msgs = List.filter_map (fun (d : Lsp_types.diagnostic) ->
       if d.severity = Lsp_types.Error then Some d.message else None) diags in
     List.iter print_endline error_msgs);
-  [%expect {| |}]
+  [%expect {| Unbound type: unknown_type |}]
 
 let%expect_test "type error - unbound module" =
   reset ();

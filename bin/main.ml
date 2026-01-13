@@ -1,8 +1,92 @@
 open Cmdliner
 
+(** {1 Common Options} *)
+
+type error_format = Human | Short | Json
+
+let error_format_conv =
+  let parse = function
+    | "human" -> Ok Human
+    | "short" -> Ok Short
+    | "json" -> Ok Json
+    | s -> Error (`Msg (Printf.sprintf "Unknown error format: %s" s))
+  in
+  let print fmt = function
+    | Human -> Format.fprintf fmt "human"
+    | Short -> Format.fprintf fmt "short"
+    | Json -> Format.fprintf fmt "json"
+  in
+  Arg.conv (parse, print)
+
+type color_choice = Auto | Always | Never
+
+let color_conv =
+  let parse = function
+    | "auto" -> Ok Auto
+    | "always" -> Ok Always
+    | "never" -> Ok Never
+    | s -> Error (`Msg (Printf.sprintf "Unknown color choice: %s" s))
+  in
+  let print fmt = function
+    | Auto -> Format.fprintf fmt "auto"
+    | Always -> Format.fprintf fmt "always"
+    | Never -> Format.fprintf fmt "never"
+  in
+  Arg.conv (parse, print)
+
+let error_format_arg =
+  let doc = "Output format for errors and warnings. $(docv) must be one of \
+             $(b,human) (default, colored output), $(b,short) (one line per diagnostic), \
+             or $(b,json) (machine-readable)." in
+  Arg.(value & opt error_format_conv Human & info ["error-format"] ~docv:"FORMAT" ~doc)
+
+let color_arg =
+  let doc = "When to use colors. $(docv) must be $(b,auto) (default), $(b,always), \
+             or $(b,never). Respects NO_COLOR and FORCE_COLOR environment variables." in
+  Arg.(value & opt color_conv Auto & info ["color"] ~docv:"WHEN" ~doc)
+
+let warning_spec_arg =
+  let doc = "Warning configuration. Can be specified multiple times. \
+             Use $(b,+name) to enable, $(b,-name) to disable, $(b,name=level) to set level \
+             (allow/warn/deny/forbid). Use $(b,+all) or $(b,-all) for all warnings. \
+             Examples: $(b,-W +all), $(b,-W -unused), $(b,-W shadowing=deny)." in
+  Arg.(value & opt_all string [] & info ["W"] ~docv:"SPEC" ~doc)
+
+let warn_error_arg =
+  let doc = "Treat warnings as errors. Use $(b,+all) to treat all warnings as errors." in
+  Arg.(value & opt (some string) None & info ["warn-error"] ~docv:"SPEC" ~doc)
+
 (** {1 Compile Command} *)
 
-let compile_single options input_file output_file =
+let to_render_format = function
+  | Human -> Driver.Diagnostic_render.Human
+  | Short -> Driver.Diagnostic_render.Short
+  | Json -> Driver.Diagnostic_render.Json
+
+let to_color_choice = function
+  | Auto -> Driver.Diagnostic_render.Auto
+  | Always -> Driver.Diagnostic_render.Always
+  | Never -> Driver.Diagnostic_render.Never
+
+(** Parse warning specs and build configuration. Returns error message on failure. *)
+let parse_warning_config warning_specs warn_error_spec =
+  let config = Driver.Warning_config.default in
+  match Driver.Warning_config.parse_specs config warning_specs with
+  | Error msg -> Error msg
+  | Ok config ->
+    match warn_error_spec with
+    | None -> Ok config
+    | Some spec ->
+      if spec = "+all" || spec = "all" then
+        Ok (Driver.Warning_config.warn_error_all config)
+      else
+        Driver.Warning_config.parse_spec config (spec ^ "=deny")
+
+let compile_single options error_fmt color input_file output_file =
+  let sources = Driver.Diagnostic_render.create_source_cache () in
+  (* Load source file for error display *)
+  let _ = Driver.Diagnostic_render.load_source_file sources input_file in
+
   match Driver.Pipeline.compile_file options input_file with
   | Ok lua_code ->
     begin match output_file with
@@ -16,10 +100,24 @@ let compile_single options input_file output_file =
       `Ok ()
     end
   | Error msg ->
-    Printf.eprintf "%s\n" msg;
+    (* Convert to diagnostic and render with new system *)
+    let terminal = Driver.Diagnostic_render.detect_terminal (to_color_choice color) in
+    let format = to_render_format error_fmt in
+    let diag = Common.Compiler_error.(
+      error ~code:Common.Error_code.e_type_mismatch msg
+      |> with_primary_label ~span:Common.Location.none
+    ) in
+    let rendered = Driver.Diagnostic_render.render_diagnostic
+      ~format ~terminal ~sources diag
+    in
+    Printf.eprintf "%s\n" rendered;
     `Error (false, "Compilation failed")
 
-let compile_multi options input_files output_dir =
+let compile_multi options error_fmt color input_files output_dir =
+  let sources = Driver.Diagnostic_render.create_source_cache () in
+  (* Load all source files for error display *)
+  List.iter (fun f -> ignore (Driver.Diagnostic_render.load_source_file sources f)) input_files;
+
   let project_options = Driver.Multifile.{
     output_dir;
     entry_point = None;
@@ -49,22 +147,39 @@ let compile_multi options input_files output_dir =
       `Ok ()
     end
   | Error msg ->
-    Printf.eprintf "%s\n" msg;
+    let terminal = Driver.Diagnostic_render.detect_terminal (to_color_choice color) in
+    let format = to_render_format error_fmt in
+    let diag = Common.Compiler_error.(
+      error ~code:Common.Error_code.e_type_mismatch msg
+      |> with_primary_label ~span:Common.Location.none
+    ) in
+    let rendered = Driver.Diagnostic_render.render_diagnostic
+      ~format ~terminal ~sources diag
+    in
+    Printf.eprintf "%s\n" rendered;
     `Error (false, "Compilation failed")
 
-let compile input_file output_file multi_files output_dir dump_ast dump_typed dump_lambda =
-  let options = Driver.Pipeline.{
-    dump_ast;
-    dump_typed;
-    dump_lambda;
-  } in
-  match multi_files with
-  | [] ->
-    (* Single file mode *)
-    compile_single options input_file output_file
-  | files ->
-    (* Multi-file mode *)
-    compile_multi options (input_file :: files) output_dir
+let compile input_file output_file multi_files output_dir error_fmt color
+    warning_specs warn_error_spec dump_ast dump_typed dump_lambda =
+  (* Parse warning configuration *)
+  match parse_warning_config warning_specs warn_error_spec with
+  | Error msg ->
+    Printf.eprintf "Error in warning configuration: %s\n" msg;
+    `Error (false, "Invalid warning configuration")
+  | Ok warning_config ->
+    let options = Driver.Pipeline.{
+      dump_ast;
+      dump_typed;
+      dump_lambda;
+      warning_config;
+    } in
+    match multi_files with
+    | [] ->
+      (* Single file mode *)
+      compile_single options error_fmt color input_file output_file
+    | files ->
+      (* Multi-file mode *)
+      compile_multi options error_fmt color (input_file :: files) output_dir
 
 let compile_input_file =
   let doc = "The Lina source file to compile." in
@@ -107,10 +222,17 @@ let compile_cmd =
     `Pre "  linac compile file.lina -o output.lua";
     `P "Multi-file project:";
     `Pre "  linac compile main.lina -m lib.lina -m util.lina -d dist/";
+    `P "JSON error output (for tooling):";
+    `Pre "  linac compile file.lina --error-format=json";
+    `P "Warning configuration:";
+    `Pre "  linac compile file.lina -W +all -W -unused";
+    `Pre "  linac compile file.lina --warn-error +all";
   ] in
   let info = Cmd.info "compile" ~doc ~man in
   Cmd.v info Term.(ret (const compile $ compile_input_file $ compile_output_file $
                         compile_multi_files $ compile_output_dir $
+                        error_format_arg $ color_arg $
+                        warning_spec_arg $ warn_error_arg $
                         dump_ast $ dump_typed $ dump_lambda))
 
 (** {1 Format Command} *)
@@ -188,6 +310,55 @@ let format_cmd =
   Cmd.v info Term.(ret (const format_file $ format_input_file $
                         format_in_place $ format_check $ format_width))
 
+(** {1 Explain Command} *)
+
+let explain_code color code_str =
+  match Common.Error_code.of_string code_str with
+  | None ->
+    Printf.eprintf "Unknown error code: %s\n" code_str;
+    Printf.eprintf "Error codes have the format E0001 (errors) or W0001 (warnings).\n";
+    `Error (false, "Unknown error code")
+  | Some code ->
+    match Driver.Explain.get_explanation code with
+    | Some explanation ->
+      let use_color = match color with
+        | Always -> true
+        | Never -> false
+        | Auto ->
+          let term = Driver.Diagnostic_render.detect_terminal Driver.Diagnostic_render.Auto in
+          term.use_color
+      in
+      print_endline (Driver.Explain.format_explanation ~color:use_color code explanation);
+      `Ok ()
+    | None ->
+      (* Fallback for codes without detailed explanations *)
+      let description = Common.Error_code.description code in
+      let code_name = Common.Error_code.to_string code in
+      Printf.printf "%s: %s\n\n" code_name description;
+      if Common.Error_code.is_error code then
+        Printf.printf "This is a compiler error that prevents compilation.\n"
+      else
+        Printf.printf "This is a warning that may indicate a potential issue.\n";
+      `Ok ()
+
+let explain_code_arg =
+  let doc = "The error or warning code to explain (e.g., E0001, W0002)." in
+  Arg.(required & pos 0 (some string) None & info [] ~docv:"CODE" ~doc)
+
+let explain_cmd =
+  let doc = "Explain an error or warning code" in
+  let man = [
+    `S Manpage.s_description;
+    `P "Shows detailed documentation for a specific error or warning code. \
+        Error codes start with 'E' (e.g., E0001) and warning codes start with \
+        'W' (e.g., W0001).";
+    `S Manpage.s_examples;
+    `Pre "  linac explain E0001";
+    `Pre "  linac explain W0002";
+  ] in
+  let info = Cmd.info "explain" ~doc ~man in
+  Cmd.v info Term.(ret (const explain_code $ color_arg $ explain_code_arg))
+
 (** {1 Main Command Group} *)
 
 let default_cmd =
@@ -198,9 +369,15 @@ let default_cmd =
     `S Manpage.s_commands;
     `P "Use $(b,linac compile) to compile Lina source to Lua.";
     `P "Use $(b,linac format) to format Lina source code.";
+    `P "Use $(b,linac explain) to get help with error codes.";
+    `S "ERROR FORMATS";
+    `P "The --error-format flag controls how errors are displayed:";
+    `I ("$(b,human)", "Colored, formatted output for terminals (default)");
+    `I ("$(b,short)", "One line per diagnostic, suitable for grep");
+    `I ("$(b,json)", "Machine-readable JSON for IDE integration");
   ] in
   let info = Cmd.info "linac" ~version:"0.1.0" ~doc ~man in
   let default = Term.(ret (const (`Help (`Pager, None)))) in
-  Cmd.group info ~default [compile_cmd; format_cmd]
+  Cmd.group info ~default [compile_cmd; format_cmd; explain_cmd]
 
 let () = exit (Cmd.eval default_cmd)

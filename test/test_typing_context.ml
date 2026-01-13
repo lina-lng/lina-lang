@@ -78,8 +78,9 @@ let%expect_test "fresh_type_variable_id returns unique IDs" =
   Printf.printf "id1=%d id2=%d id3=%d\n" id1 id2 id3;
   print_endline (if id1 <> id2 && id2 <> id3 && id1 <> id3 then "all unique" else "duplicates!");
   [%expect {|
-    id1=0 id2=1 id3=2
-    all unique |}]
+    id1=1 id2=2 id3=3
+    all unique
+    |}]
 
 let%expect_test "fresh_type_variable_id is monotonically increasing" =
   let ctx = Typing_context.create Environment.initial in
@@ -126,7 +127,7 @@ let%expect_test "new_type_variable preserves var_id counter across contexts" =
   let ctx = Typing_context.with_environment env2 ctx in
   let id, _ = Typing_context.fresh_type_variable_id ctx in
   Printf.printf "next_id=%d\n" id;
-  [%expect {| next_id=11 |}]
+  [%expect {| next_id=12 |}]
 
 (** {1 Generalization Tests} *)
 

@@ -8,14 +8,22 @@ let diagnostic_of_accumulated_error (err : Typing.Error_accumulator.error) :
   let message = Typing.Error_accumulator.error_message err in
   let code =
     match err.kind with
-    | Typing.Error_accumulator.TypeError _ -> Some "type"
-    | Typing.Error_accumulator.UnboundVariable _ -> Some "unbound-variable"
-    | Typing.Error_accumulator.UnboundType _ -> Some "unbound-type"
-    | Typing.Error_accumulator.UnboundConstructor _ -> Some "unbound-constructor"
-    | Typing.Error_accumulator.UnboundModule _ -> Some "unbound-module"
-    | Typing.Error_accumulator.UnificationError _ -> Some "unification"
-    | Typing.Error_accumulator.PatternError _ -> Some "pattern"
-    | Typing.Error_accumulator.ModuleError _ -> Some "module"
+    | Typing.Error_accumulator.TypeError _ ->
+      Some (Error_code.to_string Error_code.e_type_mismatch)
+    | Typing.Error_accumulator.UnboundVariable _ ->
+      Some (Error_code.to_string Error_code.e_unbound_value)
+    | Typing.Error_accumulator.UnboundType _ ->
+      Some (Error_code.to_string Error_code.e_unbound_type)
+    | Typing.Error_accumulator.UnboundConstructor _ ->
+      Some (Error_code.to_string Error_code.e_unbound_constructor)
+    | Typing.Error_accumulator.UnboundModule _ ->
+      Some (Error_code.to_string Error_code.e_unbound_module)
+    | Typing.Error_accumulator.UnificationError _ ->
+      Some (Error_code.to_string Error_code.e_type_mismatch)
+    | Typing.Error_accumulator.PatternError _ ->
+      Some (Error_code.to_string Error_code.e_pattern_not_exhaustive)
+    | Typing.Error_accumulator.ModuleError _ ->
+      Some (Error_code.to_string Error_code.e_signature_mismatch)
   in
   Lsp_types.make_diagnostic ~severity:Error ~message ?code ~hints:err.hints
     err.location
@@ -26,8 +34,10 @@ let diagnostic_of_warning (info : Compiler_error.warning_info) : Lsp_types.diagn
   let message = Compiler_error.warning_to_string info.warning in
   let code =
     match info.warning with
-    | Compiler_error.NonExhaustiveMatch _ -> Some "non-exhaustive"
-    | Compiler_error.RedundantPattern -> Some "redundant-pattern"
+    | Compiler_error.NonExhaustiveMatch _ ->
+      Some (Error_code.to_string Error_code.w_non_exhaustive)
+    | Compiler_error.RedundantPattern ->
+      Some (Error_code.to_string Error_code.w_redundant_pattern)
   in
   Lsp_types.make_diagnostic ~severity:Warning ~message ?code info.warning_location
 

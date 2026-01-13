@@ -108,10 +108,14 @@ let make_diagnostic ~severity ~message ?code ?(hints = []) loc =
 let diagnostic_of_compiler_error (err : Compiler_error.t) : diagnostic =
   let severity, code, message =
     match err.kind with
-    | Compiler_error.LexerError msg -> (Error, "lexer", msg)
-    | Compiler_error.ParserError msg -> (Error, "parser", msg)
-    | Compiler_error.TypeError msg -> (Error, "type", msg)
-    | Compiler_error.InternalError msg -> (Error, "internal", msg)
+    | Compiler_error.LexerError msg ->
+      (Error, Error_code.to_string Error_code.e_lexer_error, msg)
+    | Compiler_error.ParserError msg ->
+      (Error, Error_code.to_string Error_code.e_syntax_error, msg)
+    | Compiler_error.TypeError msg ->
+      (Error, Error_code.to_string Error_code.e_type_mismatch, msg)
+    | Compiler_error.InternalError msg ->
+      (Error, "internal", msg)
   in
   make_diagnostic ~severity ~message ~code ~hints:err.hints err.location
 

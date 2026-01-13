@@ -128,3 +128,127 @@ val report_warning : Format.formatter -> warning_info -> unit
 
 (** [report_warning_to_string info] formats a warning as a string. *)
 val report_warning_to_string : warning_info -> string
+
+(** [report_warning_as_error fmt info] formats a warning as an error. *)
+val report_warning_as_error : Format.formatter -> warning_info -> unit
+
+(** [report_warning_as_error_to_string info] formats a warning as an error string. *)
+val report_warning_as_error_to_string : warning_info -> string
+
+(** [warning_code info] returns the error code for a warning. *)
+val warning_code : warning_info -> Error_code.t
+
+(** {1 Enhanced Diagnostic System}
+
+    The diagnostic system provides rich, structured error messages with:
+    - Error codes for programmatic handling
+    - Multiple labeled source spans
+    - Suggested fixes with applicability levels
+    - Additional notes and context
+
+    This system is used by the new CLI renderer and JSON output format. *)
+
+(** Severity level of a diagnostic. *)
+type severity =
+  | Error       (** Compilation failure *)
+  | Warning     (** Potential issue, compilation continues *)
+  | Info        (** Informational message *)
+  | Hint        (** Style suggestion *)
+
+(** How safe is it to automatically apply a suggestion? *)
+type applicability =
+  | MachineApplicable  (** Safe to auto-apply without review *)
+  | MaybeIncorrect     (** Likely correct but should be reviewed *)
+  | HasPlaceholders    (** Contains [...] requiring user input *)
+  | Unspecified        (** Informational only, not applicable *)
+
+(** A suggested fix for a diagnostic. *)
+type suggestion = {
+  suggestion_message : string;       (** Description of the fix *)
+  replacement : string;              (** Text to replace the span with *)
+  suggestion_span : Location.t;      (** Where to apply the replacement *)
+  applicability : applicability;     (** How safe is auto-apply *)
+}
+
+(** A labeled source span within a diagnostic. *)
+type label = {
+  label_span : Location.t;           (** Source location *)
+  label_message : string option;     (** Optional annotation text *)
+  is_primary : bool;                 (** Primary vs secondary annotation *)
+}
+
+(** A rich diagnostic message. *)
+type diagnostic = {
+  severity : severity;               (** Error, Warning, Info, or Hint *)
+  code : Error_code.t option;        (** Error/warning code (e.g., E0001) *)
+  message : string;                  (** Main diagnostic message *)
+  labels : label list;               (** Annotated source spans *)
+  notes : string list;               (** Additional explanatory text *)
+  suggestions : suggestion list;     (** Suggested fixes *)
+}
+
+(** {2 Diagnostic Creation} *)
+
+(** [make_diagnostic ~severity ~message ?code ?labels ?notes ?suggestions ()]
+    creates a new diagnostic. *)
+val make_diagnostic :
+  severity:severity ->
+  message:string ->
+  ?code:Error_code.t ->
+  ?labels:label list ->
+  ?notes:string list ->
+  ?suggestions:suggestion list ->
+  unit ->
+  diagnostic
+
+(** [diagnostic_of_error err] converts a legacy error to a diagnostic. *)
+val diagnostic_of_error : t -> diagnostic
+
+(** [diagnostic_of_warning info] converts a legacy warning to a diagnostic. *)
+val diagnostic_of_warning : warning_info -> diagnostic
+
+(** {2 Diagnostic Builders}
+
+    Fluent API for building diagnostics incrementally. *)
+
+(** [error ?code message] creates an error diagnostic. *)
+val error : ?code:Error_code.t -> string -> diagnostic
+
+(** [warning ?code message] creates a warning diagnostic. *)
+val warning : ?code:Error_code.t -> string -> diagnostic
+
+(** [with_label ~span ?message ?primary diag] adds a label to a diagnostic.
+    If [primary] is not specified, the first label is primary. *)
+val with_label :
+  span:Location.t ->
+  ?message:string ->
+  ?primary:bool ->
+  diagnostic ->
+  diagnostic
+
+(** [with_primary_label ~span ?message diag] adds a primary label. *)
+val with_primary_label :
+  span:Location.t ->
+  ?message:string ->
+  diagnostic ->
+  diagnostic
+
+(** [with_secondary_label ~span ?message diag] adds a secondary label. *)
+val with_secondary_label :
+  span:Location.t ->
+  ?message:string ->
+  diagnostic ->
+  diagnostic
+
+(** [with_note note diag] adds a note to a diagnostic. *)
+val with_note : string -> diagnostic -> diagnostic
+
+(** [with_suggestion ~span ~message ~replacement ?applicability diag]
+    adds a fix suggestion to a diagnostic. *)
+val with_suggestion :
+  span:Location.t ->
+  message:string ->
+  replacement:string ->
+  ?applicability:applicability ->
+  diagnostic ->
+  diagnostic
