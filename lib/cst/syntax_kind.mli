@@ -208,6 +208,9 @@ val is_node : t -> bool
 (** Check if a syntax kind is trivia (whitespace or comments). *)
 val is_trivia : t -> bool
 
+(** Check if a syntax kind is a comment (line or block). *)
+val is_comment : t -> bool
+
 (** Check if a syntax kind is a keyword. *)
 val is_keyword : t -> bool
 

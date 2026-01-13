@@ -20,10 +20,12 @@ type syntax_node = {
   parent : syntax_node option;
   offset : int;  (** Absolute byte offset from start of source *)
   index : int;  (** Index in parent's children list *)
+  mutable children_cache : syntax_element list option;
+      (** Cached children to avoid O(n) reconstruction on every access *)
 }
 
 (** A syntax token wrapping a green token with navigation context. *)
-type syntax_token = {
+and syntax_token = {
   green : Green_tree.green_token;
   parent : syntax_node;
   offset : int;  (** Absolute byte offset from start of source *)
@@ -31,7 +33,7 @@ type syntax_token = {
 }
 
 (** A syntax element is either a node or a token. *)
-type syntax_element =
+and syntax_element =
   | SyntaxNode of syntax_node
   | SyntaxToken of syntax_token
 
@@ -40,12 +42,12 @@ type syntax_element =
 (** [root green] creates a root syntax node from a green node.
     The root has no parent and offset 0. *)
 let root green : syntax_node =
-  { green; parent = None; offset = 0; index = 0 }
+  { green; parent = None; offset = 0; index = 0; children_cache = None }
 
 (** [root_at green offset] creates a root syntax node at the given offset.
     Useful when parsing a fragment from the middle of a file. *)
 let root_at green offset : syntax_node =
-  { green; parent = None; offset; index = 0 }
+  { green; parent = None; offset; index = 0; children_cache = None }
 
 (** {1 Basic Accessors} *)
 
@@ -149,26 +151,38 @@ let ancestors_and_self (node : syntax_node) = node :: ancestors node
 
 (** {1 Child Navigation} *)
 
-(** [children node] returns all children of a node as syntax elements. *)
+(** [children node] returns all children of a node as syntax elements.
+    Children are cached to avoid O(n) reconstruction on every access. *)
 let children (node : syntax_node) =
-  let rec build_children offset index = function
-    | [] -> []
-    | child :: rest ->
-        let element =
-          match child with
-          | Green_tree.GreenToken green_token ->
-              SyntaxToken
-                ({ green = green_token; parent = node; offset; index }
-                  : syntax_token)
-          | Green_tree.GreenNode green_node ->
-              SyntaxNode
-                ({ green = green_node; parent = Some node; offset; index }
-                  : syntax_node)
-        in
-        let child_len = Green_tree.green_child_len child in
-        element :: build_children (offset + child_len) (index + 1) rest
-  in
-  build_children node.offset 0 node.green.children
+  match node.children_cache with
+  | Some cached -> cached
+  | None ->
+      let rec build_children offset index = function
+        | [] -> []
+        | child :: rest ->
+            let element =
+              match child with
+              | Green_tree.GreenToken green_token ->
+                  SyntaxToken
+                    ({ green = green_token; parent = node; offset; index }
+                      : syntax_token)
+              | Green_tree.GreenNode green_node ->
+                  SyntaxNode
+                    ({
+                       green = green_node;
+                       parent = Some node;
+                       offset;
+                       index;
+                       children_cache = None;
+                     }
+                      : syntax_node)
+            in
+            let child_len = Green_tree.green_child_len child in
+            element :: build_children (offset + child_len) (index + 1) rest
+      in
+      let result = build_children node.offset 0 node.green.children in
+      node.children_cache <- Some result;
+      result
 
 (** [child_nodes node] returns only the child nodes (not tokens). *)
 let child_nodes (node : syntax_node) =
@@ -202,9 +216,12 @@ let first_child (node : syntax_node) =
 
 (** [last_child node] returns the last child, or [None] if empty. *)
 let last_child (node : syntax_node) =
-  match List.rev (children node) with
-  | [] -> None
-  | child :: _ -> Some child
+  let rec find_last = function
+    | [] -> None
+    | [ x ] -> Some x
+    | _ :: rest -> find_last rest
+  in
+  find_last (children node)
 
 (** [first_child_node node] returns the first child that is a node. *)
 let first_child_node (node : syntax_node) =
@@ -331,6 +348,7 @@ let rec next_token (token : syntax_token) =
                 parent = Some grandparent;
                 offset = parent.offset;
                 index = parent.index;
+                children_cache = None;
               }
           in
           next_token_from_element parent_element)
@@ -361,6 +379,7 @@ let rec prev_token (token : syntax_token) =
                 parent = Some grandparent;
                 offset = parent.offset;
                 index = parent.index;
+                children_cache = None;
               }
           in
           prev_token_from_element parent_element)
@@ -418,8 +437,7 @@ let covering_element (node : syntax_node) start_ofs end_ofs =
       List.find_opt
         (fun element ->
           let s = element_span element in
-          s.start <= start_ofs
-          && start_ofs + (end_ofs - start_ofs) <= s.start + s.length)
+          s.start <= start_ofs && end_ofs <= s.start + s.length)
         (children current)
     in
     match covering_child with

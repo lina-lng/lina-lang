@@ -224,6 +224,11 @@ let is_trivia = function
   | TK_WHITESPACE | TK_NEWLINE | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
   | _ -> false
 
+(** Check if a syntax kind is a comment (line or block). *)
+let is_comment = function
+  | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
+  | _ -> false
+
 (** Check if a syntax kind is a keyword. *)
 let is_keyword = function
   | TK_LET | TK_REC | TK_IN | TK_FUN | TK_IF | TK_THEN | TK_ELSE

@@ -11,133 +11,84 @@ open Parsing
 
 (** {1 Token Conversion} *)
 
+(** [token_metadata token] returns the syntax kind and text for a token.
+    This is the single source of truth for token-to-CST conversion,
+    avoiding duplicate pattern matching. *)
+let token_metadata : Lexer.token -> Syntax_kind.t * string = function
+  (* Literals with variable text *)
+  | Lexer.INTEGER n -> (Syntax_kind.TK_INTEGER, string_of_int n)
+  | Lexer.FLOAT f -> (Syntax_kind.TK_FLOAT, string_of_float f)
+  | Lexer.STRING s -> (Syntax_kind.TK_STRING, "\"" ^ String.escaped s ^ "\"")
+  | Lexer.LOWERCASE_IDENTIFIER s -> (Syntax_kind.TK_LOWERCASE_IDENT, s)
+  | Lexer.UPPERCASE_IDENTIFIER s -> (Syntax_kind.TK_UPPERCASE_IDENT, s)
+  | Lexer.TYPE_VARIABLE s -> (Syntax_kind.TK_TYPE_VARIABLE, "'" ^ s)
+  (* Keywords *)
+  | Lexer.TRUE -> (Syntax_kind.TK_TRUE, "true")
+  | Lexer.FALSE -> (Syntax_kind.TK_FALSE, "false")
+  | Lexer.LET -> (Syntax_kind.TK_LET, "let")
+  | Lexer.REC -> (Syntax_kind.TK_REC, "rec")
+  | Lexer.IN -> (Syntax_kind.TK_IN, "in")
+  | Lexer.FUN -> (Syntax_kind.TK_FUN, "fun")
+  | Lexer.IF -> (Syntax_kind.TK_IF, "if")
+  | Lexer.THEN -> (Syntax_kind.TK_THEN, "then")
+  | Lexer.ELSE -> (Syntax_kind.TK_ELSE, "else")
+  | Lexer.TYPE -> (Syntax_kind.TK_TYPE, "type")
+  | Lexer.OF -> (Syntax_kind.TK_OF, "of")
+  | Lexer.AND -> (Syntax_kind.TK_AND, "and")
+  | Lexer.AS -> (Syntax_kind.TK_AS, "as")
+  | Lexer.MATCH -> (Syntax_kind.TK_MATCH, "match")
+  | Lexer.WITH -> (Syntax_kind.TK_WITH, "with")
+  | Lexer.WHEN -> (Syntax_kind.TK_WHEN, "when")
+  (* Module keywords *)
+  | Lexer.MODULE -> (Syntax_kind.TK_MODULE, "module")
+  | Lexer.STRUCT -> (Syntax_kind.TK_STRUCT, "struct")
+  | Lexer.END -> (Syntax_kind.TK_END, "end")
+  | Lexer.SIG -> (Syntax_kind.TK_SIG, "sig")
+  | Lexer.FUNCTOR -> (Syntax_kind.TK_FUNCTOR, "functor")
+  | Lexer.OPEN -> (Syntax_kind.TK_OPEN, "open")
+  | Lexer.INCLUDE -> (Syntax_kind.TK_INCLUDE, "include")
+  | Lexer.VAL -> (Syntax_kind.TK_VAL, "val")
+  | Lexer.EXTERNAL -> (Syntax_kind.TK_EXTERNAL, "external")
+  (* Punctuation *)
+  | Lexer.AT -> (Syntax_kind.TK_AT, "@")
+  | Lexer.LPAREN -> (Syntax_kind.TK_LPAREN, "(")
+  | Lexer.RPAREN -> (Syntax_kind.TK_RPAREN, ")")
+  | Lexer.LBRACKET -> (Syntax_kind.TK_LBRACKET, "[")
+  | Lexer.RBRACKET -> (Syntax_kind.TK_RBRACKET, "]")
+  | Lexer.LBRACE -> (Syntax_kind.TK_LBRACE, "{")
+  | Lexer.RBRACE -> (Syntax_kind.TK_RBRACE, "}")
+  | Lexer.COMMA -> (Syntax_kind.TK_COMMA, ",")
+  | Lexer.SEMICOLON -> (Syntax_kind.TK_SEMICOLON, ";")
+  | Lexer.COLON -> (Syntax_kind.TK_COLON, ":")
+  | Lexer.DOT -> (Syntax_kind.TK_DOT, ".")
+  | Lexer.DOTDOT -> (Syntax_kind.TK_DOTDOT, "..")
+  | Lexer.ARROW -> (Syntax_kind.TK_ARROW, "->")
+  | Lexer.EQUAL -> (Syntax_kind.TK_EQUAL, "=")
+  | Lexer.BAR -> (Syntax_kind.TK_BAR, "|")
+  | Lexer.UNDERSCORE -> (Syntax_kind.TK_UNDERSCORE, "_")
+  (* Operators *)
+  | Lexer.STAR -> (Syntax_kind.TK_STAR, "*")
+  | Lexer.PLUS -> (Syntax_kind.TK_PLUS, "+")
+  | Lexer.MINUS -> (Syntax_kind.TK_MINUS, "-")
+  | Lexer.SLASH -> (Syntax_kind.TK_SLASH, "/")
+  | Lexer.LESS -> (Syntax_kind.TK_LESS, "<")
+  | Lexer.GREATER -> (Syntax_kind.TK_GREATER, ">")
+  | Lexer.LESS_EQUAL -> (Syntax_kind.TK_LESS_EQUAL, "<=")
+  | Lexer.GREATER_EQUAL -> (Syntax_kind.TK_GREATER_EQUAL, ">=")
+  | Lexer.EQUAL_EQUAL -> (Syntax_kind.TK_EQUAL_EQUAL, "==")
+  | Lexer.NOT_EQUAL -> (Syntax_kind.TK_NOT_EQUAL, "!=")
+  (* Reference operations *)
+  | Lexer.REF -> (Syntax_kind.TK_REF, "ref")
+  | Lexer.BANG -> (Syntax_kind.TK_BANG, "!")
+  | Lexer.COLONEQUALS -> (Syntax_kind.TK_COLONEQUALS, ":=")
+  (* EOF *)
+  | Lexer.EOF -> (Syntax_kind.TK_EOF, "")
+
 (** [syntax_kind_of_token token] converts a lexer token to its CST syntax kind. *)
-let syntax_kind_of_token : Lexer.token -> Syntax_kind.t = function
-  | Lexer.INTEGER _ -> Syntax_kind.TK_INTEGER
-  | Lexer.FLOAT _ -> Syntax_kind.TK_FLOAT
-  | Lexer.STRING _ -> Syntax_kind.TK_STRING
-  | Lexer.LOWERCASE_IDENTIFIER _ -> Syntax_kind.TK_LOWERCASE_IDENT
-  | Lexer.UPPERCASE_IDENTIFIER _ -> Syntax_kind.TK_UPPERCASE_IDENT
-  | Lexer.TYPE_VARIABLE _ -> Syntax_kind.TK_TYPE_VARIABLE
-  | Lexer.TRUE -> Syntax_kind.TK_TRUE
-  | Lexer.FALSE -> Syntax_kind.TK_FALSE
-  | Lexer.LET -> Syntax_kind.TK_LET
-  | Lexer.REC -> Syntax_kind.TK_REC
-  | Lexer.IN -> Syntax_kind.TK_IN
-  | Lexer.FUN -> Syntax_kind.TK_FUN
-  | Lexer.IF -> Syntax_kind.TK_IF
-  | Lexer.THEN -> Syntax_kind.TK_THEN
-  | Lexer.ELSE -> Syntax_kind.TK_ELSE
-  | Lexer.TYPE -> Syntax_kind.TK_TYPE
-  | Lexer.OF -> Syntax_kind.TK_OF
-  | Lexer.AND -> Syntax_kind.TK_AND
-  | Lexer.AS -> Syntax_kind.TK_AS
-  | Lexer.MATCH -> Syntax_kind.TK_MATCH
-  | Lexer.WITH -> Syntax_kind.TK_WITH
-  | Lexer.WHEN -> Syntax_kind.TK_WHEN
-  | Lexer.MODULE -> Syntax_kind.TK_MODULE
-  | Lexer.STRUCT -> Syntax_kind.TK_STRUCT
-  | Lexer.END -> Syntax_kind.TK_END
-  | Lexer.SIG -> Syntax_kind.TK_SIG
-  | Lexer.FUNCTOR -> Syntax_kind.TK_FUNCTOR
-  | Lexer.OPEN -> Syntax_kind.TK_OPEN
-  | Lexer.INCLUDE -> Syntax_kind.TK_INCLUDE
-  | Lexer.VAL -> Syntax_kind.TK_VAL
-  | Lexer.EXTERNAL -> Syntax_kind.TK_EXTERNAL
-  | Lexer.AT -> Syntax_kind.TK_AT
-  | Lexer.LPAREN -> Syntax_kind.TK_LPAREN
-  | Lexer.RPAREN -> Syntax_kind.TK_RPAREN
-  | Lexer.LBRACKET -> Syntax_kind.TK_LBRACKET
-  | Lexer.RBRACKET -> Syntax_kind.TK_RBRACKET
-  | Lexer.LBRACE -> Syntax_kind.TK_LBRACE
-  | Lexer.RBRACE -> Syntax_kind.TK_RBRACE
-  | Lexer.COMMA -> Syntax_kind.TK_COMMA
-  | Lexer.SEMICOLON -> Syntax_kind.TK_SEMICOLON
-  | Lexer.COLON -> Syntax_kind.TK_COLON
-  | Lexer.DOT -> Syntax_kind.TK_DOT
-  | Lexer.DOTDOT -> Syntax_kind.TK_DOTDOT
-  | Lexer.ARROW -> Syntax_kind.TK_ARROW
-  | Lexer.EQUAL -> Syntax_kind.TK_EQUAL
-  | Lexer.BAR -> Syntax_kind.TK_BAR
-  | Lexer.UNDERSCORE -> Syntax_kind.TK_UNDERSCORE
-  | Lexer.STAR -> Syntax_kind.TK_STAR
-  | Lexer.PLUS -> Syntax_kind.TK_PLUS
-  | Lexer.MINUS -> Syntax_kind.TK_MINUS
-  | Lexer.SLASH -> Syntax_kind.TK_SLASH
-  | Lexer.LESS -> Syntax_kind.TK_LESS
-  | Lexer.GREATER -> Syntax_kind.TK_GREATER
-  | Lexer.LESS_EQUAL -> Syntax_kind.TK_LESS_EQUAL
-  | Lexer.GREATER_EQUAL -> Syntax_kind.TK_GREATER_EQUAL
-  | Lexer.EQUAL_EQUAL -> Syntax_kind.TK_EQUAL_EQUAL
-  | Lexer.NOT_EQUAL -> Syntax_kind.TK_NOT_EQUAL
-  | Lexer.REF -> Syntax_kind.TK_REF
-  | Lexer.BANG -> Syntax_kind.TK_BANG
-  | Lexer.COLONEQUALS -> Syntax_kind.TK_COLONEQUALS
-  | Lexer.EOF -> Syntax_kind.TK_EOF
+let syntax_kind_of_token token = fst (token_metadata token)
 
 (** [token_text token] returns the source text representation of a token. *)
-let token_text : Lexer.token -> string = function
-  | Lexer.INTEGER n -> string_of_int n
-  | Lexer.FLOAT f -> string_of_float f
-  | Lexer.STRING s -> "\"" ^ String.escaped s ^ "\""
-  | Lexer.LOWERCASE_IDENTIFIER s -> s
-  | Lexer.UPPERCASE_IDENTIFIER s -> s
-  | Lexer.TYPE_VARIABLE s -> "'" ^ s
-  | Lexer.TRUE -> "true"
-  | Lexer.FALSE -> "false"
-  | Lexer.LET -> "let"
-  | Lexer.REC -> "rec"
-  | Lexer.IN -> "in"
-  | Lexer.FUN -> "fun"
-  | Lexer.IF -> "if"
-  | Lexer.THEN -> "then"
-  | Lexer.ELSE -> "else"
-  | Lexer.TYPE -> "type"
-  | Lexer.OF -> "of"
-  | Lexer.AND -> "and"
-  | Lexer.AS -> "as"
-  | Lexer.MATCH -> "match"
-  | Lexer.WITH -> "with"
-  | Lexer.WHEN -> "when"
-  | Lexer.MODULE -> "module"
-  | Lexer.STRUCT -> "struct"
-  | Lexer.END -> "end"
-  | Lexer.SIG -> "sig"
-  | Lexer.FUNCTOR -> "functor"
-  | Lexer.OPEN -> "open"
-  | Lexer.INCLUDE -> "include"
-  | Lexer.VAL -> "val"
-  | Lexer.EXTERNAL -> "external"
-  | Lexer.AT -> "@"
-  | Lexer.LPAREN -> "("
-  | Lexer.RPAREN -> ")"
-  | Lexer.LBRACKET -> "["
-  | Lexer.RBRACKET -> "]"
-  | Lexer.LBRACE -> "{"
-  | Lexer.RBRACE -> "}"
-  | Lexer.COMMA -> ","
-  | Lexer.SEMICOLON -> ";"
-  | Lexer.COLON -> ":"
-  | Lexer.DOT -> "."
-  | Lexer.DOTDOT -> ".."
-  | Lexer.ARROW -> "->"
-  | Lexer.EQUAL -> "="
-  | Lexer.BAR -> "|"
-  | Lexer.UNDERSCORE -> "_"
-  | Lexer.STAR -> "*"
-  | Lexer.PLUS -> "+"
-  | Lexer.MINUS -> "-"
-  | Lexer.SLASH -> "/"
-  | Lexer.LESS -> "<"
-  | Lexer.GREATER -> ">"
-  | Lexer.LESS_EQUAL -> "<="
-  | Lexer.GREATER_EQUAL -> ">="
-  | Lexer.EQUAL_EQUAL -> "=="
-  | Lexer.NOT_EQUAL -> "!="
-  | Lexer.REF -> "ref"
-  | Lexer.BANG -> "!"
-  | Lexer.COLONEQUALS -> ":="
-  | Lexer.EOF -> ""
+let token_text token = snd (token_metadata token)
 
 (** {1 Trivia Conversion} *)
 
@@ -168,8 +119,7 @@ type cst_token = {
 
 (** [convert_token_with_trivia twt] converts a lexer token with trivia to a CST token. *)
 let convert_token_with_trivia (twt : Lexer.token_with_trivia) : cst_token =
-  let kind = syntax_kind_of_token twt.token in
-  let text = token_text twt.token in
+  let kind, text = token_metadata twt.token in
   let leading = convert_trivia_list twt.trivia.leading in
   let trailing = convert_trivia_list twt.trivia.trailing in
   let green = Green_tree.make_token_with_trivia kind text ~leading ~trailing in

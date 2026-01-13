@@ -328,159 +328,37 @@ let parse_string lexbuf loc =
   in
   read_string ()
 
+(** {1 Token Recognition}
+
+    The core token matching logic is in [lex_real_token] below (in the trivia
+    section). This function handles whitespace/comment skipping and delegates
+    to [lex_real_token] for actual token recognition. This avoids duplicating
+    the ~140 lines of token patterns. *)
+
+(** Forward declaration - implemented in the trivia section below. *)
+let lex_real_token_ref : (state -> (token * Location.t) option) ref =
+  ref (fun _ -> failwith "lex_real_token not initialized")
+
 let rec next_token state =
   let lexbuf = state.lexbuf in
   match%sedlex lexbuf with
   | Plus whitespace -> next_token state
   | "--" ->
-    skip_line_comment lexbuf;
-    next_token state
+      skip_line_comment lexbuf;
+      next_token state
   | "(*" ->
-    update_location state;
-    skip_block_comment 0 lexbuf state.current_location;
-    next_token state
-  | '(' ->
-    update_location state;
-    (LPAREN, state.current_location)
-  | ')' ->
-    update_location state;
-    (RPAREN, state.current_location)
-  | '[' ->
-    update_location state;
-    (LBRACKET, state.current_location)
-  | ']' ->
-    update_location state;
-    (RBRACKET, state.current_location)
-  | '{' ->
-    update_location state;
-    (LBRACE, state.current_location)
-  | '}' ->
-    update_location state;
-    (RBRACE, state.current_location)
-  | ".." ->
-    update_location state;
-    (DOTDOT, state.current_location)
-  | '.' ->
-    update_location state;
-    (DOT, state.current_location)
-  | ',' ->
-    update_location state;
-    (COMMA, state.current_location)
-  | ';' ->
-    update_location state;
-    (SEMICOLON, state.current_location)
-  | ":=" ->
-    update_location state;
-    (COLONEQUALS, state.current_location)
-  | ':' ->
-    update_location state;
-    (COLON, state.current_location)
-  | "->" ->
-    update_location state;
-    (ARROW, state.current_location)
-  | "==" ->
-    update_location state;
-    (EQUAL_EQUAL, state.current_location)
-  | "!=" ->
-    update_location state;
-    (NOT_EQUAL, state.current_location)
-  | '!' ->
-    update_location state;
-    (BANG, state.current_location)
-  | "<=" ->
-    update_location state;
-    (LESS_EQUAL, state.current_location)
-  | ">=" ->
-    update_location state;
-    (GREATER_EQUAL, state.current_location)
-  | '=' ->
-    update_location state;
-    (EQUAL, state.current_location)
-  | '|' ->
-    update_location state;
-    (BAR, state.current_location)
-  | '@' ->
-    update_location state;
-    (AT, state.current_location)
-  | '_' ->
-    update_location state;
-    (UNDERSCORE, state.current_location)
-  | '*' ->
-    update_location state;
-    (STAR, state.current_location)
-  | '+' ->
-    update_location state;
-    (PLUS, state.current_location)
-  | '-' ->
-    update_location state;
-    (MINUS, state.current_location)
-  | '/' ->
-    update_location state;
-    (SLASH, state.current_location)
-  | '<' ->
-    update_location state;
-    (LESS, state.current_location)
-  | '>' ->
-    update_location state;
-    (GREATER, state.current_location)
-  | '"' ->
-    update_location state;
-    let str = parse_string lexbuf state.current_location in
-    update_location state;
-    (STRING str, state.current_location)
-  | '\'', lowercase_letter, Star identifier_char ->
-    update_location state;
-    let lexeme = current_lexeme state in
-    let var_name = String.sub lexeme 1 (String.length lexeme - 1) in
-    (TYPE_VARIABLE var_name, state.current_location)
-  | lowercase_letter, Star identifier_char ->
-    update_location state;
-    (keyword_or_identifier (current_lexeme state), state.current_location)
-  | uppercase_letter, Star identifier_char ->
       update_location state;
-      (UPPERCASE_IDENTIFIER (current_lexeme state), state.current_location)
-  (* Hex integers: 0x1A, 0XFF_FF *)
-  | '0', ('x' | 'X'), Plus hex_digit_with_underscore ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (INTEGER (parse_int_literal lexeme state.current_location), state.current_location)
-  (* Binary integers: 0b1010, 0B1111_0000 *)
-  | '0', ('b' | 'B'), Plus binary_digit_with_underscore ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (INTEGER (parse_int_literal lexeme state.current_location), state.current_location)
-  (* Float with decimal and exponent: 3.14e10, 1.5E-3 *)
-  | Plus digit_with_underscore, '.', Star digit_with_underscore, exponent ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (FLOAT (parse_float_literal lexeme state.current_location), state.current_location)
-  (* Float with exponent only (no decimal): 1e10, 1_000E5 *)
-  | Plus digit_with_underscore, exponent ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (FLOAT (parse_float_literal lexeme state.current_location), state.current_location)
-  (* Float with decimal: 3.14, 1_000.50 *)
-  | Plus digit_with_underscore, '.', Plus digit_with_underscore ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (FLOAT (parse_float_literal lexeme state.current_location), state.current_location)
-  (* Float with trailing dot: 3. (backwards compatibility) *)
-  | Plus digit_with_underscore, '.', Star digit ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (FLOAT (parse_float_literal lexeme state.current_location), state.current_location)
-  (* Decimal integer with optional underscores: 123, 1_000_000 *)
-  | Plus digit_with_underscore ->
-      update_location state;
-      let lexeme = current_lexeme state in
-      (INTEGER (parse_int_literal lexeme state.current_location), state.current_location)
-  | eof ->
-    update_location state;
-    (EOF, state.current_location)
+      skip_block_comment 0 lexbuf state.current_location;
+      next_token state
   | _ ->
-    update_location state;
-    Compiler_error.lexer_error state.current_location
-      (Printf.sprintf "Unexpected character: %s" (current_lexeme state))
+      (* Roll back and try to match a real token *)
+      Sedlexing.rollback lexbuf;
+      match !lex_real_token_ref state with
+      | Some result -> result
+      | None ->
+          update_location state;
+          Compiler_error.lexer_error state.current_location
+            (Printf.sprintf "Unexpected character: %s" (current_lexeme state))
 
 let tokenize filename content =
   let state = create_state filename content in
@@ -771,6 +649,9 @@ let lex_real_token state =
       update_location state;
       Some (EOF, state.current_location)
   | _ -> None
+
+(* Initialize the forward reference for next_token to use *)
+let () = lex_real_token_ref := lex_real_token
 
 (** Get the next token with attached trivia.
 

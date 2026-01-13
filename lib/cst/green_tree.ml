@@ -161,7 +161,9 @@ let trivia_piece_text piece = piece.trivia_text
 
 (** [trivia_text trivia] returns the concatenated text of all trivia pieces. *)
 let trivia_text trivia =
-  String.concat "" (List.map trivia_piece_text trivia)
+  let buf = Buffer.create 64 in
+  List.iter (fun piece -> Buffer.add_string buf piece.trivia_text) trivia;
+  Buffer.contents buf
 
 (** [token_text token] returns the text of a token without trivia. *)
 let token_text token = token.text
@@ -179,7 +181,9 @@ let rec green_child_text = function
 (** [green_node_text node] returns the full text of a green node,
     reconstructing all source text including trivia. *)
 and green_node_text node =
-  String.concat "" (List.map green_child_text node.children)
+  let buf = Buffer.create 256 in
+  List.iter (fun child -> Buffer.add_string buf (green_child_text child)) node.children;
+  Buffer.contents buf
 
 (** {1 Child Access} *)
 
@@ -285,19 +289,13 @@ let has_trailing_trivia token = token.trailing_trivia <> []
 (** [has_leading_comment token] returns [true] if the token has a leading comment. *)
 let has_leading_comment token =
   List.exists
-    (fun piece ->
-      match piece.trivia_kind with
-      | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
-      | _ -> false)
+    (fun piece -> Syntax_kind.is_comment piece.trivia_kind)
     token.leading_trivia
 
 (** [has_trailing_comment token] returns [true] if the token has a trailing comment. *)
 let has_trailing_comment token =
   List.exists
-    (fun piece ->
-      match piece.trivia_kind with
-      | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
-      | _ -> false)
+    (fun piece -> Syntax_kind.is_comment piece.trivia_kind)
     token.trailing_trivia
 
 (** [leading_newline_count token] returns the number of newlines in the

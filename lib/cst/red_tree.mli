@@ -20,10 +20,12 @@ type syntax_node = {
   parent : syntax_node option;
   offset : int;  (** Absolute byte offset from start of source *)
   index : int;  (** Index in parent's children list *)
+  mutable children_cache : syntax_element list option;
+      (** Cached children to avoid O(n) reconstruction on every access *)
 }
 
 (** A syntax token wrapping a green token with navigation context. *)
-type syntax_token = {
+and syntax_token = {
   green : Green_tree.green_token;
   parent : syntax_node;
   offset : int;  (** Absolute byte offset from start of source *)
@@ -31,7 +33,7 @@ type syntax_token = {
 }
 
 (** A syntax element is either a node or a token. *)
-type syntax_element =
+and syntax_element =
   | SyntaxNode of syntax_node
   | SyntaxToken of syntax_token
 
