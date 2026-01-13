@@ -1,0 +1,26 @@
+(* Test: Destructive substitution (with type t := int)
+
+   Destructive substitution removes a type from a signature after substituting
+   all occurrences with the replacement type. This is different from regular
+   with-constraints (with type t = int) which keep the type in the signature.
+
+   Expected output:
+   42
+*)
+
+-- Basic module type with abstract type
+module type Container = sig
+  type t
+  val x : int
+end
+
+-- Destructive substitution removes `type t` from signature
+module type IntContainer = Container with type t := int
+
+-- Module implementing the destructively substituted signature
+-- Note: No `type t` declaration needed since it was removed
+module MyContainer : IntContainer = struct
+  let x = 42
+end
+
+let _ = print MyContainer.x

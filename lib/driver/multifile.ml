@@ -112,6 +112,8 @@ and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
   | ExpressionAssign (ref_expr, value_expr) ->
     extract_from_expr referenced ref_expr;
     extract_from_expr referenced value_expr
+  | ExpressionPolyVariant (_, arg) ->
+    Option.iter (extract_from_expr referenced) arg
   | ExpressionError _ ->
     (* Error nodes don't reference other modules *)
     ()

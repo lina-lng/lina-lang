@@ -52,6 +52,8 @@ type token =
   | OPEN                  (** [open] keyword *)
   | INCLUDE               (** [include] keyword *)
   | VAL                   (** [val] keyword *)
+  | PRIVATE               (** [private] keyword for private types *)
+  | CONSTRAINT            (** [constraint] keyword for type parameter constraints *)
   | EXTERNAL              (** [external] keyword for FFI declarations *)
   | AT                    (** [@] for FFI attributes *)
   | LPAREN                (** [(] or [()] *)
@@ -82,6 +84,7 @@ type token =
   | REF                   (** [ref] keyword *)
   | BANG                  (** [!] dereference *)
   | COLONEQUALS           (** [:=] assignment *)
+  | BACKTICK_TAG of string (** [`` `Tag ``] polymorphic variant constructor *)
   | EOF                   (** End of input *)
 [@@deriving show, eq]
 

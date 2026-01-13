@@ -1,0 +1,42 @@
+(* Test: Polymorphic variants *)
+
+(* Basic poly variant creation *)
+let tag_a = `A
+let tag_b = `B 42
+let tag_c = `C "hello"
+
+(* Pattern matching on poly variants *)
+let test_match_simple x =
+  match x with
+  | `A -> 1
+  | `B n -> n
+  | `C s -> 0
+
+let test_match_a = test_match_simple `A
+let test_match_b = test_match_simple (`B 100)
+
+(* Poly variants with tuples *)
+let tag_pair = `Pair (1, 2)
+
+let get_sum x =
+  match x with
+  | `Pair (a, b) -> a + b
+  | `Single n -> n
+
+let sum_result = get_sum (`Pair (10, 20))
+
+(* Nested poly variants *)
+let nested = `Outer (`Inner 5)
+
+let get_inner x =
+  match x with
+  | `Outer (`Inner n) -> n
+  | `Outer (`Other s) -> 0
+
+let inner_result = get_inner (`Outer (`Inner 99))
+
+(* Print test results *)
+let _ = print test_match_a    (* Expected: 1 *)
+let _ = print test_match_b    (* Expected: 100 *)
+let _ = print sum_result      (* Expected: 30 *)
+let _ = print inner_result    (* Expected: 99 *)

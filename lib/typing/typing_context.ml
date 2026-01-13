@@ -45,11 +45,19 @@ let fresh_type_variable_id ctx =
 
 let new_type_variable_at_level ctx level =
   let (id, ctx') = fresh_type_variable_id ctx in
-  let tv = Types.TypeVariable { Types.id; level; link = None; weak = false } in
+  let tv = Types.TypeVariable { Types.id; level; link = None; weak = false; rigid = false } in
   (tv, ctx')
 
 let new_type_variable ctx =
   new_type_variable_at_level ctx ctx.level
+
+(** Create a rigid type variable for locally abstract types.
+    Rigid variables don't unify globally - instead, GADT pattern matching
+    extracts equations on them. *)
+let new_rigid_type_variable ctx =
+  let (id, ctx') = fresh_type_variable_id ctx in
+  let tv = Types.TypeVariable { Types.id; level = ctx.level; link = None; weak = false; rigid = true } in
+  (tv, ctx')
 
 (* Type Lookup *)
 

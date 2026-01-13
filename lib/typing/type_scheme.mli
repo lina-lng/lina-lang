@@ -70,3 +70,15 @@ val instantiate :
     @param fresh_var Function that creates a fresh type variable at current level
     @param scheme The type scheme to instantiate
     @return The instantiated type expression *)
+
+val instantiate_all_fresh :
+  fresh_var:(unit -> Types.type_expression) ->
+  Types.type_expression ->
+  Types.type_expression
+(** [instantiate_all_fresh ~fresh_var ty] replaces ALL type variables in [ty]
+    with fresh type variables. This is useful for constraint checking where
+    we need fresh copies of constraint types to avoid pollution between uses.
+
+    @param fresh_var Function that creates a fresh type variable
+    @param ty The type expression to instantiate
+    @return A copy of [ty] with all type variables replaced by fresh ones *)

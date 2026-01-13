@@ -76,6 +76,7 @@ type match_error =
   | MissingModule of string
   | TypeMismatch of string * type_expression * type_expression
   | ModuleTypeMismatch of string * string
+  | WeakTypeEscape of string * type_expression  (** Weak type cannot satisfy polymorphic signature *)
 
 type match_result = (unit, match_error) result
 
@@ -87,20 +88,59 @@ type match_errors = match_error list
 let fresh_match_var () =
   Types.new_type_variable_at_level Types.generic_level
 
+(** Check if a type contains any weak type variables.
+    Weak variables are non-generalizable and cannot satisfy polymorphic signatures. *)
+let rec has_weak_variables ty =
+  match Types.representative ty with
+  | Types.TypeVariable tv -> tv.weak
+  | Types.TypeArrow (arg, result) ->
+    has_weak_variables arg || has_weak_variables result
+  | Types.TypeTuple types ->
+    List.exists has_weak_variables types
+  | Types.TypeConstructor (_, args) ->
+    List.exists has_weak_variables args
+  | Types.TypeRecord row ->
+    let has_weak_in_row_field (_, field) =
+      match field with
+      | Types.RowFieldPresent ty -> has_weak_variables ty
+    in
+    List.exists has_weak_in_row_field row.row_fields ||
+    has_weak_variables row.row_more
+  | Types.TypeRowEmpty -> false
+  | Types.TypePolyVariant pv_row ->
+    let has_weak_in_field (_, field) =
+      match field with
+      | Types.PVFieldPresent (Some ty) -> has_weak_variables ty
+      | Types.PVFieldPresent None | Types.PVFieldAbsent -> false
+    in
+    List.exists has_weak_in_field pv_row.pv_fields ||
+    has_weak_variables pv_row.pv_more
+
+(** Check if a type scheme has weak variables in its body.
+    This is used to detect weak type escape at module boundaries. *)
+let scheme_has_weak_variables scheme =
+  has_weak_variables scheme.Types.body
+
 (** Check if an implementation type is compatible with a specification type.
-    The implementation type must be at least as general as the spec type. *)
+    The implementation type must be at least as general as the spec type.
+    Also checks that weak types don't escape to polymorphic positions. *)
 let check_type_compatibility ctx _loc impl_scheme spec_scheme =
-  (* For now, do a simple structural comparison after instantiation *)
-  (* A proper implementation would use subsumption checking *)
-  let impl_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var impl_scheme in
-  let spec_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var spec_scheme in
-  (* Try to unify - if it succeeds, implementation is compatible *)
-  try
-    Unification.unify ~type_lookup:ctx.type_lookup Location.none impl_ty spec_ty;
-    Ok ()
-  with
-  | Compiler_error.Error _ ->
-    Error (TypeMismatch ("", impl_ty, spec_ty))
+  (* Check for weak type escape: if spec is polymorphic but impl has weak vars *)
+  let spec_is_polymorphic = spec_scheme.Types.quantified_variables <> [] in
+  if spec_is_polymorphic && scheme_has_weak_variables impl_scheme then
+    Error (WeakTypeEscape ("", impl_scheme.Types.body))
+  else begin
+    (* Do structural comparison after instantiation *)
+    let impl_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var impl_scheme in
+    let spec_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var spec_scheme in
+    (* Try to unify - if it succeeds, implementation is compatible *)
+    try
+      Unification.unify ~type_lookup:ctx.type_lookup Location.none impl_ty spec_ty;
+      Ok ()
+    with
+    | Compiler_error.Error _ ->
+      Error (TypeMismatch ("", impl_ty, spec_ty))
+  end
 
 (** Check if two type declarations are compatible.
     - Parameter counts must match
@@ -246,6 +286,10 @@ let format_match_error = function
       name (type_expression_to_string impl_ty) (type_expression_to_string spec_ty)
   | ModuleTypeMismatch (msg, _) ->
     msg
+  | WeakTypeEscape (name, ty) ->
+    let prefix = if name = "" then "" else Printf.sprintf "for %s: " name in
+    Printf.sprintf "Weak type escape %s%s cannot satisfy polymorphic signature"
+      prefix (type_expression_to_string ty)
 
 (** {1 Accumulating Match Functions}
 

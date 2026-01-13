@@ -35,6 +35,8 @@ type t =
   | TK_OPEN
   | TK_INCLUDE
   | TK_VAL
+  | TK_PRIVATE
+  | TK_CONSTRAINT
 
   (* FFI keywords *)
   | TK_EXTERNAL
@@ -50,6 +52,7 @@ type t =
   | TK_LOWERCASE_IDENT
   | TK_UPPERCASE_IDENT
   | TK_TYPE_VARIABLE
+  | TK_BACKTICK_TAG     (** `` `Tag `` polymorphic variant constructor *)
 
   (* Delimiters *)
   | TK_LPAREN

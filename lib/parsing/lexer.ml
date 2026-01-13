@@ -32,6 +32,10 @@ type token =
   | OPEN
   | INCLUDE
   | VAL
+  (* Privacy token *)
+  | PRIVATE
+  (* Constraint token *)
+  | CONSTRAINT
   (* FFI tokens *)
   | EXTERNAL
   | AT
@@ -64,6 +68,8 @@ type token =
   | REF            (** ref keyword for creating references *)
   | BANG           (** ! for dereference *)
   | COLONEQUALS    (** := for assignment *)
+  (* Polymorphic variants *)
+  | BACKTICK_TAG of string  (** `` `Tag `` for polymorphic variant constructors *)
   | EOF
 [@@deriving show, eq]
 
@@ -109,6 +115,10 @@ let keywords =
     ("open", OPEN);
     ("include", INCLUDE);
     ("val", VAL);
+    (* Privacy keyword *)
+    ("private", PRIVATE);
+    (* Constraint keyword *)
+    ("constraint", CONSTRAINT);
     (* FFI keywords *)
     ("external", EXTERNAL);
     (* Reference keyword *)
@@ -388,6 +398,12 @@ let lex_real_token state =
       let lexeme = current_lexeme state in
       let var_name = String.sub lexeme 1 (String.length lexeme - 1) in
       Some (TYPE_VARIABLE var_name, state.current_location)
+  (* Polymorphic variant tags: `Some, `None, `A *)
+  | '`', (lowercase_letter | uppercase_letter), Star identifier_char ->
+      update_location state;
+      let lexeme = current_lexeme state in
+      let tag_name = String.sub lexeme 1 (String.length lexeme - 1) in
+      Some (BACKTICK_TAG tag_name, state.current_location)
   (* Identifiers and keywords *)
   | lowercase_letter, Star identifier_char ->
       update_location state;

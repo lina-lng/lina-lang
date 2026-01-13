@@ -138,6 +138,9 @@ let rec check_in_context
   | Types.TypeRecord row ->
     check_in_row target_var context_variance row
 
+  | Types.TypePolyVariant pv_row ->
+    check_in_poly_variant_row target_var context_variance pv_row
+
   | Types.TypeRowEmpty ->
     Bivariant
 
@@ -161,6 +164,31 @@ and check_in_row
   (* Also check the row extension variable *)
   let row_more_variance =
     check_in_context target_var context_variance row.Types.row_more
+  in
+  combine field_variance row_more_variance
+
+(** Check variance in a polymorphic variant row type. *)
+and check_in_poly_variant_row
+    (target_var : Types.type_variable)
+    (context_variance : t)
+    (pv_row : Types.poly_variant_row)
+  : t =
+  let field_variance =
+    List.fold_left
+      (fun accumulated_variance (_, field) ->
+        match field with
+        | Types.PVFieldPresent (Some field_type) ->
+          (* Variant arguments are covariant *)
+          let fv = check_in_context target_var context_variance field_type in
+          combine accumulated_variance fv
+        | Types.PVFieldPresent None | Types.PVFieldAbsent ->
+          accumulated_variance)
+      Bivariant
+      pv_row.Types.pv_fields
+  in
+  (* Also check the row extension variable *)
+  let row_more_variance =
+    check_in_context target_var context_variance pv_row.Types.pv_more
   in
   combine field_variance row_more_variance
 

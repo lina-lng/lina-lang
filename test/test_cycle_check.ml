@@ -7,7 +7,7 @@ open Typing
 
 (** Helper to create a type variable with a given id. *)
 let make_type_var id =
-  { Types.id; level = 0; link = None; weak = false }
+  { Types.id; level = 0; link = None; weak = false; rigid = false }
 
 (** Helper to format cycle error for testing. *)
 let format_result result =
@@ -83,13 +83,17 @@ let%expect_test "cycle check: simple variant type is ok" =
       constructor_type_name = "option";
       constructor_argument_type = None;
       constructor_result_type = Types.TypeVariable tv;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
     { Types.constructor_name = "Some";
       constructor_tag_index = 1;
       constructor_type_name = "option";
       constructor_argument_type = Some (Types.TypeVariable tv);
       constructor_result_type = Types.TypeVariable tv;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
   let kind = Types.DeclarationVariant constructors in
   let result = run_check (fun () ->
@@ -111,13 +115,17 @@ let%expect_test "cycle check: recursive variant is ok (guarded)" =
       constructor_type_name = "list";
       constructor_argument_type = None;
       constructor_result_type = list_type;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
     { Types.constructor_name = "Cons";
       constructor_tag_index = 1;
       constructor_type_name = "list";
       constructor_argument_type = Some cons_arg;
       constructor_result_type = list_type;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
   (* Add the type to environment so it's recognized as a variant *)
   let decl = {
@@ -126,6 +134,8 @@ let%expect_test "cycle check: recursive variant is ok (guarded)" =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationVariant constructors;
     declaration_variances = [Types.Covariant];
+    declaration_private = false;
+    declaration_constraints = [];
   } in
   let env = Environment.add_type "list" decl (Environment.empty) in
   let kind = Types.DeclarationVariant constructors in
@@ -183,13 +193,17 @@ let%expect_test "mutual recursion: guarded mutual types are ok" =
       constructor_type_name = "even";
       constructor_argument_type = None;
       constructor_result_type = even_type;
-      constructor_type_parameters = [] };
+      constructor_type_parameters = [];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
     { Types.constructor_name = "SuccE";
       constructor_tag_index = 1;
       constructor_type_name = "even";
       constructor_argument_type = Some odd_type;
       constructor_result_type = even_type;
-      constructor_type_parameters = [] };
+      constructor_type_parameters = [];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
 
   let odd_ctors = [
@@ -198,7 +212,9 @@ let%expect_test "mutual recursion: guarded mutual types are ok" =
       constructor_type_name = "odd";
       constructor_argument_type = Some even_type;
       constructor_result_type = odd_type;
-      constructor_type_parameters = [] };
+      constructor_type_parameters = [];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
 
   let even_decl = {
@@ -207,6 +223,8 @@ let%expect_test "mutual recursion: guarded mutual types are ok" =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationVariant even_ctors;
     declaration_variances = [];
+    declaration_private = false;
+    declaration_constraints = [];
   } in
 
   let odd_decl = {
@@ -215,6 +233,8 @@ let%expect_test "mutual recursion: guarded mutual types are ok" =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationVariant odd_ctors;
     declaration_variances = [];
+    declaration_private = false;
+    declaration_constraints = [];
   } in
 
   let env = Environment.empty
@@ -244,7 +264,9 @@ let%expect_test "cycle check: tuple does not guard recursion" =
       constructor_type_name = "wrapper";
       constructor_argument_type = Some (Types.TypeVariable tv);
       constructor_result_type = Types.TypeConstructor (Types.PathLocal "wrapper", [Types.TypeVariable tv]);
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
   let kind = Types.DeclarationVariant constructors in
   let result = run_check (fun () ->

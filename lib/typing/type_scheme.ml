@@ -35,6 +35,10 @@ let generalize ~level ty =
       if not (Hashtbl.mem seen tv.id) then begin
         Hashtbl.add seen tv.id ();
         tv.level <- generic_level;
+        (* Clear rigid flag - it was only needed during initial type-checking
+           for GADT equation extraction. Once generalized, the variable becomes
+           a normal polymorphic variable that can be instantiated freely. *)
+        tv.rigid <- false;
         generalized_vars := tv :: !generalized_vars
       end
     | _ -> ()
@@ -94,3 +98,25 @@ let instantiate ~fresh_var scheme =
       | _ -> ty
     ) scheme.body
   end
+
+(** [instantiate_all_fresh ~fresh_var ty] replaces ALL type variables in [ty]
+    with fresh type variables. This is useful for constraint checking where
+    we need fresh copies of constraint types to avoid pollution between uses.
+
+    @param fresh_var Function that creates a fresh type variable
+    @param ty The type expression to instantiate
+    @return A copy of [ty] with all type variables replaced by fresh ones *)
+let instantiate_all_fresh ~fresh_var ty =
+  let substitution = Hashtbl.create 16 in
+  Type_traversal.map (fun t ->
+    match representative t with
+    | TypeVariable tv ->
+      begin match Hashtbl.find_opt substitution tv.id with
+      | Some fresh_ty -> fresh_ty
+      | None ->
+        let fresh_ty = fresh_var () in
+        Hashtbl.add substitution tv.id fresh_ty;
+        fresh_ty
+      end
+    | _ -> t
+  ) ty

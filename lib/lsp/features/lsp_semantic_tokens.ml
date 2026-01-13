@@ -162,6 +162,32 @@ let rec collect_from_pattern ~is_parameter tokens (pat : Typing.Typed_tree.typed
         collect_from_pattern ~is_parameter field_tokens field.typed_pattern_field_pattern
       ) tokens fields
 
+  | Typing.Typed_tree.TypedPatternLocallyAbstract (_id, _type_decl) ->
+      (* Locally abstract type - type name as type token *)
+      begin match make_token loc TokenType [] with
+      | Some tok -> tok :: tokens
+      | None -> tokens
+      end
+
+  | Typing.Typed_tree.TypedPatternPolyVariant (tag, arg_opt) ->
+      (* Poly variant tag as enum member *)
+      let tag_loc = {
+        Common.Location.start_pos = loc.start_pos;
+        end_pos = {
+          loc.start_pos with
+          offset = loc.start_pos.offset + String.length tag + 1;  (* +1 for backtick *)
+          column = loc.start_pos.column + String.length tag + 1;
+        };
+      } in
+      let tokens = match make_token tag_loc TokenEnumMember [] with
+        | Some tok -> tok :: tokens
+        | None -> tokens
+      in
+      begin match arg_opt with
+      | Some arg -> collect_from_pattern ~is_parameter tokens arg
+      | None -> tokens
+      end
+
   | Typing.Typed_tree.TypedPatternError _ ->
       (* Error patterns don't produce semantic tokens *)
       tokens
@@ -284,6 +310,25 @@ let rec collect_from_expression tokens (expr : Typing.Typed_tree.typed_expressio
   | Typing.Typed_tree.TypedExpressionAssign (ref_expr, value_expr) ->
       let tokens = collect_from_expression tokens ref_expr in
       collect_from_expression tokens value_expr
+
+  | Typing.Typed_tree.TypedExpressionPolyVariant (tag, arg_opt) ->
+      (* Poly variant tag as enum member *)
+      let tag_loc = {
+        Common.Location.start_pos = loc.start_pos;
+        end_pos = {
+          loc.start_pos with
+          offset = loc.start_pos.offset + String.length tag + 1;  (* +1 for backtick *)
+          column = loc.start_pos.column + String.length tag + 1;
+        };
+      } in
+      let tokens = match make_token tag_loc TokenEnumMember [] with
+        | Some tok -> tok :: tokens
+        | None -> tokens
+      in
+      begin match arg_opt with
+      | Some arg -> collect_from_expression tokens arg
+      | None -> tokens
+      end
 
   | Typing.Typed_tree.TypedExpressionError _ ->
       (* Error expressions don't produce semantic tokens *)

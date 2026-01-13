@@ -1,0 +1,21 @@
+(* Basic GADT syntax test - without type equations *)
+(* Full GADT support with type equations is not yet implemented *)
+
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+  | Add : int expr * int expr -> int expr
+
+(* Simple GADT construction works *)
+let x : int expr = Int 42
+let y : bool expr = Bool true
+let z : int expr = Add (Int 10, Int 20)
+
+(* Pattern matching on known type works *)
+let get_int (e : int expr) =
+  match e with
+  | Int n -> n
+  | Add (e1, e2) -> 0  (* Placeholder - would need recursion *)
+
+let result = get_int x
+let _ = print result  (* Expected: 42 *)

@@ -112,7 +112,23 @@ and substitute_path_in_type ~old_path ~new_path ty =
   | TypeRecord row ->
     let new_row = substitute_path_in_row ~old_path ~new_path row in
     TypeRecord new_row
+  | TypePolyVariant pv_row ->
+    let new_pv_row = substitute_path_in_poly_variant_row ~old_path ~new_path pv_row in
+    TypePolyVariant new_pv_row
   | TypeVariable _ | TypeRowEmpty -> ty
+
+and substitute_path_in_poly_variant_row ~old_path ~new_path pv_row =
+  let new_fields = List.map (fun (name, field) ->
+    let new_field = match field with
+      | PVFieldPresent (Some ty) ->
+        PVFieldPresent (Some (substitute_path_in_type ~old_path ~new_path ty))
+      | PVFieldPresent None -> PVFieldPresent None
+      | PVFieldAbsent -> PVFieldAbsent
+    in
+    (name, new_field)
+  ) pv_row.pv_fields in
+  let new_more = substitute_path_in_type ~old_path ~new_path pv_row.pv_more in
+  { pv_fields = new_fields; pv_more = new_more; pv_closed = pv_row.pv_closed }
 
 let substitute_path_in_scheme ~old_path ~new_path scheme =
   let new_body = substitute_path_in_type ~old_path ~new_path scheme.body in

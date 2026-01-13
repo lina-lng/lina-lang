@@ -1,0 +1,20 @@
+(* Constrained type schemes tests *)
+
+(* Basic constraint: type 'a t must have 'a as a pair *)
+type 'a pair_only = 'a constraint 'a = 'b * 'c
+
+(* Test with valid pair type *)
+let p : (int * string) pair_only = (1, "hello")
+let _ = print (match p with (x, _) -> x)  (* 1 *)
+
+(* Using the constrained type in a function *)
+let use_pair (x : (int * int) pair_only) =
+  match x with (a, b) -> a + b
+
+let _ = print (use_pair (10, 20))  (* 30 *)
+
+(* Multiple type parameters with constraints *)
+type ('a, 'b) both = ('a * 'b) constraint 'a = 'x constraint 'b = 'y
+
+let bp : (int, string) both = (42, "answer")
+let _ = print (match bp with (n, _) -> n)  (* 42 *)

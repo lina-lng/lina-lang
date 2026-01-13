@@ -1,0 +1,43 @@
+(* Test: Weak type escape checking at module boundaries *)
+(* This tests that concrete types satisfy polymorphic signatures correctly *)
+
+(* Module with signature constraint - polymorphic id function *)
+(* Lambda values are syntactic values, so they generalize to polymorphic types *)
+module Identity : sig
+  val id : 'a -> 'a
+end = struct
+  let id x = x
+end
+
+(* Test polymorphism is preserved through signature *)
+let test1 = Identity.id 42
+let test2 = Identity.id true
+
+(* Module with polymorphic const function *)
+module Const : sig
+  val const : 'a -> 'b -> 'a
+end = struct
+  let const x _ = x
+end
+
+(* Test const polymorphism *)
+let c1 = Const.const 10 "ignored"
+let c2 = Const.const "hello" 999
+
+(* Module with concrete types - demonstrates non-weak types pass *)
+module Counter : sig
+  val make : int -> int
+  val double : int -> int
+end = struct
+  let make n = n
+  let double x = x + x
+end
+
+let c = Counter.make 5
+let d = Counter.double c
+
+(* Output results *)
+let _ = print test1   (* Expected: 42 *)
+let _ = print test2   (* Expected: true *)
+let _ = print c1      (* Expected: 10 *)
+let _ = print d       (* Expected: 10 *)

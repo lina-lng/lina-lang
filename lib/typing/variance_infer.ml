@@ -89,6 +89,9 @@ let rec infer_variance_in_type
   | TypeRecord row ->
     infer_variance_in_row param_id context_variance row
 
+  | TypePolyVariant pv_row ->
+    infer_variance_in_poly_variant_row param_id context_variance pv_row
+
   | TypeRowEmpty ->
     None
 
@@ -115,6 +118,38 @@ and infer_variance_in_row
   (* Also check the row extension variable *)
   let row_more_variance =
     infer_variance_in_type param_id context_variance row.row_more
+  in
+  match field_variance, row_more_variance with
+  | None, v -> v
+  | v, None -> v
+  | Some v1, Some v2 -> Some (Variance.combine v1 v2)
+
+(** Check variance in a polymorphic variant row type. *)
+and infer_variance_in_poly_variant_row
+    (param_id : int)
+    (context_variance : variance)
+    (pv_row : poly_variant_row)
+  : variance option =
+  let field_variance =
+    List.fold_left
+      (fun accumulated (_, field) ->
+        match field with
+        | PVFieldPresent (Some field_type) ->
+          (* Variant arguments are covariant *)
+          let field_var = infer_variance_in_type param_id context_variance field_type in
+          begin match accumulated, field_var with
+          | None, v -> v
+          | v, None -> v
+          | Some v1, Some v2 -> Some (Variance.combine v1 v2)
+          end
+        | PVFieldPresent None | PVFieldAbsent ->
+          accumulated)
+      None
+      pv_row.pv_fields
+  in
+  (* Also check the row extension variable *)
+  let row_more_variance =
+    infer_variance_in_type param_id context_variance pv_row.pv_more
   in
   match field_variance, row_more_variance with
   | None, v -> v

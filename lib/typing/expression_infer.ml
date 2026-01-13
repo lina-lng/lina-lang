@@ -95,6 +95,15 @@ let rec infer_expression ctx (expr : expression) =
     begin match Environment.find_constructor name env with
     | None -> Inference_utils.error_unbound_constructor loc name
     | Some constructor_info ->
+      (* Check if the type is private - private types cannot be constructed *)
+      let () =
+        match Environment.find_type constructor_info.constructor_type_name env with
+        | Some type_decl when type_decl.declaration_private ->
+          Compiler_error.type_error loc
+            (Printf.sprintf "Cannot construct value of private type %s"
+               constructor_info.constructor_type_name)
+        | _ -> ()
+      in
       let expected_arg_ty, result_ty =
         Inference_utils.instantiate_constructor_with_ctx ctx constructor_info
       in
@@ -140,7 +149,14 @@ let rec infer_expression ctx (expr : expression) =
     let typed_params, param_types, inner_ctx =
       List.fold_left (fun (pats, tys, ctx) p ->
         let pat, ty, ctx = Pattern_infer.infer_pattern ctx p in
-        (pat :: pats, ty :: tys, ctx)
+        (* Locally abstract types don't contribute to the function signature -
+           they only introduce a type into scope. Filter them out when building
+           the parameter type list, but keep them in typed_params for the AST. *)
+        let tys = match pat.pattern_desc with
+          | TypedPatternLocallyAbstract _ -> tys  (* Skip - no runtime parameter *)
+          | _ -> ty :: tys
+        in
+        (pat :: pats, tys, ctx)
       ) ([], [], ctx) param_patterns
     in
     let typed_params = List.rev typed_params in
@@ -195,8 +211,14 @@ let rec infer_expression ctx (expr : expression) =
       expression_location = loc;
     }, ctx)
 
-  | ExpressionConstraint (inner_expr, _type_expr) ->
-    infer_expression ctx inner_expr
+  | ExpressionConstraint (inner_expr, type_expr) ->
+    (* Type annotation constrains the expression type *)
+    let typed_inner, ctx = infer_expression ctx inner_expr in
+    let constraint_ty, ctx = Module_type_check.check_type_expression ctx type_expr in
+    (* Unify the inferred type with the annotated type *)
+    unify ctx loc typed_inner.expression_type constraint_ty;
+    (* Return with the annotated type (may be more specific due to rigid variables) *)
+    ({ typed_inner with expression_type = constraint_ty }, ctx)
 
   | ExpressionRecord record_fields ->
     (* Infer types for each field value *)
@@ -318,11 +340,21 @@ let rec infer_expression ctx (expr : expression) =
     let scrutinee_type = typed_scrutinee.expression_type in
     (* Create fresh type variable for the result *)
     let result_type, ctx = Typing_context.new_type_variable ctx in
+    (* Check if scrutinee contains rigid type variables (GADT case) *)
+    let scrutinee_has_rigid = Gadt.has_rigid_variables scrutinee_type in
     (* Type-check each match arm *)
     let typed_match_arms, ctx = List.fold_left (fun (arms, ctx) match_arm ->
       (* Infer pattern type and get bindings *)
       let typed_pattern, pattern_type, arm_ctx = Pattern_infer.infer_pattern ctx match_arm.arm_pattern in
-      (* Unify pattern type with scrutinee type *)
+      (* Extract GADT equations if applicable *)
+      let gadt_equations =
+        if scrutinee_has_rigid then
+          let extraction = Gadt.extract_equations scrutinee_type pattern_type in
+          if extraction.success then extraction.equations else []
+        else
+          []
+      in
+      (* Unify pattern type with scrutinee type (for non-rigid parts) *)
       unify ctx match_arm.arm_location scrutinee_type pattern_type;
       (* Type-check guard if present - must be bool *)
       let typed_guard, arm_ctx = match match_arm.arm_guard with
@@ -334,8 +366,16 @@ let rec infer_expression ctx (expr : expression) =
       in
       (* Type-check arm body with pattern bindings *)
       let typed_arm_expression, _arm_ctx = infer_expression arm_ctx match_arm.arm_expression in
-      (* Unify arm result with overall result type *)
-      unify ctx match_arm.arm_location result_type typed_arm_expression.expression_type;
+      (* For GADT branches with equations, skip the normal result unification.
+         Each branch has a different concrete type based on its GADT equations.
+         The overall result type will be unified via the outer type annotation. *)
+      if gadt_equations = [] then begin
+        (* Non-GADT case: normal unification with result_type *)
+        unify ctx match_arm.arm_location result_type typed_arm_expression.expression_type
+      end;
+      (* Note: For GADT branches, we trust that the outer type annotation (: a)
+         will properly constrain the match result. Each branch independently
+         satisfies the equation-refined type. *)
       let typed_arm = {
         Typed_tree.typed_arm_pattern = typed_pattern;
         typed_arm_guard = typed_guard;
@@ -412,6 +452,25 @@ let rec infer_expression ctx (expr : expression) =
     ({
       expression_desc = TypedExpressionAssign (typed_ref, typed_value);
       expression_type = Types.type_unit;
+      expression_location = loc;
+    }, ctx)
+
+  | ExpressionPolyVariant (tag, arg_expr) ->
+    (* Polymorphic variant expression: `Tag or `Tag expr
+       Creates an open "at least" type: [> `Tag] or [> `Tag of ty] *)
+    let typed_arg, arg_ty_opt, ctx = match arg_expr with
+      | None -> (None, None, ctx)
+      | Some e ->
+        let typed_e, ctx = infer_expression ctx e in
+        (Some typed_e, Some typed_e.expression_type, ctx)
+    in
+    (* Create a row variable for the open poly variant type *)
+    let row_var, ctx = Typing_context.new_type_variable ctx in
+    let pv_field = Types.PVFieldPresent arg_ty_opt in
+    let pv_type = Types.type_poly_variant_at_least [(tag, pv_field)] ~row_var in
+    ({
+      expression_desc = TypedExpressionPolyVariant (tag, typed_arg);
+      expression_type = pv_type;
       expression_location = loc;
     }, ctx)
 

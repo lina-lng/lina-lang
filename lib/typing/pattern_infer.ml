@@ -183,6 +183,60 @@ let rec infer_pattern ctx (pattern : pattern) =
     } in
     (typed_pattern, record_type, ctx)
 
+  | PatternLocallyAbstract type_name ->
+    (* Locally abstract type: (type a) introduces a scoped rigid type variable.
+       The pattern matches nothing (has type unit), but adds a type alias
+       to the environment that maps the name to a rigid type variable.
+
+       Rigid type variables don't unify globally - instead, GADT pattern
+       matching extracts equations on them that are applied locally within
+       match branches. This enables the classic GADT eval function to work. *)
+    let abstract_id = Identifier.create type_name in
+    (* Create a rigid type variable for this locally abstract type *)
+    let type_var, ctx = Typing_context.new_rigid_type_variable ctx in
+    (* Create a type declaration that maps the name to this type variable *)
+    let type_decl = {
+      declaration_name = type_name;
+      declaration_parameters = [];
+      declaration_variances = [];
+      declaration_manifest = Some type_var;  (* Alias to the type variable *)
+      declaration_kind = DeclarationAbstract;
+      declaration_private = false;
+      declaration_constraints = [];
+    } in
+    (* Add the type alias to the environment *)
+    let env = Typing_context.environment ctx in
+    let env = Environment.add_type type_name type_decl env in
+    let ctx = Typing_context.with_environment env ctx in
+    (* The pattern has type unit - it doesn't match a value *)
+    let typed_pattern = {
+      pattern_desc = TypedPatternLocallyAbstract (abstract_id, type_decl);
+      pattern_type = type_unit;
+      pattern_location = loc;
+    } in
+    (typed_pattern, type_unit, ctx)
+
+  | PatternPolyVariant (tag, arg_pattern) ->
+    (* Polymorphic variant pattern: `Tag or `Tag pat
+       Creates an open poly variant type that can be unified with the scrutinee.
+       Pattern type is [> `Tag] or [> `Tag of ty] - same as expression type. *)
+    let typed_arg, arg_ty_opt, ctx = match arg_pattern with
+      | None -> (None, None, ctx)
+      | Some p ->
+        let typed_p, ty, ctx = infer_pattern ctx p in
+        (Some typed_p, Some ty, ctx)
+    in
+    (* Create a row variable for the open poly variant type *)
+    let row_var, ctx = Typing_context.new_type_variable ctx in
+    let pv_field = Types.PVFieldPresent arg_ty_opt in
+    let pv_type = Types.type_poly_variant_at_least [(tag, pv_field)] ~row_var in
+    let typed_pattern = {
+      pattern_desc = TypedPatternPolyVariant (tag, typed_arg);
+      pattern_type = pv_type;
+      pattern_location = loc;
+    } in
+    (typed_pattern, pv_type, ctx)
+
   | PatternError error_info ->
     (* Error patterns get a fresh type variable and are preserved in typed tree *)
     let error_ty, ctx = Typing_context.new_type_variable ctx in

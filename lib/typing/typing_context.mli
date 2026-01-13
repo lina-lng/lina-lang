@@ -70,6 +70,11 @@ val new_type_variable_at_level : t -> int -> Types.type_expression * t
 (** [new_type_variable_at_level ctx level] creates a fresh type variable
     at the specified level. *)
 
+val new_rigid_type_variable : t -> Types.type_expression * t
+(** [new_rigid_type_variable ctx] creates a rigid type variable for locally
+    abstract types. Rigid variables don't unify globally during GADT pattern
+    matching - instead, equations are extracted and applied locally. *)
+
 (** {1 Type Lookup}
 
     These functions look up type and module type definitions by path,

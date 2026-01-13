@@ -16,6 +16,7 @@ type head_constructor =
   | HCTuple of int
   | HCConstructor of string * int  (** name, tag_index *)
   | HCRecord of string list
+  | HCPolyVariant of string  (** polymorphic variant tag *)
 
 (** Compiled decision tree.
 

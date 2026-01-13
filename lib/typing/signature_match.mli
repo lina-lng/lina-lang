@@ -90,6 +90,8 @@ type match_error =
       (** Value has incompatible type: name, expected, actual *)
   | ModuleTypeMismatch of string * string
       (** Submodule has incompatible module type: name, reason *)
+  | WeakTypeEscape of string * Types.type_expression
+      (** Weak type cannot escape to polymorphic position in signature *)
 
 (** Result of signature matching. *)
 type match_result = (unit, match_error) result

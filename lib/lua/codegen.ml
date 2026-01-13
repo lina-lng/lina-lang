@@ -56,6 +56,8 @@ let translate_primitive prim args =
     ExpressionBinaryOp (OpLessEqual, a, b)
   | Lambda.PrimitiveIntGreaterEqual, [a; b] ->
     ExpressionBinaryOp (OpGreaterEqual, a, b)
+  | Lambda.PrimitiveStringEqual, [a; b] ->
+    ExpressionBinaryOp (OpEqual, a, b)
   | Lambda.PrimitivePrint, [a] ->
     ExpressionCall (ExpressionVariable "print", [a])
   | Lambda.PrimitiveMakeBlock _, fields ->
@@ -328,6 +330,26 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let return_nil = StatementReturn [ExpressionNil] in
     let iife = ExpressionCall (ExpressionFunction ([], [assign_stmt; return_nil]), []) in
     (iife, ctx)
+
+  | Lambda.LambdaPolyVariant (tag, arg) ->
+    (* `Tag -> {_tag = "Tag"}
+       `Tag x -> {_tag = "Tag", _0 = x} *)
+    begin match arg with
+    | None ->
+      (* Nullary poly variant - just the tag *)
+      let table = ExpressionTable [
+        FieldNamed ("_tag", ExpressionString tag);
+      ] in
+      (table, ctx)
+    | Some arg_expr ->
+      (* Poly variant with argument *)
+      let arg_lua, ctx = translate_expression ctx arg_expr in
+      let table = ExpressionTable [
+        FieldNamed ("_tag", ExpressionString tag);
+        FieldNamed ("_0", arg_lua);
+      ] in
+      (table, ctx)
+    end
 
 (** Helper to translate a list of expressions.
     Uses cons + reverse for O(n) instead of O(n²) list append. *)

@@ -183,9 +183,9 @@ let x =
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local a_32 = _Ctor_option_0
-    local b_33 = _Ctor_option_0
-    local x_34 = a_32
+    local a_31 = _Ctor_option_0
+    local b_32 = _Ctor_option_0
+    local x_33 = a_31
     |}]
 
 let%expect_test "conditionals with singletons in both branches" =
@@ -198,8 +198,8 @@ let f b = if b then None else None
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local function f_36(b_35)
-      if b_35 then
+    local function f_35(b_34)
+      if b_34 then
         return _Ctor_option_0
       else
         return _Ctor_option_0

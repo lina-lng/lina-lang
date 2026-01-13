@@ -43,6 +43,25 @@ and type_expression_desc =
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
   | TypeRecord of type_record_field list * bool  (* bool = is_open, i.e. has .. *)
+  | TypePolyVariant of poly_variant_row
+      (** Polymorphic variant type: [[ `A | `B of int ]] *)
+[@@deriving show, eq]
+
+(** A polymorphic variant type row. *)
+and poly_variant_row =
+  | PolyRowExact of poly_variant_field list
+      (** Exact variant: [[ `A | `B ]] *)
+  | PolyRowAtLeast of poly_variant_field list
+      (** Open lower bound: [[> `A | `B ]] *)
+  | PolyRowAtMost of poly_variant_field list * string list
+      (** Closed upper bound with required tags: [[< `A | `B > `A ]] *)
+[@@deriving show, eq]
+
+(** A single polymorphic variant field/constructor. *)
+and poly_variant_field = {
+  poly_variant_tag : string;  (** The tag name (without backtick) *)
+  poly_variant_argument : type_expression option;  (** Optional argument type *)
+}
 [@@deriving show, eq]
 
 and type_record_field = {
@@ -63,6 +82,10 @@ and pattern_desc =
   | PatternAlias of pattern * string
   | PatternConstraint of pattern * type_expression
   | PatternRecord of record_pattern_field list * bool  (* bool = is_open *)
+  | PatternLocallyAbstract of string
+      (** Locally abstract type: [(type a)] introduces scoped abstract type *)
+  | PatternPolyVariant of string * pattern option
+      (** Polymorphic variant pattern: [` `A] or [` `A p] *)
   | PatternError of error_info
       (** Error recovery placeholder for invalid pattern syntax *)
 [@@deriving show, eq]
@@ -95,6 +118,8 @@ and expression_desc =
   | ExpressionRef of expression                     (** ref e *)
   | ExpressionDeref of expression                   (** !e *)
   | ExpressionAssign of expression * expression     (** e1 := e2 *)
+  | ExpressionPolyVariant of string * expression option
+      (** Polymorphic variant expression: [` `A] or [` `A e] *)
   | ExpressionError of error_info
       (** Error recovery placeholder for invalid expression syntax *)
 [@@deriving show, eq]
@@ -123,6 +148,7 @@ and binding = {
 type constructor_declaration = {
   constructor_name : string Location.located;
   constructor_argument : type_expression option;
+  constructor_return_type : type_expression option;  (** GADT return type *)
 }
 [@@deriving show, eq]
 
@@ -139,10 +165,24 @@ type type_parameter = {
 }
 [@@deriving show, eq]
 
+(** A type parameter constraint.
+
+    Syntax: [constraint 'a = type_expression]
+
+    Example: [type 'a t constraint 'a = 'b * 'c] *)
+type type_constraint = {
+  constraint_variable : string;  (** The constrained type variable, e.g., "'a" *)
+  constraint_type : type_expression;  (** The type the variable is constrained to *)
+  constraint_location : Location.t;
+}
+[@@deriving show, eq]
+
 type type_declaration = {
   type_name : string Location.located;
   type_parameters : type_parameter list;  (** Type parameters with variance annotations *)
   type_kind : type_declaration_kind;
+  type_private : bool;  (** True if this is a private type (prevents construction) *)
+  type_constraints : type_constraint list;  (** Type parameter constraints *)
   type_location : Location.t;
 }
 [@@deriving show, eq]
@@ -230,6 +270,7 @@ and signature_item_desc =
 
 and with_constraint =
   | WithType of longident * string list * type_expression  (* with type M.t = ... *)
+  | WithTypeDestructive of longident * string list * type_expression  (* with type M.t := ... *)
   | WithModule of longident * module_path     (* with module M.N = P *)
 [@@deriving show, eq]
 

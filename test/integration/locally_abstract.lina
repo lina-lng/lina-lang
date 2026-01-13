@@ -1,0 +1,30 @@
+(* Locally abstract types integration tests *)
+
+(* Basic: (type a) introduces a scoped type variable *)
+let id (type a) (x : a) : a = x
+let _ = print (id 42)  (* 42 *)
+let _ = print (id "hello")  (* hello - polymorphic! *)
+
+(* Multiple locally abstract types *)
+let pair (type a) (type b) (x : a) (y : b) = (x, y)
+let p = pair 1 "two"
+let _ = print (match p with (a, _) -> a)  (* 1 *)
+
+(* Locally abstract type used multiple times in signature *)
+let swap (type a) (x : a) (y : a) : a * a = (y, x)
+let _ = print (match swap 1 2 with (a, b) -> a + b)  (* 3 *)
+
+(* Nested function with locally abstract type *)
+let apply_twice (type a) (f : a -> a) (x : a) : a = f (f x)
+let _ = print (apply_twice (fun x -> x + 1) 10)  (* 12 *)
+
+(* Locally abstract type with constraints in body *)
+let constrain (type a) (x : a) (y : a) : bool =
+  (* Both x and y have the same locally abstract type *)
+  true
+let _ = print (if constrain 1 2 then 1 else 0)  (* 1 *)
+
+(* Locally abstract type does not consume runtime arguments *)
+let f (type a) (x : a) = x
+let result = f 100  (* f takes only one runtime argument *)
+let _ = print result  (* 100 *)

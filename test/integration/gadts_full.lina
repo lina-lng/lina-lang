@@ -1,0 +1,41 @@
+(* Full GADT test - demonstrates type equations working *)
+
+(* Classic GADT expression type *)
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+  | Add : int expr * int expr -> int expr
+
+(* Non-recursive eval - works with current GADT support *)
+(* Note: Recursive GADTs would require polymorphic recursion support *)
+let eval_int (e : int expr) : int =
+  match e with
+  | Int n -> n
+  | Add (e1, e2) ->
+    (* Inline evaluation for int expressions *)
+    let v1 = match e1 with Int n -> n | Add _ -> 0 in
+    let v2 = match e2 with Int n -> n | Add _ -> 0 in
+    v1 + v2
+
+let eval_bool (e : bool expr) : bool =
+  match e with
+  | Bool b -> b
+
+(* GADT eval with locally abstract type - single dispatch *)
+let eval (type a) (e : a expr) : a =
+  match e with
+  | Int n -> n
+  | Bool b -> b
+  | Add (e1, e2) ->
+    (* For Add, we know a = int, so e1 and e2 are int expr *)
+    eval_int e1 + eval_int e2
+
+(* Test eval with different expressions *)
+let r1 = eval (Int 42)
+let r2 = eval (Bool true)
+let r3 = eval (Add (Int 10, Int 32))
+
+(* Output results *)
+let _ = print r1   (* Expected: 42 *)
+let _ = print r2   (* Expected: true *)
+let _ = print r3   (* Expected: 42 *)

@@ -66,6 +66,7 @@ module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = 
     (* Compound values *)
     | Typed_tree.TypedExpressionTuple components -> ShapeTuple components
     | Typed_tree.TypedExpressionConstructor (_, arg) -> ShapeConstructor arg
+    | Typed_tree.TypedExpressionPolyVariant (_, arg) -> ShapeConstructor arg
     | Typed_tree.TypedExpressionRecord fields ->
       ShapeRecord (List.map (fun field -> field.Typed_tree.typed_field_value) fields)
     | Typed_tree.TypedExpressionLet (_, bindings, body) ->
@@ -104,6 +105,7 @@ module SyntaxExpression : EXPRESSION with type t = Parsing.Syntax_tree.expressio
     (* Compound values *)
     | Parsing.Syntax_tree.ExpressionTuple components -> ShapeTuple components
     | Parsing.Syntax_tree.ExpressionConstructor (_, arg) -> ShapeConstructor arg
+    | Parsing.Syntax_tree.ExpressionPolyVariant (_, arg) -> ShapeConstructor arg
     | Parsing.Syntax_tree.ExpressionRecord fields ->
       ShapeRecord (List.map (fun field -> field.Parsing.Syntax_tree.field_value) fields)
     | Parsing.Syntax_tree.ExpressionLet (_, bindings, body) ->

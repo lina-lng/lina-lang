@@ -31,6 +31,8 @@ let type_to_string ty =
       Printf.sprintf "(%s)" (String.concat " * " (List.map pp elements))
     | TypeRecord row ->
       Printf.sprintf "{ %s }" (pp_row row)
+    | TypePolyVariant pv_row ->
+      Printf.sprintf "[%s]" (pp_poly_variant_row pv_row)
     | TypeRowEmpty -> ""
   and pp_row row =
     let fields = List.map (fun (label, field) ->
@@ -43,6 +45,20 @@ let type_to_string ty =
       | _ -> ""
     in
     String.concat "; " fields ^ more
+  and pp_poly_variant_row pv_row =
+    let fields = List.filter_map (fun (tag, field) ->
+      match field with
+      | PVFieldPresent (Some ty) -> Some (Printf.sprintf "`%s of %s" tag (pp ty))
+      | PVFieldPresent None -> Some (Printf.sprintf "`%s" tag)
+      | PVFieldAbsent -> None
+    ) pv_row.pv_fields in
+    let more = match representative pv_row.pv_more with
+      | TypeRowEmpty -> ""
+      | TypeVariable tv -> Printf.sprintf " | ..%d" tv.id
+      | _ -> ""
+    in
+    let prefix = if pv_row.pv_closed then "" else "> " in
+    prefix ^ String.concat " | " fields ^ more
   in
   pp ty
 

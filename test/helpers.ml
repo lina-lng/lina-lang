@@ -19,11 +19,26 @@ let rec strip_type_locations (t : Syntax_tree.type_expression) :
         Syntax_tree.TypeArrow (strip_type_locations t1, strip_type_locations t2)
     | Syntax_tree.TypeRecord (fields, is_open) ->
         Syntax_tree.TypeRecord (List.map strip_type_record_field_locations fields, is_open)
+    | Syntax_tree.TypePolyVariant row ->
+        Syntax_tree.TypePolyVariant (strip_poly_variant_row_locations row)
   in
   { value = desc; location = Location.none }
 
 and strip_type_record_field_locations (f : Syntax_tree.type_record_field) : Syntax_tree.type_record_field =
   { type_field_name = f.type_field_name; type_field_type = strip_type_locations f.type_field_type }
+
+and strip_poly_variant_row_locations (row : Syntax_tree.poly_variant_row) : Syntax_tree.poly_variant_row =
+  match row with
+  | Syntax_tree.PolyRowExact fields ->
+      Syntax_tree.PolyRowExact (List.map strip_poly_variant_field_locations fields)
+  | Syntax_tree.PolyRowAtLeast fields ->
+      Syntax_tree.PolyRowAtLeast (List.map strip_poly_variant_field_locations fields)
+  | Syntax_tree.PolyRowAtMost (fields, required) ->
+      Syntax_tree.PolyRowAtMost (List.map strip_poly_variant_field_locations fields, required)
+
+and strip_poly_variant_field_locations (f : Syntax_tree.poly_variant_field) : Syntax_tree.poly_variant_field =
+  { poly_variant_tag = f.poly_variant_tag;
+    poly_variant_argument = Option.map strip_type_locations f.poly_variant_argument }
 
 (** Recursively strip all locations from a pattern *)
 let rec strip_pattern_locations (p : Syntax_tree.pattern) : Syntax_tree.pattern =
@@ -44,6 +59,9 @@ let rec strip_pattern_locations (p : Syntax_tree.pattern) : Syntax_tree.pattern 
           (strip_pattern_locations p', strip_type_locations ty)
     | Syntax_tree.PatternRecord (fields, is_open) ->
         Syntax_tree.PatternRecord (List.map strip_record_pattern_field_locations fields, is_open)
+    | Syntax_tree.PatternLocallyAbstract _ as pat -> pat
+    | Syntax_tree.PatternPolyVariant (tag, arg) ->
+        Syntax_tree.PatternPolyVariant (tag, Option.map strip_pattern_locations arg)
     | Syntax_tree.PatternError _ as err -> err
   in
   { value = desc; location = Location.none }
@@ -104,6 +122,8 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
     | Syntax_tree.ExpressionAssign (ref_expr, value_expr) ->
         Syntax_tree.ExpressionAssign
           (strip_expr_locations ref_expr, strip_expr_locations value_expr)
+    | Syntax_tree.ExpressionPolyVariant (tag, arg) ->
+        Syntax_tree.ExpressionPolyVariant (tag, Option.map strip_expr_locations arg)
     | Syntax_tree.ExpressionError _ as err -> err
   in
   { value = desc; location = Location.none }
@@ -124,6 +144,15 @@ and strip_binding_locations (b : Syntax_tree.binding) : Syntax_tree.binding =
     binding_location = Location.none;
   }
 
+(** Strip locations from type constraint *)
+let strip_type_constraint_locations (c : Syntax_tree.type_constraint) :
+    Syntax_tree.type_constraint =
+  {
+    constraint_variable = c.constraint_variable;
+    constraint_type = strip_type_locations c.constraint_type;
+    constraint_location = Location.none;
+  }
+
 (** Strip locations from type declaration *)
 let rec strip_type_decl_locations (d : Syntax_tree.type_declaration) :
     Syntax_tree.type_declaration =
@@ -131,6 +160,8 @@ let rec strip_type_decl_locations (d : Syntax_tree.type_declaration) :
     type_name = strip_loc d.type_name;
     type_parameters = d.type_parameters;
     type_kind = strip_type_kind_locations d.type_kind;
+    type_private = d.type_private;
+    type_constraints = List.map strip_type_constraint_locations d.type_constraints;
     type_location = Location.none;
   }
 
@@ -148,6 +179,7 @@ and strip_constructor_locations (c : Syntax_tree.constructor_declaration) :
   {
     constructor_name = strip_loc c.constructor_name;
     constructor_argument = Option.map strip_type_locations c.constructor_argument;
+    constructor_return_type = Option.map strip_type_locations c.constructor_return_type;
   }
 
 (** Strip locations from a structure item *)

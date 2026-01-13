@@ -37,6 +37,8 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.OPEN -> Parser.OPEN
   | Lexer.INCLUDE -> Parser.INCLUDE
   | Lexer.VAL -> Parser.VAL
+  | Lexer.PRIVATE -> Parser.PRIVATE
+  | Lexer.CONSTRAINT -> Parser.CONSTRAINT
   | Lexer.EXTERNAL -> Parser.EXTERNAL
   | Lexer.AT -> Parser.AT
   | Lexer.LPAREN -> Parser.LPAREN
@@ -67,6 +69,7 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.REF -> Parser.REF
   | Lexer.BANG -> Parser.BANG
   | Lexer.COLONEQUALS -> Parser.COLONEQUALS
+  | Lexer.BACKTICK_TAG s -> Parser.BACKTICK_TAG s
   | Lexer.EOF -> Parser.EOF
 
 (** Convert Lina position to Lexing.position. *)

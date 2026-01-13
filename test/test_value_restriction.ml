@@ -33,12 +33,19 @@ let has_weak_variables scheme =
     | Types.TypeTuple elems -> List.exists check elems
     | Types.TypeArrow (a, r) -> check a || check r
     | Types.TypeRecord row -> check_row row
+    | Types.TypePolyVariant pv_row -> check_poly_variant_row pv_row
     | Types.TypeRowEmpty -> false
   and check_row row =
     List.exists (fun (_, field) ->
       match field with
       | Types.RowFieldPresent ty -> check ty
     ) row.row_fields || check row.row_more
+  and check_poly_variant_row pv_row =
+    List.exists (fun (_, field) ->
+      match field with
+      | Types.PVFieldPresent (Some ty) -> check ty
+      | Types.PVFieldPresent None | Types.PVFieldAbsent -> false
+    ) pv_row.pv_fields || check pv_row.pv_more
   in
   check scheme.Types.body
 
@@ -169,7 +176,7 @@ let%expect_test "value restriction preserves let-polymorphism for values" =
 
 (** Helper to create a type variable for variance tests *)
 let make_test_type_var id =
-  { Types.id; level = 1; link = None; weak = false }
+  { Types.id; level = 1; link = None; weak = false; rigid = false }
 
 let variance_to_string = function
   | Value_check.Covariant -> "covariant"

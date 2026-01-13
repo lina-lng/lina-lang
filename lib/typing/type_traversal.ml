@@ -15,6 +15,7 @@ let rec iter f ty =
     iter f arg;
     iter f result
   | TypeRecord row -> iter_row f row
+  | TypePolyVariant pv_row -> iter_poly_variant_row f pv_row
   | TypeRowEmpty -> ()
 
 and iter_row f row =
@@ -23,6 +24,14 @@ and iter_row f row =
     | RowFieldPresent ty -> iter f ty
   ) row.row_fields;
   iter f row.row_more
+
+and iter_poly_variant_row f pv_row =
+  List.iter (fun (_, field) ->
+    match field with
+    | PVFieldPresent (Some ty) -> iter f ty
+    | PVFieldPresent None | PVFieldAbsent -> ()
+  ) pv_row.pv_fields;
+  iter f pv_row.pv_more
 
 let rec map f ty =
   let ty = representative ty in
@@ -36,6 +45,8 @@ let rec map f ty =
       TypeArrow (map f arg, map f result)
     | TypeRecord row ->
       TypeRecord (map_row f row)
+    | TypePolyVariant pv_row ->
+      TypePolyVariant (map_poly_variant_row f pv_row)
     | TypeRowEmpty ->
       TypeRowEmpty
   in
@@ -47,6 +58,17 @@ and map_row f row = {
       | RowFieldPresent ty -> RowFieldPresent (map f ty))
   ) row.row_fields;
   row_more = map f row.row_more;
+}
+
+and map_poly_variant_row f pv_row = {
+  pv_fields = List.map (fun (name, field) ->
+    (name, match field with
+      | PVFieldPresent (Some ty) -> PVFieldPresent (Some (map f ty))
+      | PVFieldPresent None -> PVFieldPresent None
+      | PVFieldAbsent -> PVFieldAbsent)
+  ) pv_row.pv_fields;
+  pv_more = map f pv_row.pv_more;
+  pv_closed = pv_row.pv_closed;
 }
 
 let rec fold f acc ty =
@@ -62,6 +84,7 @@ let rec fold f acc ty =
     let acc = fold f acc arg in
     fold f acc result
   | TypeRecord row -> fold_row f acc row
+  | TypePolyVariant pv_row -> fold_poly_variant_row f acc pv_row
   | TypeRowEmpty -> acc
 
 and fold_row f acc row =
@@ -70,6 +93,14 @@ and fold_row f acc row =
     | RowFieldPresent ty -> fold f acc ty
   ) acc row.row_fields in
   fold f acc row.row_more
+
+and fold_poly_variant_row f acc pv_row =
+  let acc = List.fold_left (fun acc (_, field) ->
+    match field with
+    | PVFieldPresent (Some ty) -> fold f acc ty
+    | PVFieldPresent None | PVFieldAbsent -> acc
+  ) acc pv_row.pv_fields in
+  fold f acc pv_row.pv_more
 
 (** {1 Context-Aware Traversal} *)
 
@@ -86,6 +117,7 @@ let rec fold_with_context f ctx acc ty =
     let acc = fold_with_context f ctx acc arg in
     fold_with_context f ctx acc result
   | TypeRecord row -> fold_row_with_context f ctx acc row
+  | TypePolyVariant pv_row -> fold_poly_variant_row_with_context f ctx acc pv_row
   | TypeRowEmpty -> acc
 
 and fold_row_with_context f ctx acc row =
@@ -94,6 +126,14 @@ and fold_row_with_context f ctx acc row =
     | RowFieldPresent ty -> fold_with_context f ctx acc ty
   ) acc row.row_fields in
   fold_with_context f ctx acc row.row_more
+
+and fold_poly_variant_row_with_context f ctx acc pv_row =
+  let acc = List.fold_left (fun acc (_, field) ->
+    match field with
+    | PVFieldPresent (Some ty) -> fold_with_context f ctx acc ty
+    | PVFieldPresent None | PVFieldAbsent -> acc
+  ) acc pv_row.pv_fields in
+  fold_with_context f ctx acc pv_row.pv_more
 
 (** {1 Type Variable Operations} *)
 

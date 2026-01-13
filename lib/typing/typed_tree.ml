@@ -13,6 +13,10 @@ and typed_pattern_desc =
   | TypedPatternTuple of typed_pattern list
   | TypedPatternConstructor of Types.constructor_info * typed_pattern option
   | TypedPatternRecord of typed_record_pattern_field list * bool
+  | TypedPatternLocallyAbstract of Identifier.t * Types.type_declaration
+      (** Locally abstract type: [(type a)] introduces scoped abstract type *)
+  | TypedPatternPolyVariant of string * typed_pattern option
+      (** Polymorphic variant pattern: [`Tag] or [`Tag pat] *)
   | TypedPatternError of Parsing.Syntax_tree.error_info
       (** Error recovery placeholder for invalid pattern syntax *)
 
@@ -46,6 +50,8 @@ and typed_expression_desc =
   | TypedExpressionRef of typed_expression           (** ref e *)
   | TypedExpressionDeref of typed_expression         (** !e *)
   | TypedExpressionAssign of typed_expression * typed_expression  (** e1 := e2 *)
+  | TypedExpressionPolyVariant of string * typed_expression option
+      (** Polymorphic variant constructor: [`Tag] or [`Tag expr] *)
   | TypedExpressionError of Parsing.Syntax_tree.error_info
       (** Error recovery placeholder for invalid expression syntax *)
 

@@ -103,6 +103,10 @@ let rec check_type ~env ~recursive_set ~visited ~contractive ~loc ty =
     (* Records ARE contractive (they're like single-constructor variants) *)
     check_row ~env ~recursive_set ~visited ~contractive:true ~loc row
 
+  | TypePolyVariant pv_row ->
+    (* Polymorphic variants ARE contractive (they're sum types) *)
+    check_poly_variant_row ~env ~recursive_set ~visited ~contractive:true ~loc pv_row
+
   | TypeRowEmpty ->
     ()
 
@@ -113,6 +117,15 @@ and check_row ~env ~recursive_set ~visited ~contractive ~loc row =
       check_type ~env ~recursive_set ~visited ~contractive ~loc ty
   ) row.row_fields;
   check_type ~env ~recursive_set ~visited ~contractive ~loc row.row_more
+
+and check_poly_variant_row ~env ~recursive_set ~visited ~contractive ~loc pv_row =
+  List.iter (fun (_, field) ->
+    match field with
+    | PVFieldPresent (Some ty) ->
+      check_type ~env ~recursive_set ~visited ~contractive ~loc ty
+    | PVFieldPresent None | PVFieldAbsent -> ()
+  ) pv_row.pv_fields;
+  check_type ~env ~recursive_set ~visited ~contractive ~loc pv_row.pv_more
 
 (** Check a single type definition for cycles. *)
 let check_type_definition ~env ~loc name _params kind manifest =

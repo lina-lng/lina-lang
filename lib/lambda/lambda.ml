@@ -12,6 +12,7 @@ type primitive =
   | PrimitiveIntGreater
   | PrimitiveIntLessEqual
   | PrimitiveIntGreaterEqual
+  | PrimitiveStringEqual
   | PrimitiveMakeBlock of int
   | PrimitiveGetField of int
   | PrimitivePrint
@@ -58,6 +59,8 @@ type lambda =
   | LambdaRef of lambda                           (** ref e - create mutable cell *)
   | LambdaDeref of lambda                         (** !e - read mutable cell *)
   | LambdaAssign of lambda * lambda               (** e1 := e2 - write to mutable cell *)
+  (* Polymorphic variant *)
+  | LambdaPolyVariant of string * lambda option   (** `Tag or `Tag e - poly variant constructor *)
 
 and module_binding = {
   mb_id : Identifier.t;  (** Original identifier for internal references *)
@@ -127,8 +130,9 @@ let generate_dt_bindings (scrutinee : lambda) (bindings : (Identifier.t * Patter
 let rec translate_decision_tree (scrutinee : lambda) (tree : Pattern_match.decision_tree) (translate_expr : Typing.Typed_tree.typed_expression -> lambda) : lambda =
   match tree with
   | Pattern_match.DTFail ->
+    (* Use stamp 0 so the mangler generates just "error" without suffix *)
     LambdaApply (
-      LambdaVariable (Identifier.create "error"),
+      LambdaVariable (Identifier.create_with_stamp "error" 0),
       [LambdaConstant (ConstantString "Match failure")]
     )
 
@@ -149,19 +153,22 @@ let rec translate_decision_tree (scrutinee : lambda) (tree : Pattern_match.decis
 and translate_dt_switch scrutinee occ cases default translate_expr =
   let target = occurrence_to_lambda scrutinee occ in
 
-  (* Separate constructor cases from constant cases *)
-  let const_cases, ctor_cases, other_cases =
-    List.fold_left (fun (consts, ctors, others) (head, tree) ->
+  (* Separate constructor cases from constant and poly variant cases *)
+  let const_cases, ctor_cases, pv_cases, other_cases =
+    List.fold_left (fun (consts, ctors, pvs, others) (head, tree) ->
       match head with
-      | Pattern_match.HCConstant c -> ((c, tree) :: consts, ctors, others)
-      | Pattern_match.HCConstructor (name, tag_index) -> (consts, ((name, tag_index), tree) :: ctors, others)
-      | _ -> (consts, ctors, (head, tree) :: others)
-    ) ([], [], []) cases
+      | Pattern_match.HCConstant c -> ((c, tree) :: consts, ctors, pvs, others)
+      | Pattern_match.HCConstructor (name, tag_index) -> (consts, ((name, tag_index), tree) :: ctors, pvs, others)
+      | Pattern_match.HCPolyVariant tag -> (consts, ctors, (tag, tree) :: pvs, others)
+      | _ -> (consts, ctors, pvs, (head, tree) :: others)
+    ) ([], [], [], []) cases
   in
 
   (* Generate code based on case types *)
-  if ctor_cases <> [] && const_cases = [] then
+  if ctor_cases <> [] && const_cases = [] && pv_cases = [] then
     translate_dt_constructor_switch scrutinee target ctor_cases default translate_expr
+  else if pv_cases <> [] && const_cases = [] && ctor_cases = [] then
+    translate_dt_poly_variant_switch scrutinee target pv_cases default translate_expr
   else if const_cases <> [] then
     translate_dt_constant_switch scrutinee target const_cases default translate_expr
   else
@@ -217,6 +224,25 @@ and translate_dt_constant_switch scrutinee target cases default translate_expr =
   in
   build_chain cases
 
+and translate_dt_poly_variant_switch scrutinee target cases default translate_expr =
+  (* Polymorphic variants use string tags, so we compare with string equality.
+     Unlike regular constructors, we always use an if-chain (no dispatch table)
+     since the tag is a string, not an integer index. *)
+  let tag_access = LambdaGetRecordField ("_tag", target) in
+  let rec build_chain = function
+    | [] ->
+      begin match default with
+      | Some d -> translate_decision_tree scrutinee d translate_expr
+      | None -> translate_decision_tree scrutinee Pattern_match.DTFail translate_expr
+      end
+    | (tag, tree) :: rest ->
+      let test = LambdaPrimitive (PrimitiveStringEqual, [tag_access; LambdaConstant (ConstantString tag)]) in
+      let then_branch = translate_decision_tree scrutinee tree translate_expr in
+      let else_branch = build_chain rest in
+      LambdaIfThenElse (test, then_branch, else_branch)
+  in
+  build_chain cases
+
 (* --- Pattern binding helpers (for non-match patterns) --- *)
 
 let rec translate_pattern_binding pattern value body =
@@ -262,6 +288,22 @@ let rec translate_pattern_binding pattern value body =
     in
     let inner = List.fold_right (fun binding_function accumulator -> binding_function accumulator) bindings body in
     LambdaLet (temp_id, value, inner)
+
+  | TypedPatternLocallyAbstract _ ->
+    (* Locally abstract types don't introduce runtime bindings.
+       They only affect the type system - at runtime, the value is unit. *)
+    body
+
+  | TypedPatternPolyVariant (_, arg_pattern) ->
+    (* Polymorphic variant pattern binding - similar to constructor *)
+    begin match arg_pattern with
+    | None -> body
+    | Some inner_pattern ->
+      let temp_id = Identifier.create Codegen_constants.constructor_temp_prefix in
+      let arg_access = LambdaGetRecordField ("_0", LambdaVariable temp_id) in
+      let inner = translate_pattern_binding inner_pattern arg_access body in
+      LambdaLet (temp_id, value, inner)
+    end
 
   | TypedPatternError _ ->
     (* Error patterns don't introduce any bindings *)
@@ -512,12 +554,18 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     end
 
   | TypedExpressionFunction (param_patterns, body_expr) ->
+    (* Filter out locally abstract type patterns - they don't have runtime parameters *)
+    let runtime_patterns = List.filter (fun (p : typed_pattern) ->
+      match p.pattern_desc with
+      | TypedPatternLocallyAbstract _ -> false
+      | _ -> true
+    ) param_patterns in
     let param_ids =
       List.map (fun (p : typed_pattern) ->
         match p.pattern_desc with
         | TypedPatternVariable id -> id
         | _ -> Identifier.create Codegen_constants.param_prefix
-      ) param_patterns
+      ) runtime_patterns
     in
     let translated_body = translate_expression body_expr in
     let body_with_bindings =
@@ -525,7 +573,7 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
         match pattern.pattern_desc with
         | TypedPatternVariable _ -> body
         | _ -> translate_pattern_binding pattern (LambdaVariable param_id) body
-      ) param_patterns param_ids translated_body
+      ) runtime_patterns param_ids translated_body
     in
     LambdaFunction (param_ids, body_with_bindings)
 
@@ -611,6 +659,10 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   | TypedExpressionAssign (ref_expr, value_expr) ->
     (* e1 := e2 - write the value to the mutable cell *)
     LambdaAssign (translate_expression ref_expr, translate_expression value_expr)
+
+  | TypedExpressionPolyVariant (tag, arg) ->
+    (* `Tag or `Tag expr - polymorphic variant constructor *)
+    LambdaPolyVariant (tag, Option.map translate_expression arg)
 
   | TypedExpressionError _ ->
     (* Error expressions produce a runtime error *)

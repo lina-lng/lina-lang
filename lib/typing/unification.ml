@@ -145,6 +145,10 @@ let rec occurs_check_with_path location tv ty path =
     let new_path = ty :: path in
     occurs_check_row_with_path location tv row new_path
 
+  | TypePolyVariant pv_row ->
+    let new_path = ty :: path in
+    occurs_check_poly_variant_row_with_path location tv pv_row new_path
+
   | TypeRowEmpty ->
     ()
 
@@ -154,6 +158,14 @@ and occurs_check_row_with_path location tv row path =
     | RowFieldPresent ty -> occurs_check_with_path location tv ty path
   ) row.row_fields;
   occurs_check_with_path location tv row.row_more path
+
+and occurs_check_poly_variant_row_with_path location tv pv_row path =
+  List.iter (fun (_, field) ->
+    match field with
+    | PVFieldPresent (Some ty) -> occurs_check_with_path location tv ty path
+    | PVFieldPresent None | PVFieldAbsent -> ()
+  ) pv_row.pv_fields;
+  occurs_check_with_path location tv pv_row.pv_more path
 
 (** Original occurs check interface - delegates to enhanced version. *)
 let occurs_check location tv ty =
@@ -185,14 +197,36 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
   if ty1 == ty2 then ()
   else match ty1, ty2 with
   | TypeVariable tv1, TypeVariable tv2 ->
-    if tv1.level < tv2.level then
-      tv2.link <- Some ty1
-    else
+    (* Don't link rigid variables - they're handled by GADT equation extraction *)
+    if tv1.rigid && tv2.rigid then begin
+      (* Both rigid - must be the same variable *)
+      if tv1.id <> tv2.id then
+        unification_error location ty1 ty2
+          "Cannot unify different rigid type variables"
+    end else if tv1.rigid then
+      (* tv1 is rigid - don't link it, link tv2 instead if not rigid *)
+      if not tv2.rigid then tv2.link <- Some ty1
+    else if tv2.rigid then
+      (* tv2 is rigid - don't link it *)
       tv1.link <- Some ty2
+    else begin
+      (* Neither is rigid - normal unification *)
+      if tv1.level < tv2.level then
+        tv2.link <- Some ty1
+      else
+        tv1.link <- Some ty2
+    end
 
   | TypeVariable tv, ty | ty, TypeVariable tv ->
-    occurs_check location tv ty;
-    tv.link <- Some ty
+    (* Don't link rigid variables - GADT equations handle the type refinement *)
+    if tv.rigid then
+      (* Rigid variable: succeed without linking.
+         The GADT equation extraction records this relationship. *)
+      ()
+    else begin
+      occurs_check location tv ty;
+      tv.link <- Some ty
+    end
 
   | TypeConstructor (path1, args1), TypeConstructor (path2, args2) ->
     if path_equal path1 path2 then begin
@@ -232,6 +266,9 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
 
   | TypeRecord row1, TypeRecord row2 ->
     unify_rows_full ~type_lookup ~fresh_type_var location row1 row2
+
+  | TypePolyVariant pv_row1, TypePolyVariant pv_row2 ->
+    unify_poly_variant_rows_full ~type_lookup ~fresh_type_var location pv_row1 pv_row2
 
   | TypeRowEmpty, TypeRowEmpty ->
     ()
@@ -316,6 +353,153 @@ and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more lab
     unification_error location row_more
       (TypeRecord { row_fields = [(label, RowFieldPresent field_ty)]; row_more = TypeRowEmpty })
       "Expected row type"
+
+(* Polymorphic variant row unification.
+   Similar to record row unification but handles presence/absence of tags. *)
+and unify_poly_variant_rows_full ~type_lookup ~fresh_type_var location pv_row1 pv_row2 =
+  (* Collect all tags from both rows *)
+  let tags1 = List.map fst pv_row1.pv_fields in
+  let tags2 = List.map fst pv_row2.pv_fields in
+  let all_tags = List.sort_uniq compare (tags1 @ tags2) in
+
+  (* For each tag, find field in both rows and unify *)
+  List.iter (fun tag ->
+    let field1 = List.assoc_opt tag pv_row1.pv_fields in
+    let field2 = List.assoc_opt tag pv_row2.pv_fields in
+    match field1, field2 with
+    | Some (PVFieldPresent arg1), Some (PVFieldPresent arg2) ->
+      (* Both present - unify argument types if any *)
+      begin match arg1, arg2 with
+      | Some ty1, Some ty2 ->
+        unify_full ~type_lookup ~fresh_type_var location ty1 ty2
+      | None, None -> ()
+      | Some _, None | None, Some _ ->
+        unification_error location
+          (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
+          (Printf.sprintf "Tag `%s arity mismatch" tag)
+      end
+    | Some PVFieldAbsent, Some PVFieldAbsent ->
+      (* Both absent - OK *)
+      ()
+    | Some (PVFieldPresent _), Some PVFieldAbsent
+    | Some PVFieldAbsent, Some (PVFieldPresent _) ->
+      (* One present, one absent - error *)
+      unification_error location
+        (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
+        (Printf.sprintf "Tag `%s presence conflict" tag)
+    | Some (PVFieldPresent arg_ty), None ->
+      (* Tag in row1 but not row2 - extend row2's more *)
+      unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location
+        pv_row2.pv_more tag (PVFieldPresent arg_ty)
+    | None, Some (PVFieldPresent arg_ty) ->
+      (* Tag in row2 but not row1 - extend row1's more *)
+      unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location
+        pv_row1.pv_more tag (PVFieldPresent arg_ty)
+    | Some PVFieldAbsent, None | None, Some PVFieldAbsent ->
+      (* Absent tags don't need to be propagated to the other row *)
+      ()
+    | None, None ->
+      ()  (* Should not happen *)
+  ) all_tags;
+
+  (* Unify the row tails *)
+  let tags1_set = StringSet.of_list tags1 in
+  let tags2_set = StringSet.of_list tags2 in
+  let remaining1 = List.filter (fun (t, _) -> not (StringSet.mem t tags2_set)) pv_row1.pv_fields in
+  let remaining2 = List.filter (fun (t, _) -> not (StringSet.mem t tags1_set)) pv_row2.pv_fields in
+
+  match remaining1, remaining2 with
+  | [], [] ->
+    (* All tags matched, unify tails *)
+    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more pv_row2.pv_more
+  | _, [] when remaining1 <> [] ->
+    (* pv_row1 has extra tags, unify pv_row2.pv_more with a poly variant containing them *)
+    let new_pv = TypePolyVariant {
+      pv_fields = remaining1;
+      pv_more = pv_row1.pv_more;
+      pv_closed = pv_row1.pv_closed;
+    } in
+    unify_full ~type_lookup ~fresh_type_var location pv_row2.pv_more new_pv
+  | [], _ when remaining2 <> [] ->
+    (* pv_row2 has extra tags, unify pv_row1.pv_more with a poly variant containing them *)
+    let new_pv = TypePolyVariant {
+      pv_fields = remaining2;
+      pv_more = pv_row2.pv_more;
+      pv_closed = pv_row2.pv_closed;
+    } in
+    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more new_pv
+  | _, _ ->
+    (* Both have extra tags - create fresh row variable and unify both tails *)
+    let fresh_more = fresh_type_var () in
+    let new_pv1 = TypePolyVariant {
+      pv_fields = remaining2;
+      pv_more = fresh_more;
+      pv_closed = false;
+    } in
+    let new_pv2 = TypePolyVariant {
+      pv_fields = remaining1;
+      pv_more = fresh_more;
+      pv_closed = false;
+    } in
+    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more new_pv1;
+    unify_full ~type_lookup ~fresh_type_var location pv_row2.pv_more new_pv2
+
+(* Unify a poly variant row tail with a tag that should be present *)
+and unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location row_more tag field =
+  match representative row_more with
+  | TypeRowEmpty ->
+    (* Closed row - tag must be absent *)
+    unification_error location TypeRowEmpty
+      (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
+      (Printf.sprintf "Tag `%s not allowed in closed poly variant" tag)
+  | TypeVariable tv ->
+    (* Open row - instantiate the variable to include this tag *)
+    let fresh_more = fresh_type_var () in
+    let new_pv = TypePolyVariant {
+      pv_fields = [(tag, field)];
+      pv_more = fresh_more;
+      pv_closed = false;
+    } in
+    occurs_check location tv new_pv;
+    tv.link <- Some new_pv
+  | TypePolyVariant inner_pv ->
+    (* Check if tag is in inner poly variant row *)
+    begin match List.assoc_opt tag inner_pv.pv_fields with
+    | Some (PVFieldPresent inner_arg) ->
+      begin match field with
+      | PVFieldPresent arg ->
+        begin match inner_arg, arg with
+        | Some ty1, Some ty2 ->
+          unify_full ~type_lookup ~fresh_type_var location ty1 ty2
+        | None, None -> ()
+        | _ ->
+          unification_error location
+            (TypePolyVariant inner_pv)
+            (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
+            (Printf.sprintf "Tag `%s arity mismatch" tag)
+        end
+      | PVFieldAbsent ->
+        unification_error location
+          (TypePolyVariant inner_pv)
+          (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
+          (Printf.sprintf "Tag `%s presence conflict" tag)
+      end
+    | Some PVFieldAbsent ->
+      begin match field with
+      | PVFieldPresent _ ->
+        unification_error location
+          (TypePolyVariant inner_pv)
+          (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
+          (Printf.sprintf "Tag `%s presence conflict" tag)
+      | PVFieldAbsent -> ()
+      end
+    | None ->
+      unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location inner_pv.pv_more tag field
+    end
+  | _ ->
+    unification_error location row_more
+      (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
+      "Expected poly variant row type"
 
 (** Unify two types.
 

@@ -861,6 +861,44 @@ module type S2 = S with type t = int
     Type error: Type t has 1 parameters but constraint has 0
     |}]
 
+(* ==================== Destructive Substitution ==================== *)
+
+let%expect_test "destructive substitution basic" =
+  (* Basic parsing test - type exists in signature *)
+  print_endline (compile {|
+module type S = sig
+  type t
+  val x : int
+end
+module type S_INT = S with type t := int
+|});
+  [%expect{| |}]
+
+let%expect_test "destructive substitution - type not found" =
+  print_endline (compile {|
+module type S = sig
+  val x : int
+end
+module type S2 = S with type t := int
+|});
+  [%expect{|
+    ERROR: File "<string>", line 5, characters 17-37:
+    Type error: Type t not found in signature
+    |}]
+
+let%expect_test "destructive substitution - wrong parameter count" =
+  print_endline (compile {|
+module type S = sig
+  type 'a t
+  val x : int
+end
+module type S2 = S with type t := int
+|});
+  [%expect{|
+    ERROR: File "<string>", line 6, characters 17-37:
+    Type error: Type t has 1 parameters but constraint has 0
+    |}]
+
 (* ==================== Module Binding Inter-Reference Tests ==================== *)
 (* These tests verify that bindings within a module can reference earlier bindings
    in the same module. This was a bug where the codegen generated inline table
@@ -923,3 +961,104 @@ end
 let _ = print M.result
 |});
   [%expect{| 35 |}]
+
+(* ==================== Private Types ==================== *)
+
+let%expect_test "private type prevents construction" =
+  print_endline (compile {|
+type t = private | A | B of int
+let x = A
+|});
+  [%expect{|
+    ERROR: File "<string>", line 3, characters 8-9:
+    Type error: Cannot construct value of private type t
+    |}]
+
+let%expect_test "private type prevents construction with argument" =
+  print_endline (compile {|
+type t = private | A | B of int
+let x = B 42
+|});
+  [%expect{|
+    ERROR: File "<string>", line 3, characters 8-12:
+    Type error: Cannot construct value of private type t
+    |}]
+
+let%expect_test "private type allows pattern matching" =
+  (* Pattern matching on private types should be allowed *)
+  print_endline (compile {|
+type t = private | A | B of int
+let f (x : t) = match x with
+  | A -> 0
+  | B n -> n
+|});
+  [%expect{|
+    local function f_359(x_357)
+      local _scrutinee_360 = x_357
+      if _scrutinee_360._tag == 1 then
+        local n_358 = _scrutinee_360._0
+        return n_358
+      else
+        if _scrutinee_360._tag == 0 then
+          return 0
+        else
+          return error("Match failure")
+        end
+      end
+    end
+    |}]
+
+let%expect_test "non-private type allows construction" =
+  print_endline (compile_and_run {|
+type t = | A | B of int
+let x = A
+let y = B 42
+let result = match y with
+  | A -> 0
+  | B n -> n
+let _ = print result
+|});
+  [%expect{| 42 |}]
+
+(* ==================== Locally Abstract Types ==================== *)
+
+let%expect_test "locally abstract type parses" =
+  (* Basic parsing test - (type a) as a pattern *)
+  print_endline (compile {|
+let f (type a) (x : a) = x
+|});
+  [%expect{|
+    local function f_369(x_368)
+      return x_368
+    end
+    |}]
+
+let%expect_test "locally abstract type introduces scoped type" =
+  (* The abstract type 'a' should be in scope for the body *)
+  print_endline (compile {|
+let f (type a) (x : a) (y : a) = (x, y)
+|});
+  [%expect{|
+    local function f_373(x_371, y_372)
+      return {x_371, y_372}
+    end
+    |}]
+
+let%expect_test "locally abstract type with multiple type params" =
+  print_endline (compile {|
+let f (type a) (type b) (x : a) (y : b) = (x, y)
+|});
+  [%expect{|
+    local function f_378(x_376, y_377)
+      return {x_376, y_377}
+    end
+    |}]
+
+let%expect_test "locally abstract type in function body" =
+  (* Use the abstract type within the function *)
+  print_endline (compile_and_run {|
+let f (type a) (x : a) = x
+let result = f 42
+let _ = print result
+|});
+  [%expect{| 42 |}]

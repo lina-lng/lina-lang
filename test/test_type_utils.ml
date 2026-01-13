@@ -15,6 +15,7 @@ let make_type_var id level =
     level;
     link = None;
     weak = false;
+    rigid = false;
   } in
   (tv, Types.TypeVariable tv)
 
@@ -92,7 +93,7 @@ let%expect_test "substitute_type_params: unrelated variable unchanged" =
 let%expect_test "instantiate_constructor: nullary constructor" =
   (* A constructor like None : 'a option with no argument *)
   Types.reset_type_variable_id ();
-  let param_tv = { Types.id = 0; level = 0; link = None; weak = false } in
+  let param_tv = { Types.id = 0; level = 0; link = None; weak = false; rigid = false } in
   let result_type = Types.TypeConstructor (Types.PathLocal "option", [Types.TypeVariable param_tv]) in
   let ctor_info = {
     Types.constructor_name = "None";
@@ -101,6 +102,8 @@ let%expect_test "instantiate_constructor: nullary constructor" =
     constructor_argument_type = None;
     constructor_result_type = result_type;
     constructor_type_parameters = [param_tv];
+    constructor_is_gadt = false;
+    constructor_existentials = [];
   } in
   let fresh_var () = Types.new_type_variable_at_level 1 in
   let (arg_opt, result_ty) = Type_utils.instantiate_constructor ~fresh_var ctor_info in
@@ -116,7 +119,7 @@ let%expect_test "instantiate_constructor: nullary constructor" =
 let%expect_test "instantiate_constructor: unary constructor" =
   (* A constructor like Some : 'a -> 'a option *)
   Types.reset_type_variable_id ();
-  let param_tv = { Types.id = 0; level = 0; link = None; weak = false } in
+  let param_tv = { Types.id = 0; level = 0; link = None; weak = false; rigid = false } in
   let result_type = Types.TypeConstructor (Types.PathLocal "option", [Types.TypeVariable param_tv]) in
   let ctor_info = {
     Types.constructor_name = "Some";
@@ -125,6 +128,8 @@ let%expect_test "instantiate_constructor: unary constructor" =
     constructor_argument_type = Some (Types.TypeVariable param_tv);
     constructor_result_type = result_type;
     constructor_type_parameters = [param_tv];
+    constructor_is_gadt = false;
+    constructor_existentials = [];
   } in
   let fresh_var () = Types.new_type_variable_at_level 1 in
   let (arg_opt, result_ty) = Type_utils.instantiate_constructor ~fresh_var ctor_info in
@@ -217,7 +222,7 @@ let%expect_test "substitute_path_in_scheme: preserves quantifiers" =
   let old_path = Types.PathIdent (Common.Identifier.create "M") in
   let new_path = Types.PathIdent (Common.Identifier.create "N") in
   let type_path = Types.PathDot (old_path, "t") in
-  let tv = { Types.id = 0; level = 1; link = None; weak = false } in
+  let tv = { Types.id = 0; level = 1; link = None; weak = false; rigid = false } in
   let body = Types.TypeArrow (
     Types.TypeVariable tv,
     Types.TypeConstructor (type_path, [])

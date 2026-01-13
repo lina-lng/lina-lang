@@ -70,6 +70,8 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
     declaration_variances = List.map (fun _ -> Types.Covariant) type_params;  (* Placeholder, will be computed later *)
     declaration_manifest = None;
     declaration_kind = DeclarationAbstract;  (* Placeholder *)
+    declaration_private = type_decl.type_private;
+    declaration_constraints = [];  (* Constraints will be added later *)
   } in
   let env_with_type = Environment.add_type type_decl.type_name.Location.value preliminary_declaration env in
 
@@ -91,13 +93,27 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
               (Some ty, ctx)
             | None -> (None, ctx)
           in
+          (* Handle GADT constructor return types *)
+          let ctor_result_type, is_gadt, ctx = match ctor.constructor_return_type with
+            | Some ret_ty_expr ->
+              (* GADT constructor with explicit return type *)
+              let ret_ty, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ret_ty_expr in
+              (ret_ty, true, ctx)
+            | None ->
+              (* Standard constructor - result is the type applied to parameters *)
+              (result_type, false, ctx)
+          in
+          (* TODO: Compute existential type variables (in argument but not in result) *)
+          let existentials = [] in
           let ctor_info = {
             constructor_name = ctor.constructor_name.Location.value;
             constructor_tag_index = tag_index;
             constructor_type_name = type_decl.type_name.Location.value;
             constructor_argument_type = arg_type;
-            constructor_result_type = result_type;
+            constructor_result_type = ctor_result_type;
             constructor_type_parameters = type_params;
+            constructor_is_gadt = is_gadt;
+            constructor_existentials = existentials;
           } in
           (infos @ [ctor_info], ctx)
         ) ([], ctx) indexed_constructors
@@ -141,12 +157,39 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
   let final_variances = Variance_infer.merge_variances
     explicit_variances inferred_variances in
 
+  (* Convert type constraints to semantic constraints *)
+  let semantic_constraints, ctx =
+    List.fold_left (fun (constraints, ctx) (syntax_constraint : Parsing.Syntax_tree.type_constraint) ->
+      let var_name = syntax_constraint.constraint_variable in
+      (* Find the type variable for this constraint *)
+      let constraint_var = match List.assoc_opt var_name (List.combine param_names type_params) with
+        | Some tv -> tv
+        | None ->
+          Compiler_error.type_error syntax_constraint.constraint_location
+            (Printf.sprintf "Constraint on unknown type variable: %s" var_name)
+      in
+      (* Convert the constraint type expression *)
+      let constraint_type, ctx =
+        Module_type_check.check_type_expression_with_params ctx param_names type_params
+          syntax_constraint.constraint_type
+      in
+      let semantic_constraint = Types.{
+        constraint_variable = constraint_var;
+        constraint_type;
+      } in
+      (semantic_constraint :: constraints, ctx)
+    ) ([], ctx) type_decl.type_constraints
+  in
+  let semantic_constraints = List.rev semantic_constraints in
+
   let type_declaration = {
     declaration_name = type_decl.type_name.Location.value;
     declaration_parameters = type_params;
     declaration_variances = final_variances;
     declaration_manifest = manifest;
     declaration_kind;
+    declaration_private = type_decl.type_private;
+    declaration_constraints = semantic_constraints;
   } in
 
   (* Check for type alias cycles *)

@@ -41,6 +41,8 @@ let make_sig_with_type name =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationAbstract;
     declaration_variances = [];
+    declaration_private = false;
+    declaration_constraints = [];
   } in
   Module_types.ModTypeSig [Module_types.SigType (name, decl)]
 

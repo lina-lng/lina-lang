@@ -57,6 +57,7 @@ type type_variable = {
   mutable level : level;            (** Generalization level *)
   mutable link : type_expression option;  (** Union-find link *)
   mutable weak : bool;              (** True if value restriction blocks generalization *)
+  mutable rigid : bool;             (** True for locally abstract types - don't unify, extract equations *)
 }
 
 (** Core type expressions.
@@ -74,6 +75,7 @@ and type_expression =
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
   | TypeRecord of row
+  | TypePolyVariant of poly_variant_row  (** Polymorphic variant type *)
   | TypeRowEmpty
 
 (** Row type for record fields.
@@ -96,6 +98,20 @@ and row = {
     The wrapper adds minimal overhead but preserves extensibility. *)
 and row_field =
   | RowFieldPresent of type_expression
+
+(** Polymorphic variant row type.
+
+    Like record rows but for sum types. Contains tag fields and a row variable. *)
+and poly_variant_row = {
+  pv_fields : (string * poly_variant_field) list;  (** Tag fields, sorted by name *)
+  pv_more : type_expression;  (** Row variable or TypeRowEmpty *)
+  pv_closed : bool;  (** False for open [\[> ...\]], True for closed *)
+}
+
+(** A single polymorphic variant field. *)
+and poly_variant_field =
+  | PVFieldPresent of type_expression option  (** Tag is present, with optional argument *)
+  | PVFieldAbsent  (** Tag is explicitly absent (for closed variants) *)
 
 (** {2 Type Paths} *)
 
@@ -182,6 +198,13 @@ val type_record_closed : (string * row_field) list -> type_expression
     to allow additional fields. *)
 val type_record_open : (string * row_field) list -> row_var:type_expression -> type_expression
 
+(** [type_poly_variant_at_least fields ~row_var] creates an open poly variant type [\[> `A | `B \]].
+    The variant has at least the given tags, with [row_var] as the tail for additional tags. *)
+val type_poly_variant_at_least : (string * poly_variant_field) list -> row_var:type_expression -> type_expression
+
+(** [type_poly_variant_exact fields] creates a closed exact poly variant type [\[ `A | `B \]]. *)
+val type_poly_variant_exact : (string * poly_variant_field) list -> type_expression
+
 (** {1 Type Manipulation} *)
 
 (** [representative ty] follows union-find links to find the canonical type.
@@ -230,6 +253,17 @@ type constructor_info = {
   constructor_argument_type : type_expression option;
   constructor_result_type : type_expression;
   constructor_type_parameters : type_variable list;
+  constructor_is_gadt : bool;            (** True if constructor has explicit return type (GADT) *)
+  constructor_existentials : type_variable list;  (** Type variables in argument but not in result *)
+}
+
+(** A type parameter constraint.
+
+    Pairs a type variable with the type it must unify with.
+    Example: constraint 'a = 'b * 'c *)
+type type_constraint = {
+  constraint_variable : type_variable;  (** The constrained type variable *)
+  constraint_type : type_expression;  (** The type the variable must equal *)
 }
 
 (** Type declaration in the environment. *)
@@ -239,6 +273,8 @@ type type_declaration = {
   declaration_variances : variance list;  (** Variance of each type parameter *)
   declaration_manifest : type_expression option;  (** [Some t] for type aliases *)
   declaration_kind : type_declaration_kind;
+  declaration_private : bool;  (** True if private (pattern match ok, construction blocked) *)
+  declaration_constraints : type_constraint list;  (** Type parameter constraints *)
 }
 
 (** The kind of type declaration. *)

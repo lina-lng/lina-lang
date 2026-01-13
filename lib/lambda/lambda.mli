@@ -37,6 +37,7 @@ type primitive =
   | PrimitiveIntGreater          (** Integer greater-than *)
   | PrimitiveIntLessEqual        (** Integer less-or-equal *)
   | PrimitiveIntGreaterEqual     (** Integer greater-or-equal *)
+  | PrimitiveStringEqual         (** String equality *)
   | PrimitiveMakeBlock of int    (** Create a tuple of given arity *)
   | PrimitiveGetField of int     (** Get tuple field by index (0-based) *)
   | PrimitivePrint               (** Print any value *)
@@ -119,6 +120,8 @@ type lambda =
       (** Dereference: [!e] *)
   | LambdaAssign of lambda * lambda
       (** Assignment: [e1 := e2] *)
+  | LambdaPolyVariant of string * lambda option
+      (** Polymorphic variant constructor: [`Tag] or [`Tag(arg)] *)
 
 (** Module binding in a module expression. *)
 and module_binding = {

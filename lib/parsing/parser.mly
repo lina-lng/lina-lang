@@ -19,13 +19,14 @@ let make_binding pattern expression loc =
 %token <string> TYPE_VARIABLE
 %token TRUE FALSE
 %token LET REC IN FUN IF THEN ELSE TYPE OF AND AS MATCH WITH WHEN
-%token MODULE STRUCT END SIG FUNCTOR OPEN INCLUDE VAL
+%token MODULE STRUCT END SIG FUNCTOR OPEN INCLUDE VAL PRIVATE CONSTRAINT
 %token EXTERNAL AT
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
 %token STAR PLUS MINUS SLASH
 %token LESS GREATER LESS_EQUAL GREATER_EQUAL EQUAL_EQUAL NOT_EQUAL
 %token REF BANG COLONEQUALS
+%token <string> BACKTICK_TAG
 %token EOF
 
 %right ARROW
@@ -111,11 +112,22 @@ let_binding:
     }
 
 type_declaration:
-  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; kind = type_declaration_kind
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; kind = type_declaration_kind; constraints = list(type_constraint)
     {
       { type_name = make_located name $loc(name);
         type_parameters = params;
         type_kind = kind;
+        type_private = false;
+        type_constraints = constraints;
+        type_location = make_loc $loc }
+    }
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; PRIVATE; kind = type_declaration_kind; constraints = list(type_constraint)
+    {
+      { type_name = make_located name $loc(name);
+        type_parameters = params;
+        type_kind = kind;
+        type_private = true;
+        type_constraints = constraints;
         type_location = make_loc $loc }
     }
   | params = type_parameters; name = LOWERCASE_IDENTIFIER
@@ -123,16 +135,38 @@ type_declaration:
       { type_name = make_located name $loc(name);
         type_parameters = params;
         type_kind = TypeAbstract;
+        type_private = false;
+        type_constraints = [];
         type_location = make_loc $loc }
+    }
+
+(* Type parameter constraint: constraint 'a = type_expression *)
+type_constraint:
+  | CONSTRAINT; var = TYPE_VARIABLE; EQUAL; ty = type_expression
+    {
+      { Syntax_tree.constraint_variable = var;
+        constraint_type = ty;
+        constraint_location = make_loc $loc }
     }
 
 (* Type declaration in signatures - allows abstract types (no = definition) *)
 signature_type_declaration:
-  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; kind = type_declaration_kind
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; kind = type_declaration_kind; constraints = list(type_constraint)
     {
       { type_name = make_located name $loc(name);
         type_parameters = params;
         type_kind = kind;
+        type_private = false;
+        type_constraints = constraints;
+        type_location = make_loc $loc }
+    }
+  | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; PRIVATE; kind = type_declaration_kind; constraints = list(type_constraint)
+    {
+      { type_name = make_located name $loc(name);
+        type_parameters = params;
+        type_kind = kind;
+        type_private = true;
+        type_constraints = constraints;
         type_location = make_loc $loc }
     }
   | params = type_parameters; name = LOWERCASE_IDENTIFIER
@@ -140,10 +174,12 @@ signature_type_declaration:
       { type_name = make_located name $loc(name);
         type_parameters = params;
         type_kind = TypeAbstract;
+        type_private = false;
+        type_constraints = [];
         type_location = make_loc $loc }
     }
 
-(* Type parameter with optional variance annotation: 'a, +'a, -'a *)
+(* Type parameter with optional variance annotation: 'a, +'a, -'a, _ *)
 type_param:
   | PLUS; v = TYPE_VARIABLE
     { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceCovariant } }
@@ -151,6 +187,9 @@ type_param:
     { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceContravariant } }
   | v = TYPE_VARIABLE
     { { Syntax_tree.parameter_name = v; parameter_variance = None } }
+  (* Wildcard type parameter for GADTs: type _ t = ... *)
+  | UNDERSCORE
+    { { Syntax_tree.parameter_name = "_"; parameter_variance = None } }
 
 type_parameters:
   | { [] }
@@ -166,10 +205,26 @@ type_declaration_kind:
     { TypeAlias ty }
 
 constructor_declaration:
+  (* Standard constructor: Name *)
   | name = UPPERCASE_IDENTIFIER
-    { { constructor_name = make_located name $loc(name); constructor_argument = None } }
+    { { constructor_name = make_located name $loc(name);
+        constructor_argument = None;
+        constructor_return_type = None } }
+  (* Standard constructor with argument: Name of type *)
   | name = UPPERCASE_IDENTIFIER; OF; ty = type_expression
-    { { constructor_name = make_located name $loc(name); constructor_argument = Some ty } }
+    { { constructor_name = make_located name $loc(name);
+        constructor_argument = Some ty;
+        constructor_return_type = None } }
+  (* GADT constructor without argument: Name : return_type *)
+  | name = UPPERCASE_IDENTIFIER; COLON; ret = type_expression
+    { { constructor_name = make_located name $loc(name);
+        constructor_argument = None;
+        constructor_return_type = Some ret } }
+  (* GADT constructor with argument: Name : arg_type -> return_type *)
+  | name = UPPERCASE_IDENTIFIER; COLON; arg = type_expression; ARROW; ret = type_expression
+    { { constructor_name = make_located name $loc(name);
+        constructor_argument = Some arg;
+        constructor_return_type = Some ret } }
 
 type_expression:
   | t = simple_type_expression { t }
@@ -199,6 +254,15 @@ simple_type_expression:
     { make_located (TypeRecord (fields, false)) $loc }
   | LBRACE; fields = separated_list(SEMICOLON, type_record_field); SEMICOLON; DOTDOT; RBRACE
     { make_located (TypeRecord (fields, true)) $loc }
+  (* Polymorphic variant types *)
+  | LBRACKET; fields = poly_variant_fields; RBRACKET
+    { make_located (TypePolyVariant (PolyRowExact fields)) $loc }
+  | LBRACKET; GREATER; fields = poly_variant_fields; RBRACKET
+    { make_located (TypePolyVariant (PolyRowAtLeast fields)) $loc }
+  | LBRACKET; LESS; fields = poly_variant_fields; RBRACKET
+    { make_located (TypePolyVariant (PolyRowAtMost (fields, []))) $loc }
+  | LBRACKET; LESS; fields = poly_variant_fields; GREATER; required = separated_nonempty_list(BAR, BACKTICK_TAG); RBRACKET
+    { make_located (TypePolyVariant (PolyRowAtMost (fields, required))) $loc }
 
 expression_eof:
   | e = expression; EOF { e }
@@ -300,6 +364,11 @@ atomic_expression:
     { make_located (ExpressionRecord fields) $loc }
   | LBRACE; base = simple_expression; WITH; fields = separated_nonempty_list(SEMICOLON, record_field); RBRACE
     { make_located (ExpressionRecordUpdate (base, fields)) $loc }
+  (* Polymorphic variant expression: `Tag or `Tag arg *)
+  | tag = BACKTICK_TAG
+    { make_located (ExpressionPolyVariant (tag, None)) $loc }
+  | tag = BACKTICK_TAG; arg = atomic_expression
+    { make_located (ExpressionPolyVariant (tag, Some arg)) $loc }
 
 expression_tuple:
   | e1 = expression; COMMA; e2 = expression
@@ -317,6 +386,8 @@ atomic_pattern:
     { make_located PatternWildcard $loc }
   | LPAREN; RPAREN
     { make_located (PatternConstant ConstantUnit) $loc }
+  | LPAREN; TYPE; name = LOWERCASE_IDENTIFIER; RPAREN
+    { make_located (PatternLocallyAbstract name) $loc }
   | LPAREN; p = pattern; RPAREN
     { p }
   | LPAREN; ps = pattern_tuple; RPAREN
@@ -339,6 +410,11 @@ atomic_pattern:
     { make_located (PatternRecord (fields, false)) $loc }
   | LBRACE; fields = record_pattern_field_list_open; RBRACE
     { make_located (PatternRecord (fields, true)) $loc }
+  (* Polymorphic variant pattern: `Tag or `Tag p *)
+  | tag = BACKTICK_TAG
+    { make_located (PatternPolyVariant (tag, None)) $loc }
+  | tag = BACKTICK_TAG; p = atomic_pattern
+    { make_located (PatternPolyVariant (tag, Some p)) $loc }
 
 pattern:
   | p = simple_pattern { p }
@@ -392,6 +468,17 @@ match_arm:
 type_record_field:
   | name = LOWERCASE_IDENTIFIER; COLON; ty = type_expression
     { { type_field_name = name; type_field_type = ty } }
+
+(* Polymorphic variant fields for type expressions *)
+poly_variant_fields:
+  | BAR?; fields = separated_nonempty_list(BAR, poly_variant_field)
+    { fields }
+
+poly_variant_field:
+  | tag = BACKTICK_TAG
+    { { poly_variant_tag = tag; poly_variant_argument = None } }
+  | tag = BACKTICK_TAG; OF; ty = type_expression
+    { { poly_variant_tag = tag; poly_variant_argument = Some ty } }
 
 (* ==================== Module System ==================== *)
 
@@ -499,6 +586,8 @@ signature_item:
 with_constraint:
   | TYPE; path = longident_type; params = type_parameters; EQUAL; ty = type_expression
     { WithType (path, List.map (fun p -> p.Syntax_tree.parameter_name) params, ty) }
+  | TYPE; path = longident_type; params = type_parameters; COLONEQUALS; ty = type_expression
+    { WithTypeDestructive (path, List.map (fun p -> p.Syntax_tree.parameter_name) params, ty) }
   | MODULE; path = longident; EQUAL; target = module_path
     { WithModule (path, target) }
 

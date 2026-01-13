@@ -112,7 +112,11 @@ let%expect_test "compile nested record and constructor" =
   |} in
   let has_code = String.length lua > 0 in
   print_endline (if has_code then "generated code" else "ERROR");
-  [%expect {| generated code |}]
+  [%expect {|
+    generated code
+    File "<string>", line 4, characters 14-17:
+    Warning: Non-exhaustive pattern matching, missing case: Some None
+    |}]
 
 (** {1 Guard Pattern Tests} *)
 

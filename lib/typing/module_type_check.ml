@@ -102,7 +102,38 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
       (* Look up the type in environment *)
       begin match Environment.find_type name env with
       | Some decl ->
-        TypeConstructor (PathLocal decl.declaration_name, arg_types)
+        (* Apply type parameter constraints if present *)
+        if decl.declaration_constraints <> [] && arg_types <> [] then begin
+          (* Check each constraint by unifying the constraint variable with its constraint type.
+             We need to instantiate fresh variables for the constraint type to avoid
+             polluting the original constraint with concrete types from this use site. *)
+          List.iter (fun (constraint_ : Types.type_constraint) ->
+            (* Substitute the constraint variable with its corresponding argument *)
+            let var_type = Type_utils.substitute_type_params
+              decl.declaration_parameters arg_types
+              (TypeVariable constraint_.constraint_variable) in
+            (* Substitute parameters in constraint type, then instantiate fresh vars
+               for any remaining type variables to avoid cross-use pollution *)
+            let constraint_type = Type_utils.substitute_type_params
+              decl.declaration_parameters arg_types
+              constraint_.constraint_type in
+            let fresh_var () = Types.new_type_variable_at_level 0 in
+            let constraint_type = Type_scheme.instantiate_all_fresh ~fresh_var constraint_type in
+            (* Unify: the variable's actual type must match the constraint type *)
+            Inference_utils.unify_with_env env loc var_type constraint_type
+          ) decl.declaration_constraints
+        end;
+        begin match decl.declaration_manifest with
+        | Some manifest when arg_types = [] ->
+          (* Type alias with no arguments - return the manifest type directly.
+             This is crucial for locally abstract types which alias to type variables. *)
+          manifest
+        | Some manifest ->
+          (* Type alias with arguments - substitute parameters in manifest *)
+          Type_utils.substitute_type_params decl.declaration_parameters arg_types manifest
+        | None ->
+          TypeConstructor (PathLocal decl.declaration_name, arg_types)
+        end
       | None ->
         Inference_utils.error_unbound_type loc name
       end
@@ -135,6 +166,10 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
       else (TypeRowEmpty, ctx)
     in
     (TypeRecord { row_fields; row_more }, ctx)
+
+  | TypePolyVariant _row ->
+    (* Polymorphic variant types - not yet implemented *)
+    Compiler_error.type_error ty_expr.location "Polymorphic variant types are not yet implemented"
 
 (** Check a type expression from a signature and convert to semantic type.
     Note: This does NOT preserve type variable sharing - use check_type_expression_with_params
@@ -272,6 +307,8 @@ and apply_with_constraint ctx mty (constraint_ : Parsing.Syntax_tree.with_constr
   match constraint_ with
   | WithType (path, params, type_expr) ->
     apply_type_constraint ctx mty path params type_expr loc
+  | WithTypeDestructive (path, params, type_expr) ->
+    apply_destructive_type_constraint ctx mty path params type_expr loc
   | WithModule (path, target) ->
     apply_module_constraint ctx mty path target loc
 
@@ -437,6 +474,194 @@ and refine_type_in_nested_sig ctx sig_ (prefix : Parsing.Syntax_tree.longident) 
       Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" mod_name);
     (refined_sig, !ctx_ref)
 
+(** Apply a destructive type constraint: with type path := type_expr
+    This substitutes all occurrences of the type and removes it from the signature. *)
+and apply_destructive_type_constraint ctx mty path params type_expr loc =
+  match mty with
+  | Module_types.ModTypeSig sig_ ->
+    let refined_sig, ctx = destructive_refine_type_in_sig ctx sig_ path params type_expr loc in
+    (Module_types.ModTypeSig refined_sig, ctx)
+  | Module_types.ModTypeFunctor _ ->
+    Compiler_error.type_error loc "Cannot apply with-constraint to functor type"
+  | Module_types.ModTypeIdent _ ->
+    Compiler_error.type_error loc "Cannot apply with-constraint to abstract module type"
+
+(** Destructively refine a type in a signature - substitutes and removes the type *)
+and destructive_refine_type_in_sig ctx sig_ (path : Parsing.Syntax_tree.longident) params type_expr loc =
+  match path.Location.value with
+  | Lident name ->
+    (* Direct type: with type t := ... *)
+    let found = ref false in
+    let ctx_ref = ref ctx in
+    let replacement_type = ref None in
+    let type_params = ref [] in
+    (* First pass: find the type, verify params, get replacement type *)
+    List.iter (fun item ->
+      match item with
+      | Module_types.SigType (n, decl) when n = name ->
+        found := true;
+        (* Verify parameter count matches *)
+        if List.length params <> List.length decl.declaration_parameters then
+          Compiler_error.type_error loc
+            (Printf.sprintf "Type %s has %d parameters but constraint has %d"
+              name (List.length decl.declaration_parameters) (List.length params));
+        (* Store the type parameters for substitution *)
+        type_params := decl.declaration_parameters;
+        (* Convert the type expression to a semantic type *)
+        let manifest_type, ctx' = check_type_expression !ctx_ref type_expr in
+        ctx_ref := ctx';
+        replacement_type := Some manifest_type
+      | _ -> ()
+    ) sig_;
+    if not !found then
+      Compiler_error.type_error loc (Printf.sprintf "Type %s not found in signature" name);
+    (* Second pass: substitute and filter out the type *)
+    let subst_type = match !replacement_type with
+      | Some ty -> ty
+      | None -> Compiler_error.internal_error "Replacement type not found after first pass"
+    in
+    let refined_sig = List.filter_map (fun item ->
+      match item with
+      | Module_types.SigType (n, _) when n = name ->
+        (* Remove the type declaration *)
+        None
+      | Module_types.SigValue (n, vd) ->
+        (* Substitute type in value description *)
+        let new_body = substitute_type_in_type name !type_params subst_type vd.Module_types.value_type.body in
+        let new_scheme = { vd.Module_types.value_type with body = new_body } in
+        Some (Module_types.SigValue (n, { vd with Module_types.value_type = new_scheme }))
+      | Module_types.SigType (n, decl) ->
+        (* Substitute type in other type declarations' manifests *)
+        let new_manifest = Option.map (substitute_type_in_type name !type_params subst_type) decl.declaration_manifest in
+        Some (Module_types.SigType (n, { decl with declaration_manifest = new_manifest }))
+      | Module_types.SigModule (n, inner_mty) ->
+        (* Substitute type in nested module *)
+        let new_inner = substitute_type_in_module_type name !type_params subst_type inner_mty in
+        Some (Module_types.SigModule (n, new_inner))
+      | Module_types.SigModuleType (n, mty_opt) ->
+        (* Substitute type in module type definition *)
+        let new_mty_opt = Option.map (substitute_type_in_module_type name !type_params subst_type) mty_opt in
+        Some (Module_types.SigModuleType (n, new_mty_opt))
+    ) sig_ in
+    (refined_sig, !ctx_ref)
+  | Ldot (prefix, name) ->
+    (* Nested: with type M.t := ... - find module M, then destructively refine type t inside *)
+    destructive_refine_type_in_nested_sig ctx sig_ prefix name params type_expr loc
+
+(** Destructively refine a type in a nested module signature *)
+and destructive_refine_type_in_nested_sig ctx sig_ (prefix : Parsing.Syntax_tree.longident) type_name params type_expr loc =
+  match prefix.Location.value with
+  | Lident mod_name ->
+    (* Simple module prefix: with type M.t := ... *)
+    let found = ref false in
+    let ctx_ref = ref ctx in
+    let refined_sig = List.map (fun item ->
+      match item with
+      | Module_types.SigModule (n, inner_mty) when n = mod_name ->
+        found := true;
+        let type_path = { Location.value = Parsing.Syntax_tree.Lident type_name; location = loc } in
+        let refined_inner, ctx' = apply_destructive_type_constraint !ctx_ref inner_mty type_path params type_expr loc in
+        ctx_ref := ctx';
+        Module_types.SigModule (n, refined_inner)
+      | _ -> item
+    ) sig_ in
+    if not !found then
+      Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" mod_name);
+    (refined_sig, !ctx_ref)
+  | Ldot (deeper_prefix, mod_name) ->
+    (* Deeper nesting: with type M.N.t := ... *)
+    let found = ref false in
+    let ctx_ref = ref ctx in
+    let refined_sig = List.map (fun item ->
+      match item with
+      | Module_types.SigModule (n, inner_mty) when n = mod_name ->
+        found := true;
+        let remaining_path = { Location.value = Parsing.Syntax_tree.Ldot (deeper_prefix, type_name); location = loc } in
+        let refined_inner, ctx' = apply_destructive_type_constraint !ctx_ref inner_mty remaining_path params type_expr loc in
+        ctx_ref := ctx';
+        Module_types.SigModule (n, refined_inner)
+      | _ -> item
+    ) sig_ in
+    if not !found then
+      Compiler_error.type_error loc (Printf.sprintf "Module %s not found in signature" mod_name);
+    (refined_sig, !ctx_ref)
+
+(** Substitute a type path with a replacement type in a type expression *)
+and substitute_type_in_type type_name type_params replacement ty =
+  match Types.representative ty with
+  | Types.TypeVariable _ -> ty
+  | Types.TypeConstructor (path, args) ->
+    let args' = List.map (substitute_type_in_type type_name type_params replacement) args in
+    begin match path with
+    | Types.PathLocal name when name = type_name ->
+      (* This is the type we're substituting - replace with the replacement type *)
+      (* If there are type parameters, we need to substitute them in the replacement *)
+      if List.length type_params = 0 then
+        replacement
+      else
+        (* Substitute type params in replacement with the actual args *)
+        Type_utils.substitute_type_params type_params args' replacement
+    | _ ->
+      Types.TypeConstructor (path, args')
+    end
+  | Types.TypeArrow (t1, t2) ->
+    Types.TypeArrow (
+      substitute_type_in_type type_name type_params replacement t1,
+      substitute_type_in_type type_name type_params replacement t2
+    )
+  | Types.TypeTuple tys ->
+    Types.TypeTuple (List.map (substitute_type_in_type type_name type_params replacement) tys)
+  | Types.TypeRecord row ->
+    let new_fields = List.map (fun (name, field) ->
+      match field with
+      | Types.RowFieldPresent ty ->
+        (name, Types.RowFieldPresent (substitute_type_in_type type_name type_params replacement ty))
+    ) row.row_fields in
+    let new_more = substitute_type_in_type type_name type_params replacement row.row_more in
+    Types.TypeRecord { row_fields = new_fields; row_more = new_more }
+  | Types.TypePolyVariant pv_row ->
+    let new_fields = List.map (fun (name, field) ->
+      let new_field = match field with
+        | Types.PVFieldPresent (Some ty) ->
+          Types.PVFieldPresent (Some (substitute_type_in_type type_name type_params replacement ty))
+        | Types.PVFieldPresent None -> Types.PVFieldPresent None
+        | Types.PVFieldAbsent -> Types.PVFieldAbsent
+      in
+      (name, new_field)
+    ) pv_row.pv_fields in
+    let new_more = substitute_type_in_type type_name type_params replacement pv_row.pv_more in
+    Types.TypePolyVariant { pv_fields = new_fields; pv_more = new_more; pv_closed = pv_row.pv_closed }
+  | Types.TypeRowEmpty -> ty
+
+(** Substitute a type in a module type *)
+and substitute_type_in_module_type type_name type_params replacement mty =
+  match mty with
+  | Module_types.ModTypeSig sig_ ->
+    Module_types.ModTypeSig (substitute_type_in_signature type_name type_params replacement sig_)
+  | Module_types.ModTypeFunctor (param, result) ->
+    let new_param_type = substitute_type_in_module_type type_name type_params replacement param.parameter_type in
+    let new_param = { param with Module_types.parameter_type = new_param_type } in
+    let new_result = substitute_type_in_module_type type_name type_params replacement result in
+    Module_types.ModTypeFunctor (new_param, new_result)
+  | Module_types.ModTypeIdent _ -> mty
+
+(** Substitute a type in a signature *)
+and substitute_type_in_signature type_name type_params replacement sig_ =
+  List.map (fun item ->
+    match item with
+    | Module_types.SigValue (n, vd) ->
+      let new_body = substitute_type_in_type type_name type_params replacement vd.Module_types.value_type.body in
+      let new_scheme = { vd.Module_types.value_type with body = new_body } in
+      Module_types.SigValue (n, { vd with Module_types.value_type = new_scheme })
+    | Module_types.SigType (n, decl) ->
+      let new_manifest = Option.map (substitute_type_in_type type_name type_params replacement) decl.declaration_manifest in
+      Module_types.SigType (n, { decl with declaration_manifest = new_manifest })
+    | Module_types.SigModule (n, inner_mty) ->
+      Module_types.SigModule (n, substitute_type_in_module_type type_name type_params replacement inner_mty)
+    | Module_types.SigModuleType (n, mty_opt) ->
+      Module_types.SigModuleType (n, Option.map (substitute_type_in_module_type type_name type_params replacement) mty_opt)
+  ) sig_
+
 (** Check a syntax signature and convert to semantic signature.
 
     @param ctx The typing context
@@ -467,8 +692,8 @@ and check_signature_item ctx (item : signature_item) : Module_types.signature_it
     let name_str = name.Location.value in
     (* Convert syntax type to semantic type *)
     let ty, ctx = check_type_expression ctx type_expr in
-    (* Use base level for signature type generalization *)
-    let scheme = Type_scheme.generalize ~level:1 ty in
+    (* Use level 0 for signature type generalization so variables at level 1 are generalized *)
+    let scheme = Type_scheme.generalize ~level:0 ty in
     let val_desc = Module_types.{
       value_type = scheme;
       value_location = loc;
@@ -501,12 +726,15 @@ and check_signature_item ctx (item : signature_item) : Module_types.signature_it
       in
       (* Create a type declaration for the signature *)
       (* Abstract types in signatures default to invariant (most restrictive) *)
+      (* TODO: Process type constraints for signature types *)
       let sig_decl = Types.{
         declaration_name = name;
         declaration_parameters = type_params;
         declaration_variances = List.map (fun _ -> Types.Invariant) type_params;
         declaration_manifest = None;
         declaration_kind = kind;
+        declaration_private = decl.type_private;
+        declaration_constraints = [];
       } in
       (Some (Module_types.SigType (name, sig_decl)), ctx)
     | [] -> (None, ctx)
@@ -539,8 +767,8 @@ and check_signature_item ctx (item : signature_item) : Module_types.signature_it
     (* External declarations in signatures contribute value bindings *)
     let name = ext_decl.external_name.Location.value in
     let ty, ctx = check_type_expression ctx ext_decl.external_type in
-    (* Use base level for signature type generalization *)
-    let scheme = Type_scheme.generalize ~level:1 ty in
+    (* Use level 0 for signature type generalization so variables at level 1 are generalized *)
+    let scheme = Type_scheme.generalize ~level:0 ty in
     let val_desc = Module_types.{
       value_type = scheme;
       value_location = loc;

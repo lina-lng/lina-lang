@@ -4,7 +4,7 @@ open Typing
 
 (** Helper to create a type variable with a given id. *)
 let make_type_var id =
-  { Types.id; level = 0; link = None; weak = false }
+  { Types.id; level = 0; link = None; weak = false; rigid = false }
 
 (** Helper to print variance. *)
 let variance_to_string = function
@@ -68,13 +68,17 @@ let%expect_test "infer: variant type with covariant param" =
       constructor_type_name = "option";
       constructor_argument_type = None;
       constructor_result_type = Types.TypeVariable tv;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
     { Types.constructor_name = "Some";
       constructor_tag_index = 1;
       constructor_type_name = "option";
       constructor_argument_type = Some (Types.TypeVariable tv);
       constructor_result_type = Types.TypeVariable tv;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
   let variances = Variance_infer.infer_declaration_variances [tv]
     (Types.DeclarationVariant constructors) in
@@ -117,7 +121,9 @@ let%expect_test "infer: unused parameter is covariant" =
       constructor_type_name = "phantom";
       constructor_argument_type = Some Types.type_int;  (* No 'a! *)
       constructor_result_type = Types.TypeVariable tv;
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
   let variances = Variance_infer.infer_declaration_variances [tv]
     (Types.DeclarationVariant constructors) in
@@ -189,7 +195,9 @@ let%expect_test "infer: unused parameter is bivariant" =
       constructor_type_name = "phantom";
       constructor_argument_type = Some Types.type_int;  (* No 'a! *)
       constructor_result_type = Types.TypeConstructor (Types.PathLocal "phantom", [Types.TypeVariable tv]);
-      constructor_type_parameters = [tv] };
+      constructor_type_parameters = [tv];
+      constructor_is_gadt = false;
+      constructor_existentials = [] };
   ] in
   let variances = Variance_infer.infer_declaration_variances [tv]
     (Types.DeclarationVariant constructors) in

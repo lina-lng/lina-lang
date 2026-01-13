@@ -49,6 +49,12 @@ let rec simplify_pattern (pat : Typed_tree.typed_pattern) : simple_pattern =
       (f.typed_pattern_field_name, simplify_pattern f.typed_pattern_field_pattern)
     ) fields in
     PatRecord (simplified_fields, is_open)
+  | Typed_tree.TypedPatternLocallyAbstract _ ->
+    (* Locally abstract types are wildcards for exhaustiveness checking *)
+    PatWildcard
+  | Typed_tree.TypedPatternPolyVariant (tag, arg) ->
+    (* Polymorphic variants are treated as constructors with backtick-prefixed names *)
+    PatConstructor ("`" ^ tag, Option.map simplify_pattern arg)
   | Typed_tree.TypedPatternError _ ->
     (* Error patterns are treated as wildcards for exhaustiveness checking *)
     PatWildcard

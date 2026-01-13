@@ -14,6 +14,7 @@ let make_type_var id level =
     level;
     link = None;
     weak = false;
+    rigid = false;
   } in
   (tv, Types.TypeVariable tv)
 
