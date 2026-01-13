@@ -19,7 +19,7 @@ let compile_and_check code =
 
 let get_scheme_for name env =
   match Environment.find_value name env with
-  | Some (_, scheme) -> scheme
+  | Some binding -> binding.Environment.binding_scheme
   | None -> failwith ("Value not found: " ^ name)
 
 let is_polymorphic scheme =

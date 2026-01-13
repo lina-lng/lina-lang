@@ -16,6 +16,15 @@
     - [print : 'a -> unit]
     - Arithmetic operators via primitives *)
 
+(** {1 Types} *)
+
+(** Value binding with definition location for go-to-definition support. *)
+type value_binding = {
+  binding_id : Common.Identifier.t;
+  binding_scheme : Types.type_scheme;
+  binding_location : Common.Location.t;
+}
+
 (** {1 Environment Type} *)
 
 (** Abstract environment type.
@@ -33,21 +42,22 @@ val initial : t
 
 (** {1 Value Bindings} *)
 
-(** [add_value name id scheme env] adds a value binding.
+(** [add_value name id scheme location env] adds a value binding.
 
     @param name The source-level name
     @param id The unique runtime identifier
     @param scheme The polymorphic type scheme
+    @param location The source location of the definition
     @param env The environment to extend
     @return A new environment with the binding added *)
-val add_value : string -> Common.Identifier.t -> Types.type_scheme -> t -> t
+val add_value : string -> Common.Identifier.t -> Types.type_scheme -> Common.Location.t -> t -> t
 
 (** [find_value name env] looks up a value binding.
 
     @param name The name to look up
     @param env The environment to search
-    @return [Some (id, scheme)] if found, [None] otherwise *)
-val find_value : string -> t -> (Common.Identifier.t * Types.type_scheme) option
+    @return [Some binding] if found, [None] otherwise *)
+val find_value : string -> t -> value_binding option
 
 (** {1 Type Declarations} *)
 

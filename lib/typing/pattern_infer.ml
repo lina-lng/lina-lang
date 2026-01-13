@@ -40,7 +40,7 @@ let rec infer_pattern ctx (pattern : pattern) =
     let ty, ctx = Typing_context.new_type_variable ctx in
     let id = Identifier.create name in
     let env = Typing_context.environment ctx in
-    let env = Environment.add_value name id (trivial_scheme ty) env in
+    let env = Environment.add_value name id (trivial_scheme ty) loc env in
     let ctx = Typing_context.with_environment env ctx in
     let typed_pattern = {
       pattern_desc = TypedPatternVariable id;
@@ -121,7 +121,7 @@ let rec infer_pattern ctx (pattern : pattern) =
     let _typed_inner, ty, ctx = infer_pattern ctx inner_pattern in
     let id = Identifier.create name in
     let env = Typing_context.environment ctx in
-    let env = Environment.add_value name id (trivial_scheme ty) env in
+    let env = Environment.add_value name id (trivial_scheme ty) loc env in
     let ctx = Typing_context.with_environment env ctx in
     let typed_pattern = {
       pattern_desc = TypedPatternVariable id;
@@ -170,3 +170,13 @@ let rec infer_pattern ctx (pattern : pattern) =
       pattern_location = loc;
     } in
     (typed_pattern, record_type, ctx)
+
+  | PatternError error_info ->
+    (* Error patterns get a fresh type variable and are preserved in typed tree *)
+    let error_ty, ctx = Typing_context.new_type_variable ctx in
+    let typed_pattern = {
+      pattern_desc = TypedPatternError error_info;
+      pattern_type = error_ty;
+      pattern_location = loc;
+    } in
+    (typed_pattern, error_ty, ctx)

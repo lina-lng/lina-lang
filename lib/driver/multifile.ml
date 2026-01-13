@@ -36,6 +36,9 @@ and extract_from_item defined referenced (item : Parsing.Syntax_tree.structure_i
   | StructureExternal _ ->
     (* External declarations don't reference other modules *)
     ()
+  | StructureError _ ->
+    (* Error nodes don't reference other modules *)
+    ()
 
 and extract_from_module_expr referenced (mexpr : Parsing.Syntax_tree.module_expression) =
   let open Parsing.Syntax_tree in
@@ -109,6 +112,9 @@ and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
   | ExpressionAssign (ref_expr, value_expr) ->
     extract_from_expr referenced ref_expr;
     extract_from_expr referenced value_expr
+  | ExpressionError _ ->
+    (* Error nodes don't reference other modules *)
+    ()
 
 (** Build dependency graph *)
 type file_info = {

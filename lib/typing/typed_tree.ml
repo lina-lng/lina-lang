@@ -13,6 +13,8 @@ and typed_pattern_desc =
   | TypedPatternTuple of typed_pattern list
   | TypedPatternConstructor of Types.constructor_info * typed_pattern option
   | TypedPatternRecord of typed_record_pattern_field list * bool
+  | TypedPatternError of Parsing.Syntax_tree.error_info
+      (** Error recovery placeholder for invalid pattern syntax *)
 
 and typed_record_pattern_field = {
   typed_pattern_field_name : string;
@@ -26,7 +28,8 @@ type typed_expression = {
 }
 
 and typed_expression_desc =
-  | TypedExpressionVariable of Identifier.t
+  | TypedExpressionVariable of Identifier.t * Location.t option
+      (** Variable reference with optional definition location for go-to-definition *)
   | TypedExpressionConstant of Parsing.Syntax_tree.constant
   | TypedExpressionTuple of typed_expression list
   | TypedExpressionConstructor of Types.constructor_info * typed_expression option
@@ -43,6 +46,8 @@ and typed_expression_desc =
   | TypedExpressionRef of typed_expression           (** ref e *)
   | TypedExpressionDeref of typed_expression         (** !e *)
   | TypedExpressionAssign of typed_expression * typed_expression  (** e1 := e2 *)
+  | TypedExpressionError of Parsing.Syntax_tree.error_info
+      (** Error recovery placeholder for invalid expression syntax *)
 
 and typed_record_field = {
   typed_field_name : string;
@@ -87,6 +92,8 @@ and typed_structure_item_desc =
   | TypedStructureOpen of Module_types.path * (string * Common.Identifier.t) list  (** path, opened value bindings *)
   | TypedStructureInclude of typed_module_expression * (string * Common.Identifier.t) list  (** module expr, included value bindings *)
   | TypedStructureExternal of typed_external  (** FFI external declaration *)
+  | TypedStructureError of Parsing.Syntax_tree.error_info
+      (** Error recovery placeholder for invalid top-level syntax *)
 
 (** Typed module expression *)
 and typed_module_expression = {

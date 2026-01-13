@@ -1,5 +1,13 @@
 open Common
 
+(** Error information for error recovery during parsing.
+    Stored in error nodes when the parser encounters invalid syntax. *)
+type error_info = {
+  error_message : string;
+  error_span : Location.t;
+}
+[@@deriving show, eq]
+
 type constant =
   | ConstantInteger of int
   | ConstantFloat of float
@@ -55,6 +63,8 @@ and pattern_desc =
   | PatternAlias of pattern * string
   | PatternConstraint of pattern * type_expression
   | PatternRecord of record_pattern_field list * bool
+  | PatternError of error_info
+      (** Error recovery placeholder for invalid pattern syntax *)
 [@@deriving show, eq]
 
 and record_pattern_field = {
@@ -85,6 +95,8 @@ and expression_desc =
   | ExpressionRef of expression                     (** ref e *)
   | ExpressionDeref of expression                   (** !e *)
   | ExpressionAssign of expression * expression     (** e1 := e2 *)
+  | ExpressionError of error_info
+      (** Error recovery placeholder for invalid expression syntax *)
 [@@deriving show, eq]
 
 and record_field = {
@@ -184,6 +196,8 @@ and structure_item_desc =
   | StructureOpen of module_path
   | StructureInclude of module_expression
   | StructureExternal of external_declaration  (** FFI external declaration *)
+  | StructureError of error_info
+      (** Error recovery placeholder for invalid top-level syntax *)
 [@@deriving show, eq]
 
 and structure = structure_item list

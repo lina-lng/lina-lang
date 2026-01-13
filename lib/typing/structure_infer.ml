@@ -351,7 +351,7 @@ let rec infer_structure_item ctx (item : structure_item) =
     let external_id = Identifier.create name in
     (* Add to environment as a value binding *)
     let scheme = Typing_context.generalize ctx final_type in
-    let env = Environment.add_value name external_id scheme env in
+    let env = Environment.add_value name external_id scheme location env in
     let ctx = Typing_context.with_environment env ctx in
     (* Create the typed external *)
     let typed_ext = {
@@ -362,6 +362,14 @@ let rec infer_structure_item ctx (item : structure_item) =
     } in
     let typed_item = {
       structure_item_desc = TypedStructureExternal typed_ext;
+      structure_item_location = item.Location.location;
+    } in
+    (typed_item, ctx)
+
+  | StructureError error_info ->
+    (* Error structure items are preserved in typed tree *)
+    let typed_item = {
+      structure_item_desc = TypedStructureError error_info;
       structure_item_location = item.Location.location;
     } in
     (typed_item, ctx)
@@ -578,6 +586,10 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
       value_location = ext.external_location;
     } in
     [Module_types.SigValue (name, val_desc)]
+
+  | TypedStructureError _ ->
+    (* Error items don't contribute to the signature *)
+    []
 
 (** [infer_structure ctx structure] infers types for a complete structure.
 

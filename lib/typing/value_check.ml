@@ -86,6 +86,7 @@ module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = 
     | Typed_tree.TypedExpressionRef _ -> ShapeNonValue
     | Typed_tree.TypedExpressionDeref _ -> ShapeNonValue
     | Typed_tree.TypedExpressionAssign _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionError _ -> ShapeNonValue
 end
 
 (** {2 Syntax Expression Implementation} *)
@@ -127,6 +128,7 @@ module SyntaxExpression : EXPRESSION with type t = Parsing.Syntax_tree.expressio
     | Parsing.Syntax_tree.ExpressionRef _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionDeref _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionAssign _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionError _ -> ShapeNonValue
 end
 
 (** {2 Instantiate the Functor} *)

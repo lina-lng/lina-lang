@@ -263,6 +263,10 @@ let rec translate_pattern_binding pattern value body =
     let inner = List.fold_right (fun binding_function accumulator -> binding_function accumulator) bindings body in
     LambdaLet (temp_id, value, inner)
 
+  | TypedPatternError _ ->
+    (* Error patterns don't introduce any bindings *)
+    body
+
 (** Translate a module path to a lambda expression *)
 let rec translate_module_path (path : Typing.Types.path) : lambda =
   match path with
@@ -398,6 +402,9 @@ and translate_structure_with_opens (structure : Typing.Typed_tree.typed_structur
         let new_local = `Single (ext.external_id, func) in
         let new_field = { mb_id = ext.external_id; mb_value = LambdaVariable ext.external_id } in
         process rest (new_local :: local_bindings) (new_field :: module_fields)
+      | TypedStructureError _ ->
+        (* Error items are skipped in module translation *)
+        process rest local_bindings module_fields
   in
   process structure [] []
 
@@ -463,12 +470,15 @@ and collect_module_bindings (structure : Typing.Typed_tree.typed_structure) : mo
     | TypedStructureExternal ext ->
       let func = make_ffi_wrapper ext.external_spec in
       [{ mb_id = ext.external_id; mb_value = func }]
+    | TypedStructureError _ ->
+      (* Error items don't contribute to module bindings *)
+      []
   ) structure
 
 and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   let open Typing.Typed_tree in
   match expr.expression_desc with
-  | TypedExpressionVariable id ->
+  | TypedExpressionVariable (id, _def_loc) ->
     LambdaVariable id
 
   | TypedExpressionConstant const ->
@@ -602,6 +612,13 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     (* e1 := e2 - write the value to the mutable cell *)
     LambdaAssign (translate_expression ref_expr, translate_expression value_expr)
 
+  | TypedExpressionError _ ->
+    (* Error expressions produce a runtime error *)
+    LambdaApply (
+      LambdaVariable (Identifier.create "error"),
+      [LambdaConstant (ConstantString "Error recovery: invalid expression")]
+    )
+
 let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : lambda list =
   let open Typing.Typed_tree in
   match item.structure_item_desc with
@@ -661,6 +678,10 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
   | TypedStructureExternal ext ->
     let func = make_ffi_wrapper ext.external_spec in
     [LambdaLet (ext.external_id, func, LambdaConstant ConstantUnit)]
+
+  | TypedStructureError _ ->
+    (* Error items are skipped at top level *)
+    []
 
 let translate_structure structure =
   List.concat_map translate_structure_item structure

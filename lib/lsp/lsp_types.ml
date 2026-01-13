@@ -43,11 +43,14 @@ type diagnostic = {
 }
 [@@deriving show, eq]
 
-(** Convert Lina position (1-indexed) to LSP position (0-indexed). *)
+(** Convert Lina position to LSP position.
+
+    Lina uses 1-indexed lines (from Lexing convention) but 0-indexed columns
+    (computed as pos_cnum - pos_bol). LSP uses 0-indexed for both. *)
 let position_of_lina_position (pos : Location.position) : position =
   {
     line = pos.line - 1;
-    character = pos.column - 1;
+    character = pos.column;  (* column is already 0-indexed *)
   }
 
 (** Convert Lina location to LSP range. *)
@@ -57,12 +60,15 @@ let range_of_location (loc : Location.t) : range =
     end_pos = position_of_lina_position loc.end_pos;
   }
 
-(** Create a Lina position from LSP position. *)
+(** Create a Lina position from LSP position.
+
+    Converts from LSP's 0-indexed positions to Lina's convention
+    (1-indexed lines, 0-indexed columns). *)
 let lina_position_of_position filename (pos : position) offset : Location.position =
   {
     filename;
     line = pos.line + 1;
-    column = pos.character + 1;
+    column = pos.character;  (* both LSP and Lina use 0-indexed columns *)
     offset;
   }
 

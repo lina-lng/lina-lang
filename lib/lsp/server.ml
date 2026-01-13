@@ -66,11 +66,23 @@ class lina_server =
     (** Enable go-to-definition. *)
     method! config_definition = Some (`Bool true)
 
-    (** Advertise formatting capabilities. *)
+    (** Advertise formatting and semantic tokens capabilities. *)
     method! config_modify_capabilities caps =
+      let legend =
+        SemanticTokensLegend.create
+          ~tokenTypes:Lsp_semantic_tokens.token_type_names
+          ~tokenModifiers:Lsp_semantic_tokens.token_modifier_names
+      in
+      let semantic_tokens_options =
+        SemanticTokensOptions.create
+          ~legend
+          ~full:(`Bool true)
+          ()
+      in
       { caps with
         ServerCapabilities.documentFormattingProvider = Some (`Bool true);
         documentRangeFormattingProvider = Some (`Bool true);
+        semanticTokensProvider = Some (`SemanticTokensOptions semantic_tokens_options);
       }
 
     (** Publish diagnostics for a document. *)
@@ -248,6 +260,17 @@ class lina_server =
             let uri = DocumentUri.to_path params.textDocument.uri in
             Lsp_formatting.format_range state.document_store uri params.range
               params.options
+        | Lsp.Client_request.SemanticTokensFull params ->
+            let uri = DocumentUri.to_path params.textDocument.uri in
+            let typed_ast_opt, _, _ =
+              Diagnostics.type_check_document state.document_store uri
+            in
+            (match typed_ast_opt with
+            | None -> None
+            | Some typed_ast ->
+                let tokens = Lsp_semantic_tokens.collect_tokens typed_ast in
+                let data = Lsp_semantic_tokens.encode_tokens tokens in
+                Some (SemanticTokens.create ~data:(Array.of_list data) ()))
         | _ ->
             super#on_request_unhandled ~notify_back ~id req
   end

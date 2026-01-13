@@ -44,6 +44,7 @@ let rec strip_pattern_locations (p : Syntax_tree.pattern) : Syntax_tree.pattern 
           (strip_pattern_locations p', strip_type_locations ty)
     | Syntax_tree.PatternRecord (fields, is_open) ->
         Syntax_tree.PatternRecord (List.map strip_record_pattern_field_locations fields, is_open)
+    | Syntax_tree.PatternError _ as err -> err
   in
   { value = desc; location = Location.none }
 
@@ -103,6 +104,7 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
     | Syntax_tree.ExpressionAssign (ref_expr, value_expr) ->
         Syntax_tree.ExpressionAssign
           (strip_expr_locations ref_expr, strip_expr_locations value_expr)
+    | Syntax_tree.ExpressionError _ as err -> err
   in
   { value = desc; location = Location.none }
 
@@ -163,6 +165,7 @@ let strip_structure_item_locations (item : Syntax_tree.structure_item) :
     | Syntax_tree.StructureOpen _ -> failwith "Open support not yet implemented"
     | Syntax_tree.StructureInclude _ -> failwith "Include support not yet implemented"
     | Syntax_tree.StructureExternal _ -> failwith "External support not yet implemented"
+    | Syntax_tree.StructureError _ as err -> err
   in
   { value = desc; location = Location.none }
 

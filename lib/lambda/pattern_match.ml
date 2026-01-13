@@ -92,6 +92,9 @@ let head_of_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor =
     HCConstructor (ctor_info.Typing.Types.constructor_name, ctor_info.Typing.Types.constructor_tag_index)
   | Typing.Typed_tree.TypedPatternRecord (fields, _) ->
     HCRecord (List.map (fun f -> f.Typing.Typed_tree.typed_pattern_field_name) fields)
+  | Typing.Typed_tree.TypedPatternError _ ->
+    (* Error patterns are treated as wildcards in pattern matching *)
+    HCWildcard
 
 (* Compare constants for equality *)
 let constants_equal c1 c2 =
@@ -145,6 +148,9 @@ let collect_bindings (pat : Typing.Typed_tree.typed_pattern) (occ : occurrence) 
         collect_with_builder f.typed_pattern_field_pattern
           (extend_builder builder (OccRecordField f.typed_pattern_field_name))
       ) fields)
+    | Typing.Typed_tree.TypedPatternError _ ->
+      (* Error patterns don't bind any variables *)
+      []
   in
   collect_with_builder pat initial_builder
 

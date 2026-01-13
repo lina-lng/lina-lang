@@ -201,3 +201,19 @@
  (modules test_module_expansion)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Error recovery tests
+(library
+ (name test_error_recovery)
+ (libraries parsing common)
+ (modules test_error_recovery)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Error node tests (typed error nodes)
+(library
+ (name test_error_nodes)
+ (libraries parsing typing common)
+ (modules test_error_nodes)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

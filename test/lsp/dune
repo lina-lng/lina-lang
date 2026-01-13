@@ -67,3 +67,11 @@
  (modules test_lsp_formatting)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; LSP semantic tokens tests
+(library
+ (name test_lsp_semantic_tokens)
+ (libraries lina_lsp lsp_test_helpers typing common)
+ (modules test_lsp_semantic_tokens)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

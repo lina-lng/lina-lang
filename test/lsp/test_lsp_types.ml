@@ -12,7 +12,7 @@ let%expect_test "position_of_lina_position - converts 1-indexed to 0-indexed" =
   in
   let lsp_pos = Lsp_types.position_of_lina_position lina_pos in
   print_endline (Lsp_types.show_position lsp_pos);
-  [%expect {| { Lsp_types.line = 0; character = 0 } |}]
+  [%expect {| { Lsp_types.line = 0; character = 1 } |}]
 
 let%expect_test "position_of_lina_position - handles line 5 column 10" =
   let lina_pos : Common.Location.position =
@@ -20,7 +20,7 @@ let%expect_test "position_of_lina_position - handles line 5 column 10" =
   in
   let lsp_pos = Lsp_types.position_of_lina_position lina_pos in
   print_endline (Lsp_types.show_position lsp_pos);
-  [%expect {| { Lsp_types.line = 4; character = 9 } |}]
+  [%expect {| { Lsp_types.line = 4; character = 10 } |}]
 
 let%expect_test "range_of_location - converts location span" =
   let start_pos : Common.Location.position =
@@ -33,8 +33,8 @@ let%expect_test "range_of_location - converts location span" =
   let range = Lsp_types.range_of_location loc in
   print_endline (Lsp_types.show_range range);
   [%expect {|
-    { Lsp_types.start_pos = { Lsp_types.line = 0; character = 4 };
-      end_pos = { Lsp_types.line = 0; character = 9 } }
+    { Lsp_types.start_pos = { Lsp_types.line = 0; character = 5 };
+      end_pos = { Lsp_types.line = 0; character = 10 } }
     |}]
 
 let%expect_test "range_of_location - multi-line range" =
@@ -48,21 +48,21 @@ let%expect_test "range_of_location - multi-line range" =
   let range = Lsp_types.range_of_location loc in
   print_endline (Lsp_types.show_range range);
   [%expect {|
-    { Lsp_types.start_pos = { Lsp_types.line = 0; character = 0 };
-      end_pos = { Lsp_types.line = 2; character = 4 } }
+    { Lsp_types.start_pos = { Lsp_types.line = 0; character = 1 };
+      end_pos = { Lsp_types.line = 2; character = 5 } }
     |}]
 
 let%expect_test "lina_position_of_position - reverse conversion" =
   let lsp_pos : Lsp_types.position = { line = 0; character = 0 } in
   let lina_pos = Lsp_types.lina_position_of_position "test.lina" lsp_pos 0 in
   Printf.printf "line=%d column=%d" lina_pos.line lina_pos.column;
-  [%expect {| line=1 column=1 |}]
+  [%expect {| line=1 column=0 |}]
 
 let%expect_test "lina_position_of_position - with offset" =
   let lsp_pos : Lsp_types.position = { line = 2; character = 5 } in
   let lina_pos = Lsp_types.lina_position_of_position "test.lina" lsp_pos 25 in
   Printf.printf "line=%d column=%d offset=%d" lina_pos.line lina_pos.column lina_pos.offset;
-  [%expect {| line=3 column=6 offset=25 |}]
+  [%expect {| line=3 column=5 offset=25 |}]
 
 (* ============================================================ *)
 (* Severity Conversion Tests *)

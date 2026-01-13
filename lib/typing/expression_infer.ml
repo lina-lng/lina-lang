@@ -60,10 +60,15 @@ let rec infer_expression ctx (expr : expression) =
   | ExpressionVariable name ->
     begin match Environment.find_value name env with
     | None -> Inference_utils.error_unbound_variable loc name
-    | Some (id, scheme) ->
-      let ty, ctx = Typing_context.instantiate ctx scheme in
+    | Some binding ->
+      let ty, ctx = Typing_context.instantiate ctx binding.Environment.binding_scheme in
+      (* Store definition location for go-to-definition support *)
+      let def_loc =
+        if Common.Location.is_none binding.binding_location then None
+        else Some binding.binding_location
+      in
       ({
-        expression_desc = TypedExpressionVariable id;
+        expression_desc = TypedExpressionVariable (binding.binding_id, def_loc);
         expression_type = ty;
         expression_location = loc;
       }, ctx)
@@ -410,6 +415,15 @@ let rec infer_expression ctx (expr : expression) =
       expression_location = loc;
     }, ctx)
 
+  | ExpressionError error_info ->
+    (* Error expressions get a fresh type variable and are preserved in typed tree *)
+    let error_ty, ctx = Typing_context.new_type_variable ctx in
+    ({
+      expression_desc = TypedExpressionError error_info;
+      expression_type = error_ty;
+      expression_location = loc;
+    }, ctx)
+
 (** Helper to infer a list of expressions, threading context *)
 and infer_expression_list ctx exprs =
   List.fold_left (fun (typed_exprs, ctx) expr ->
@@ -439,7 +453,7 @@ and infer_bindings ctx rec_flag bindings =
         let env = Typing_context.environment ctx in
         let env = match binding.binding_pattern.Location.value, typed_pat.pattern_desc with
           | PatternVariable name, TypedPatternVariable id ->
-            Environment.add_value name id scheme env
+            Environment.add_value name id scheme binding.binding_location env
           | _ -> env
         in
         let ctx = Typing_context.with_environment env ctx in
@@ -463,8 +477,8 @@ and infer_bindings ctx rec_flag bindings =
         | PatternVariable name ->
           let ty, ctx = Typing_context.new_type_variable ctx in
           let id = Identifier.create name in
-          let env = Environment.add_value name id (trivial_scheme ty) env in
-          (env, (name, id, ty) :: temps, ctx)
+          let env = Environment.add_value name id (trivial_scheme ty) binding.binding_location env in
+          (env, (name, id, ty, binding.binding_location) :: temps, ctx)
         | _ ->
           Compiler_error.type_error binding.binding_location
             "Recursive bindings must be simple variables"
@@ -472,7 +486,7 @@ and infer_bindings ctx rec_flag bindings =
     in
     let ctx = Typing_context.with_environment env ctx in
     let typed_bindings, ctx =
-      List.fold_left2 (fun (typed_bindings, ctx) (binding : binding) (_name, id, expected_ty) ->
+      List.fold_left2 (fun (typed_bindings, ctx) (binding : binding) (_name, id, expected_ty, _def_loc) ->
         let typed_expr, ctx = infer_expression ctx binding.binding_expression in
         unify ctx binding.binding_location expected_ty typed_expr.expression_type;
         let typed_pat = {
@@ -493,12 +507,12 @@ and infer_bindings ctx rec_flag bindings =
     let level = Typing_context.current_level ctx in
     let env = Typing_context.environment ctx in
     let env =
-      List.fold_left2 (fun env (binding : binding) (name, id, ty) ->
+      List.fold_left2 (fun env (binding : binding) (name, id, ty, def_loc) ->
         let typed_expr =
           List.find (fun tb -> tb.Typed_tree.binding_location = binding.binding_location) typed_bindings
         in
         let scheme = Inference_utils.compute_binding_scheme ~level typed_expr.binding_expression ty in
-        Environment.add_value name id scheme env
+        Environment.add_value name id scheme def_loc env
       ) env bindings (List.rev temp_info)
     in
     let ctx = Typing_context.with_environment env ctx in

@@ -205,7 +205,7 @@ let%expect_test "symbol has correct range" =
           sym.range.start_pos.line
           sym.range.start_pos.character
     | _ -> print_endline "unexpected");
-  [%expect {| start_line=0 start_char=3 |}]
+  [%expect {| start_line=0 start_char=4 |}]
 
 let contains_substring substring s =
   let len_sub = String.length substring in

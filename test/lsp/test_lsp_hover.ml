@@ -49,31 +49,31 @@ let%expect_test "hover on boolean" =
 (* Function Types *)
 (* ============================================================ *)
 
-let%expect_test "hover on simple function" =
+let%expect_test "hover on variable in function body" =
   reset ();
   with_document "let f x = x + 1" (fun store uri ->
-    (* Hover on function body (x + 1) at position (0, 10) *)
+    (* Hover on 'x' at position (0, 10) - shows type of the variable x *)
     let result = Lsp_hover.get_hover store uri (pos 0 10) in
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
   [%expect {|
     ```lina
-    (int -> (int -> int))
+    int
     ```
     |}]
 
-let%expect_test "hover on multi-arg function body" =
+let%expect_test "hover on variable in multi-arg function body" =
   reset ();
   with_document "let add x y = x + y" (fun store uri ->
-    (* Hover on x + y at position (0, 14) *)
+    (* Hover on 'x' at position (0, 14) - shows type of variable x *)
     let result = Lsp_hover.get_hover store uri (pos 0 14) in
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
   [%expect {|
     ```lina
-    (int -> (int -> int))
+    int
     ```
     |}]
 
@@ -118,17 +118,17 @@ let%expect_test "hover on constructor application" =
     | None -> print_endline "None");
   [%expect {| None |}]
 
-let%expect_test "hover on nested expression" =
+let%expect_test "hover on literal in nested expression" =
   reset ();
   with_document "let x = (1 + 2) * 3" (fun store uri ->
-    (* Hover on (1 + 2) at position (0, 9) - the inner addition *)
+    (* Hover on '1' at position (0, 9) - shows type of the integer literal *)
     let result = Lsp_hover.get_hover store uri (pos 0 9) in
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
   [%expect {|
     ```lina
-    (int -> (int -> int))
+    int
     ```
     |}]
 
@@ -169,33 +169,33 @@ let%expect_test "hover on invalid document returns None" =
 (* Multi-line Documents *)
 (* ============================================================ *)
 
-let%expect_test "hover on second line" =
+let%expect_test "hover on variable on second line" =
   reset ();
   with_document {|let x = 1
 let y = x + 1|} (fun store uri ->
-    (* Hover on 'x + 1' at line 1, position 8 *)
+    (* Hover on 'x' at line 1, position 8 - shows type of variable x *)
     let result = Lsp_hover.get_hover store uri (pos 1 8) in
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
   [%expect {|
     ```lina
-    (int -> (int -> int))
+    int
     ```
     |}]
 
-let%expect_test "hover in function body on different line" =
+let%expect_test "hover on variable in function body on different line" =
   reset ();
   with_document {|let f x =
   x + 1|} (fun store uri ->
-    (* Hover on 'x + 1' at line 1, position 2 *)
+    (* Hover on 'x' at line 1, position 2 - shows type of variable x *)
     let result = Lsp_hover.get_hover store uri (pos 1 2) in
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
   [%expect {|
     ```lina
-    (int -> (int -> int))
+    int
     ```
     |}]
 

@@ -31,7 +31,15 @@ let diagnostic_of_warning (info : Compiler_error.warning_info) : Lsp_types.diagn
   in
   Lsp_types.make_diagnostic ~severity:Warning ~message ?code info.warning_location
 
-(** Parse a document and return AST with any parse errors. *)
+(** Convert a parse error message to a diagnostic.
+    Parse errors from tolerant parsing include location info in the message. *)
+let diagnostic_of_parse_error (message : string) : Lsp_types.diagnostic =
+  (* Parse error messages are in format "Syntax error at line N, column M" *)
+  Lsp_types.make_diagnostic ~severity:Error ~message ~code:"syntax" Location.none
+
+(** Parse a document and return AST with any parse errors.
+    Uses tolerant parsing to produce partial ASTs even with syntax errors,
+    enabling IDE features like hover and completion on invalid code. *)
 let parse_document store uri =
   (* Check cache first *)
   match Document_store.get_parse_cache store uri with
@@ -40,13 +48,23 @@ let parse_document store uri =
       match Document_store.get_document store uri with
       | None -> (None, [])
       | Some doc ->
-          let _filename = Document_store.filename_of_uri uri in
+          let filename = Document_store.filename_of_uri uri in
           let result =
             try
-              let ast = Parsing.Parse.structure_from_string doc.content in
-              (Some ast, [])
+              (* Use tolerant parsing to get partial AST even with errors *)
+              let ast, error_messages =
+                Parsing.Parse.structure_from_string_tolerant ~filename doc.content
+              in
+              let parse_errors = List.map diagnostic_of_parse_error error_messages in
+              (* Return AST even if there were errors - it may contain error nodes
+                 but valid parts can still be used for IDE features *)
+              if ast = [] && error_messages <> [] then
+                (None, parse_errors)
+              else
+                (Some ast, parse_errors)
             with
             | Compiler_error.Error err ->
+                (* Lexer errors still raise exceptions *)
                 (None, [ Lsp_types.diagnostic_of_compiler_error err ])
             | _ ->
                 let diag =
@@ -126,10 +144,16 @@ let type_check_document store uri =
               Document_store.set_typing_cache store ~uri cache;
               (typed_ast, env, type_errors @ warnings)))
 
-(** Compute all diagnostics for a document. *)
+(** Compute all diagnostics for a document.
+    With tolerant parsing, we continue to type checking even if there are
+    parse errors, since we may have a partial AST that can be analyzed. *)
 let compute_diagnostics store uri =
-  let _, parse_errors = parse_document store uri in
-  if parse_errors <> [] then parse_errors
-  else
-    let _, _, type_diagnostics = type_check_document store uri in
-    type_diagnostics
+  let ast_opt, parse_errors = parse_document store uri in
+  match ast_opt with
+  | None ->
+      (* No AST at all - just return parse errors *)
+      parse_errors
+  | Some _ ->
+      (* Have an AST (possibly with error nodes) - run type checking too *)
+      let _, _, type_diagnostics = type_check_document store uri in
+      parse_errors @ type_diagnostics

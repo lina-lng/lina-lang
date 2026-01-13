@@ -49,6 +49,9 @@ let rec simplify_pattern (pat : Typed_tree.typed_pattern) : simple_pattern =
       (f.typed_pattern_field_name, simplify_pattern f.typed_pattern_field_pattern)
     ) fields in
     PatRecord (simplified_fields, is_open)
+  | Typed_tree.TypedPatternError _ ->
+    (* Error patterns are treated as wildcards for exhaustiveness checking *)
+    PatWildcard
 
 and simplify_constant = function
   | Parsing.Syntax_tree.ConstantInteger n -> ConstInt n

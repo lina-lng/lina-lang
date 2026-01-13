@@ -236,7 +236,7 @@ simple_expression:
     { make_located (ExpressionRef e) $loc }
   | e1 = simple_expression; op = binary_operator; e2 = simple_expression
     {
-      let op_expr = make_located (ExpressionVariable op) $loc in
+      let op_expr = make_located (ExpressionVariable op) $loc(op) in
       make_located (ExpressionApply (op_expr, [e1; e2])) $loc
     }
 

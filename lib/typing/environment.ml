@@ -3,8 +3,15 @@ open Types
 
 module StringMap = Map.Make(String)
 
+(** Value binding with definition location for go-to-definition support. *)
+type value_binding = {
+  binding_id : Identifier.t;
+  binding_scheme : type_scheme;
+  binding_location : Location.t;
+}
+
 type t = {
-  values : (Identifier.t * type_scheme) StringMap.t;
+  values : value_binding StringMap.t;
   types : type_declaration StringMap.t;
   constructors : constructor_info StringMap.t;
   (* Module system additions *)
@@ -20,8 +27,9 @@ let empty = {
   module_types = StringMap.empty;
 }
 
-let add_value name id scheme env =
-  { env with values = StringMap.add name (id, scheme) env.values }
+let add_value name id scheme location env =
+  let binding = { binding_id = id; binding_scheme = scheme; binding_location = location } in
+  { env with values = StringMap.add name binding env.values }
 
 let find_value name env =
   StringMap.find_opt name env.values
@@ -54,7 +62,7 @@ let comparison_int_type =
   trivial_scheme (TypeArrow (type_int, TypeArrow (type_int, type_bool)))
 
 let add_builtin name scheme env =
-  add_value name (Identifier.create name) scheme env
+  add_value name (Identifier.create name) scheme Location.none env
 
 (* Module operations *)
 
@@ -77,7 +85,8 @@ let open_module (sig_ : Module_types.signature) env =
     match item with
     | Module_types.SigValue (name, desc) ->
       let id = Identifier.create name in
-      let env = add_value name id desc.value_type env in
+      (* Use Location.none for opened values - they come from signatures without source locations *)
+      let env = add_value name id desc.value_type Location.none env in
       (env, (name, id) :: bindings)
     | Module_types.SigType (name, decl) ->
       (add_type name decl env, bindings)
@@ -180,7 +189,7 @@ let find_module_type_by_path path env =
 (* Iteration functions for LSP features *)
 
 let fold_values f env acc =
-  StringMap.fold (fun name (id, scheme) acc -> f name id scheme acc) env.values acc
+  StringMap.fold (fun name binding acc -> f name binding.binding_id binding.binding_scheme acc) env.values acc
 
 let fold_types f env acc =
   StringMap.fold f env.types acc
