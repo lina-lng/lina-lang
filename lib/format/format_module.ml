@@ -253,7 +253,6 @@ and format_structure node =
        | [] -> struct_doc ^^ end_doc
        | _ ->
            let items_doc = format_structure_items items in
-           (* Use ^^ since trivia already has newlines *)
            group (struct_doc ^^ nest (indent_width ()) items_doc ^^ end_doc))
   | _ -> format_children node
 
@@ -372,7 +371,6 @@ and format_signature node =
        | [] -> sig_doc ^^ end_doc
        | _ ->
            let items_doc = format_signature_items items in
-           (* Use ^^ since trivia already has newlines *)
            group (sig_doc ^^ nest (indent_width ()) items_doc ^^ end_doc))
   | _ -> format_children node
 

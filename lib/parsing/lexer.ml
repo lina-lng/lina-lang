@@ -88,45 +88,49 @@ let hex_digit_with_underscore = [%sedlex.regexp? hex_digit | '_']
 let binary_digit_with_underscore = [%sedlex.regexp? binary_digit | '_']
 let exponent = [%sedlex.regexp? ('e' | 'E'), Opt ('+' | '-'), Plus digit_with_underscore]
 
-let keywords =
-  [
-    ("true", TRUE);
-    ("false", FALSE);
-    ("let", LET);
-    ("rec", REC);
-    ("in", IN);
-    ("fun", FUN);
-    ("if", IF);
-    ("then", THEN);
-    ("else", ELSE);
-    ("type", TYPE);
-    ("of", OF);
-    ("and", AND);
-    ("as", AS);
-    ("match", MATCH);
-    ("with", WITH);
-    ("when", WHEN);
-    (* Module system keywords *)
-    ("module", MODULE);
-    ("struct", STRUCT);
-    ("end", END);
-    ("sig", SIG);
-    ("functor", FUNCTOR);
-    ("open", OPEN);
-    ("include", INCLUDE);
-    ("val", VAL);
-    (* Privacy keyword *)
-    ("private", PRIVATE);
-    (* Constraint keyword *)
-    ("constraint", CONSTRAINT);
-    (* FFI keywords *)
-    ("external", EXTERNAL);
-    (* Reference keyword *)
-    ("ref", REF);
-  ]
+(** Keyword lookup table for O(1) keyword identification instead of O(n) list search. *)
+let keywords_table : (string, token) Hashtbl.t =
+  let table = Hashtbl.create 32 in
+  List.iter (fun (keyword, token) -> Hashtbl.add table keyword token)
+    [
+      ("true", TRUE);
+      ("false", FALSE);
+      ("let", LET);
+      ("rec", REC);
+      ("in", IN);
+      ("fun", FUN);
+      ("if", IF);
+      ("then", THEN);
+      ("else", ELSE);
+      ("type", TYPE);
+      ("of", OF);
+      ("and", AND);
+      ("as", AS);
+      ("match", MATCH);
+      ("with", WITH);
+      ("when", WHEN);
+      (* Module system keywords *)
+      ("module", MODULE);
+      ("struct", STRUCT);
+      ("end", END);
+      ("sig", SIG);
+      ("functor", FUNCTOR);
+      ("open", OPEN);
+      ("include", INCLUDE);
+      ("val", VAL);
+      (* Privacy keyword *)
+      ("private", PRIVATE);
+      (* Constraint keyword *)
+      ("constraint", CONSTRAINT);
+      (* FFI keywords *)
+      ("external", EXTERNAL);
+      (* Reference keyword *)
+      ("ref", REF);
+    ];
+  table
 
 let keyword_or_identifier str =
-  match List.assoc_opt str keywords with
+  match Hashtbl.find_opt keywords_table str with
   | Some token -> token
   | None -> LOWERCASE_IDENTIFIER str
 
@@ -619,17 +623,14 @@ let rec collect_trailing_trivia trivia_state acc =
     lexes the token, then collects trailing trivia (on the same line). *)
 let next_token_with_trivia trivia_state =
   let state = trivia_state.state in
-  (* Collect leading trivia *)
   let leading = collect_leading_trivia trivia_state [] in
-  (* Lex the real token *)
+
   match lex_real_token state with
   | Some (token, location) ->
-      (* Collect trailing trivia (same line only) *)
       let trailing = collect_trailing_trivia trivia_state [] in
       let trivia = Trivia.create ~leading ~trailing in
       { token; location; trivia }
   | None ->
-      (* Unexpected character *)
       update_location state;
       Compiler_error.lexer_error state.current_location
         (Printf.sprintf "Unexpected character: %s" (current_lexeme state))

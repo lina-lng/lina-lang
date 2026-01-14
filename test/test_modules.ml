@@ -989,13 +989,13 @@ let f (x : t) = match x with
   | B n -> n
 |});
   [%expect{|
-    local function f_361(x_359)
-      local _scrutinee_362 = x_359
-      if _scrutinee_362._tag == 1 then
-        local n_360 = _scrutinee_362._0
-        return n_360
+    local function f_365(x_363)
+      local _scrutinee_366 = x_363
+      if _scrutinee_366._tag == 1 then
+        local n_364 = _scrutinee_366._0
+        return n_364
       else
-        if _scrutinee_362._tag == 0 then
+        if _scrutinee_366._tag == 0 then
           return 0
         else
           return error("Match failure")
@@ -1024,8 +1024,8 @@ let%expect_test "locally abstract type parses" =
 let f (type a) (x : a) = x
 |});
   [%expect{|
-    local function f_371(x_370)
-      return x_370
+    local function f_375(x_374)
+      return x_374
     end
     |}]
 
@@ -1035,8 +1035,8 @@ let%expect_test "locally abstract type introduces scoped type" =
 let f (type a) (x : a) (y : a) = (x, y)
 |});
   [%expect{|
-    local function f_375(x_373, y_374)
-      return {x_373, y_374}
+    local function f_379(x_377, y_378)
+      return {x_377, y_378}
     end
     |}]
 
@@ -1045,8 +1045,8 @@ let%expect_test "locally abstract type with multiple type params" =
 let f (type a) (type b) (x : a) (y : b) = (x, y)
 |});
   [%expect{|
-    local function f_380(x_378, y_379)
-      return {x_378, y_379}
+    local function f_384(x_382, y_383)
+      return {x_382, y_383}
     end
     |}]
 

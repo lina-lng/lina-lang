@@ -67,25 +67,23 @@ let completions_from_env prefix (env : Typing.Environment.t) =
       (fun name _id scheme acc ->
         if has_prefix prefix name then
           let type_str = Typing.Types.type_expression_to_string scheme.Typing.Types.body in
-          {
-            label = name;
+          { label = name;
             kind = kind_of_type_scheme scheme;
             detail = Some type_str;
-            documentation = None;
-          }
-          :: acc
+            documentation = None } :: acc
         else acc)
       env []
   in
+
   let type_completions =
     Typing.Environment.fold_types
       (fun name _decl acc ->
         if has_prefix prefix name then
-          { label = name; kind = Type; detail = Some "type"; documentation = None }
-          :: acc
+          { label = name; kind = Type; detail = Some "type"; documentation = None } :: acc
         else acc)
       env []
   in
+
   let constructor_completions =
     Typing.Environment.fold_constructors
       (fun name info acc ->
@@ -93,25 +91,23 @@ let completions_from_env prefix (env : Typing.Environment.t) =
           let type_str =
             Typing.Types.type_expression_to_string info.Typing.Types.constructor_result_type
           in
-          {
-            label = name;
+          { label = name;
             kind = Constructor;
             detail = Some type_str;
-            documentation = None;
-          }
-          :: acc
+            documentation = None } :: acc
         else acc)
       env []
   in
+
   let module_completions =
     Typing.Environment.fold_modules
       (fun name _binding acc ->
         if has_prefix prefix name then
-          { label = name; kind = Module; detail = Some "module"; documentation = None }
-          :: acc
+          { label = name; kind = Module; detail = Some "module"; documentation = None } :: acc
         else acc)
       env []
   in
+
   value_completions @ type_completions @ constructor_completions @ module_completions
 
 (** Get keyword completions. *)

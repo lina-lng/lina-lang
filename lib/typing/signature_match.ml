@@ -56,34 +56,8 @@ let collect_type_names sig_ =
 
 (** Substitute PathLocal type references with qualified paths.
     Only substitutes types that are defined in this signature. *)
-let rec qualify_type_in_signature path type_names ty =
-  match ty with
-  | Types.TypeConstructor (Types.PathLocal name, args) when List.mem name type_names ->
-    (* This is a reference to a type defined in this signature - qualify it *)
-    let qualified_path = Types.PathDot (path, name) in
-    let qualified_args = List.map (qualify_type_in_signature path type_names) args in
-    Types.TypeConstructor (qualified_path, qualified_args)
-  | Types.TypeConstructor (p, args) ->
-    let qualified_args = List.map (qualify_type_in_signature path type_names) args in
-    Types.TypeConstructor (p, qualified_args)
-  | Types.TypeArrow (arg, result) ->
-    Types.TypeArrow (
-      qualify_type_in_signature path type_names arg,
-      qualify_type_in_signature path type_names result)
-  | Types.TypeTuple elements ->
-    Types.TypeTuple (List.map (qualify_type_in_signature path type_names) elements)
-  | Types.TypeRecord row ->
-    Types.TypeRecord (qualify_row_in_signature path type_names row)
-  | Types.TypeVariable _ | Types.TypeRowEmpty | Types.TypePolyVariant _ -> ty
-
-and qualify_row_in_signature path type_names row =
-  let qualified_fields = List.map (fun (name, field) ->
-    match field with
-    | Types.RowFieldPresent ty ->
-      (name, Types.RowFieldPresent (qualify_type_in_signature path type_names ty))
-  ) row.Types.row_fields in
-  { Types.row_fields = qualified_fields;
-    row_more = qualify_type_in_signature path type_names row.Types.row_more }
+let qualify_type_in_signature path type_names ty =
+  Type_traversal.qualify_path_local ~type_names ~prefix:path ty
 
 let qualify_scheme_in_signature path type_names scheme =
   { scheme with Types.body = qualify_type_in_signature path type_names scheme.Types.body }
@@ -149,31 +123,7 @@ let fresh_match_var () =
 
 (** Check if a type contains any weak type variables.
     Weak variables are non-generalizable and cannot satisfy polymorphic signatures. *)
-let rec has_weak_variables ty =
-  match Types.representative ty with
-  | Types.TypeVariable tv -> tv.weak
-  | Types.TypeArrow (arg, result) ->
-    has_weak_variables arg || has_weak_variables result
-  | Types.TypeTuple types ->
-    List.exists has_weak_variables types
-  | Types.TypeConstructor (_, args) ->
-    List.exists has_weak_variables args
-  | Types.TypeRecord row ->
-    let has_weak_in_row_field (_, field) =
-      match field with
-      | Types.RowFieldPresent ty -> has_weak_variables ty
-    in
-    List.exists has_weak_in_row_field row.row_fields ||
-    has_weak_variables row.row_more
-  | Types.TypeRowEmpty -> false
-  | Types.TypePolyVariant pv_row ->
-    let has_weak_in_field (_, field) =
-      match field with
-      | Types.PVFieldPresent (Some ty) -> has_weak_variables ty
-      | Types.PVFieldPresent None | Types.PVFieldAbsent -> false
-    in
-    List.exists has_weak_in_field pv_row.pv_fields ||
-    has_weak_variables pv_row.pv_more
+let has_weak_variables = Type_traversal.has_weak_variables
 
 (** Check if a type scheme has weak variables in its body.
     This is used to detect weak type escape at module boundaries. *)
@@ -201,47 +151,49 @@ let check_type_compatibility ctx _loc impl_scheme spec_scheme =
       Error (TypeMismatch ("", impl_ty, spec_ty))
   end
 
+(** Check if two manifests are compatible via unification. *)
+let check_manifest_unification ctx name impl_decl spec_decl impl_manifest spec_manifest =
+  let impl_scheme = {
+    quantified_variables = impl_decl.declaration_parameters;
+    body = impl_manifest
+  } in
+  let spec_scheme = {
+    quantified_variables = spec_decl.declaration_parameters;
+    body = spec_manifest
+  } in
+
+  try
+    let impl_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var impl_scheme in
+    let spec_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var spec_scheme in
+    Unification.unify ~type_lookup:ctx.type_lookup Location.none impl_ty spec_ty;
+    Ok ()
+  with Compiler_error.Error _ ->
+    Error (TypeMismatch (name, impl_manifest, spec_manifest))
+
+(** Check manifest compatibility between impl and spec type declarations. *)
+let check_manifest_compatibility ctx name impl_decl spec_decl =
+  match spec_decl.declaration_manifest, impl_decl.declaration_manifest with
+  | None, _ ->
+      Ok ()
+  | Some spec_manifest, None ->
+      Error (TypeMismatch (name, TypeConstructor (PathLocal name, []), spec_manifest))
+  | Some spec_manifest, Some impl_manifest ->
+      check_manifest_unification ctx name impl_decl spec_decl impl_manifest spec_manifest
+
 (** Check if two type declarations are compatible.
     - Parameter counts must match
     - If spec has manifest, impl must have compatible manifest
     - If spec is abstract, impl can be anything *)
 let check_type_declaration_compatibility ctx name impl_decl spec_decl =
-  (* Check parameter count *)
   let impl_params = List.length impl_decl.declaration_parameters in
   let spec_params = List.length spec_decl.declaration_parameters in
+
   if impl_params <> spec_params then
     Error (TypeMismatch (name,
       TypeConstructor (PathLocal name, []),
       TypeConstructor (PathLocal name, [])))
   else
-    (* Check manifest compatibility *)
-    match spec_decl.declaration_manifest with
-    | None ->
-      (* Spec is abstract - impl can be anything *)
-      Ok ()
-    | Some spec_manifest ->
-      (* Spec has manifest - impl must have compatible manifest *)
-      begin match impl_decl.declaration_manifest with
-      | None ->
-        (* Impl is abstract but spec has manifest - error *)
-        Error (TypeMismatch (name,
-          TypeConstructor (PathLocal name, []),
-          spec_manifest))
-      | Some impl_manifest ->
-        (* Both have manifests - check they're compatible *)
-        (* Create type schemes for comparison *)
-        let impl_scheme = { quantified_variables = impl_decl.declaration_parameters; body = impl_manifest } in
-        let spec_scheme = { quantified_variables = spec_decl.declaration_parameters; body = spec_manifest } in
-        begin try
-          let impl_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var impl_scheme in
-          let spec_ty = Type_scheme.instantiate ~fresh_var:fresh_match_var spec_scheme in
-          Unification.unify ~type_lookup:ctx.type_lookup Location.none impl_ty spec_ty;
-          Ok ()
-        with
-        | Compiler_error.Error _ ->
-          Error (TypeMismatch (name, impl_manifest, spec_manifest))
-        end
-      end
+    check_manifest_compatibility ctx name impl_decl spec_decl
 
 (** Build a type substitution from impl signature to replace spec's PathLocal types.
     For each type in spec, if impl has a manifest, map PathLocal(name) -> impl manifest. *)
@@ -286,102 +238,6 @@ and substitute_local_types_in_row subst row =
   { Types.row_fields = new_fields;
     row_more = substitute_local_types subst row.Types.row_more }
 
-(** Check if an implementation signature satisfies a specification signature *)
-let rec match_signature ctx loc impl_sig spec_sig : match_result =
-  (* Build substitution from impl's type manifests *)
-  let type_subst = build_type_substitution impl_sig in
-  (* For each item in the specification, check there's a matching item in implementation *)
-  let check_item (spec_item : Module_types.signature_item) =
-    match spec_item with
-    | Module_types.SigValue (name, spec_val) ->
-      begin match Module_types.find_value_in_sig name impl_sig with
-      | Some impl_val ->
-        (* Substitute PathLocal types in spec with impl's manifest types *)
-        let spec_body_substituted = substitute_local_types type_subst spec_val.Module_types.value_type.Types.body in
-        let spec_val_substituted = { spec_val with
-          Module_types.value_type = { spec_val.Module_types.value_type with Types.body = spec_body_substituted }
-        } in
-        begin match check_type_compatibility ctx loc impl_val.value_type spec_val_substituted.value_type with
-        | Ok () -> Ok ()
-        | Error (TypeMismatch (_, impl_ty, spec_ty)) ->
-          Error (TypeMismatch (name, impl_ty, spec_ty))
-        | Error e -> Error e
-        end
-      | None ->
-        Error (MissingValue name)
-      end
-
-    | Module_types.SigType (name, spec_decl) ->
-      (* Check type exists and is compatible *)
-      begin match Module_types.find_type_in_sig name impl_sig with
-      | Some impl_decl ->
-        check_type_declaration_compatibility ctx name impl_decl spec_decl
-      | None -> Error (MissingType name)
-      end
-
-    | Module_types.SigModule (name, spec_mty) ->
-      begin match Module_types.find_module_in_sig name impl_sig with
-      | Some impl_mty ->
-        begin match match_module_type ctx loc impl_mty spec_mty with
-        | Ok () -> Ok ()
-        | Error e -> Error e
-        end
-      | None ->
-        Error (MissingModule name)
-      end
-
-    | Module_types.SigModuleType (_name, _spec_mty_opt) ->
-      (* Module type declarations - skip for now *)
-      Ok ()
-  in
-  (* Check all specification items *)
-  List.fold_left (fun acc item ->
-    match acc with
-    | Error _ -> acc  (* Stop on first error *)
-    | Ok () -> check_item item
-  ) (Ok ()) spec_sig
-
-(** Check if an implementation module type matches a specification module type *)
-and match_module_type ctx loc impl_mty spec_mty : match_result =
-  (* First, expand any ModTypeIdent to their definitions *)
-  let impl_mty = expand_module_type ctx impl_mty in
-  let spec_mty = expand_module_type ctx spec_mty in
-  match impl_mty, spec_mty with
-  | Module_types.ModTypeSig impl_sig, Module_types.ModTypeSig spec_sig ->
-    match_signature ctx loc impl_sig spec_sig
-
-  | Module_types.ModTypeFunctor (param_impl, result_impl),
-    Module_types.ModTypeFunctor (param_spec, result_spec) ->
-    (* Functor matching:
-       - Parameters match contravariantly (spec param against impl param)
-       - Results match covariantly (impl result against spec result) *)
-    begin match match_module_type ctx loc param_spec.parameter_type param_impl.parameter_type with
-    | Error e -> Error e
-    | Ok () ->
-      (* Covariant: impl result must match spec result *)
-      match_module_type ctx loc result_impl result_spec
-    end
-
-  | Module_types.ModTypeIdent path1, Module_types.ModTypeIdent path2 ->
-    (* Both are unexpandable named module types - check path equality *)
-    if Types.path_equal path1 path2 then Ok ()
-    else Error (ModuleTypeMismatch (
-      Printf.sprintf "module type %s is not compatible with %s"
-        (Types.path_to_string path1) (Types.path_to_string path2), ""))
-
-  | Module_types.ModTypeIdent path, _ ->
-    (* Couldn't expand impl - error *)
-    Error (ModuleTypeMismatch (
-      Printf.sprintf "could not expand module type %s" (Types.path_to_string path), ""))
-
-  | _, Module_types.ModTypeIdent path ->
-    (* Couldn't expand spec - error *)
-    Error (ModuleTypeMismatch (
-      Printf.sprintf "could not expand module type %s" (Types.path_to_string path), ""))
-
-  | _ ->
-    Error (ModuleTypeMismatch ("module type mismatch", ""))
-
 (** Format a match error for display *)
 let format_match_error = function
   | MissingValue name ->
@@ -400,88 +256,161 @@ let format_match_error = function
     Printf.sprintf "Weak type escape %s%s cannot satisfy polymorphic signature"
       prefix (type_expression_to_string ty)
 
-(** {1 Accumulating Match Functions}
+(** {1 Generic Signature Matching}
 
-    These functions collect all errors instead of stopping at the first one.
-    Useful for LSP diagnostics where showing all issues at once is preferred. *)
+    Parameterized signature matching that supports both first-error and all-errors semantics.
+    This eliminates code duplication between match_signature/match_signature_all. *)
 
-(** Check if an implementation signature satisfies a specification signature,
-    accumulating all errors instead of stopping at the first. *)
-let rec match_signature_all ctx loc impl_sig spec_sig : match_errors =
+(** Error accumulation strategy for signature matching.
+
+    This allows a single implementation to handle both:
+    - First-error semantics (stop on first error, return Result)
+    - All-errors semantics (collect all errors, return list) *)
+type 'a error_accumulator = {
+  empty : 'a;                           (** Initial value (no errors) *)
+  singleton : match_error -> 'a;        (** Create accumulator from single error *)
+  combine : 'a -> 'a -> 'a;            (** Combine two accumulators *)
+  should_continue : 'a -> bool;        (** Whether to continue checking after error *)
+}
+
+(** Accumulator that stops on first error, returns Result. *)
+let first_error_accumulator : match_result error_accumulator = {
+  empty = Ok ();
+  singleton = (fun error -> Error error);
+  combine = (fun acc1 acc2 ->
+    match acc1 with
+    | Error _ -> acc1
+    | Ok () -> acc2);
+  should_continue = Result.is_ok;
+}
+
+(** Accumulator that collects all errors, returns list. *)
+let all_errors_accumulator : match_errors error_accumulator = {
+  empty = [];
+  singleton = (fun error -> [error]);
+  combine = (fun acc1 acc2 -> acc1 @ acc2);
+  should_continue = (fun _ -> true);
+}
+
+(** Generic signature matching with parameterized error accumulation.
+
+    @param acc The error accumulation strategy
+    @param ctx Match context
+    @param loc Source location
+    @param impl_sig Implementation signature
+    @param spec_sig Specification signature
+    @return Accumulated errors according to the strategy *)
+let rec match_signature_generic
+    : type a. a error_accumulator -> match_context -> Common.Location.t ->
+      Module_types.signature -> Module_types.signature -> a =
+  fun acc ctx loc impl_sig spec_sig ->
+  let type_subst = build_type_substitution impl_sig in
   let check_item (spec_item : Module_types.signature_item) =
     match spec_item with
     | Module_types.SigValue (name, spec_val) ->
       begin match Module_types.find_value_in_sig name impl_sig with
       | Some impl_val ->
-        begin match check_type_compatibility ctx loc impl_val.value_type spec_val.value_type with
-        | Ok () -> []
+        (* Substitute PathLocal types in spec with impl's manifest types *)
+        let spec_body_substituted = substitute_local_types type_subst spec_val.Module_types.value_type.Types.body in
+        let spec_val_substituted = { spec_val with
+          Module_types.value_type = { spec_val.Module_types.value_type with Types.body = spec_body_substituted }
+        } in
+        begin match check_type_compatibility ctx loc impl_val.value_type spec_val_substituted.value_type with
+        | Ok () -> acc.empty
         | Error (TypeMismatch (_, impl_ty, spec_ty)) ->
-          [TypeMismatch (name, impl_ty, spec_ty)]
-        | Error e -> [e]
+          acc.singleton (TypeMismatch (name, impl_ty, spec_ty))
+        | Error error -> acc.singleton error
         end
       | None ->
-        [MissingValue name]
+        acc.singleton (MissingValue name)
       end
 
     | Module_types.SigType (name, spec_decl) ->
       begin match Module_types.find_type_in_sig name impl_sig with
       | Some impl_decl ->
         begin match check_type_declaration_compatibility ctx name impl_decl spec_decl with
-        | Ok () -> []
-        | Error e -> [e]
+        | Ok () -> acc.empty
+        | Error error -> acc.singleton error
         end
-      | None -> [MissingType name]
+      | None -> acc.singleton (MissingType name)
       end
 
     | Module_types.SigModule (name, spec_mty) ->
       begin match Module_types.find_module_in_sig name impl_sig with
       | Some impl_mty ->
-        match_module_type_all ctx loc impl_mty spec_mty
+        match_module_type_generic acc ctx loc impl_mty spec_mty
       | None ->
-        [MissingModule name]
+        acc.singleton (MissingModule name)
       end
 
     | Module_types.SigModuleType (_name, _spec_mty_opt) ->
       (* Module type declarations - skip for now *)
-      []
+      acc.empty
   in
-  (* Check all specification items and collect all errors *)
+  (* Check all specification items *)
   List.fold_left (fun errors item ->
-    errors @ check_item item
-  ) [] spec_sig
+    if acc.should_continue errors then
+      acc.combine errors (check_item item)
+    else
+      errors
+  ) acc.empty spec_sig
 
-(** Check if an implementation module type matches a specification module type,
-    accumulating all errors instead of stopping at the first. *)
-and match_module_type_all ctx loc impl_mty spec_mty : match_errors =
+(** Generic module type matching with parameterized error accumulation. *)
+and match_module_type_generic
+    : type a. a error_accumulator -> match_context -> Common.Location.t ->
+      Module_types.module_type -> Module_types.module_type -> a =
+  fun acc ctx loc impl_mty spec_mty ->
   let impl_mty = expand_module_type ctx impl_mty in
   let spec_mty = expand_module_type ctx spec_mty in
   match impl_mty, spec_mty with
   | Module_types.ModTypeSig impl_sig, Module_types.ModTypeSig spec_sig ->
-    match_signature_all ctx loc impl_sig spec_sig
+    match_signature_generic acc ctx loc impl_sig spec_sig
 
   | Module_types.ModTypeFunctor (param_impl, result_impl),
     Module_types.ModTypeFunctor (param_spec, result_spec) ->
-    (* Collect errors from both parameter and result matching *)
-    let param_errors = match_module_type_all ctx loc param_spec.parameter_type param_impl.parameter_type in
-    let result_errors = match_module_type_all ctx loc result_impl result_spec in
-    param_errors @ result_errors
+    (* Parameters: contravariant, Results: covariant *)
+    let param_result = match_module_type_generic acc ctx loc param_spec.parameter_type param_impl.parameter_type in
+    if acc.should_continue param_result then
+      acc.combine param_result (match_module_type_generic acc ctx loc result_impl result_spec)
+    else
+      param_result
 
   | Module_types.ModTypeIdent path1, Module_types.ModTypeIdent path2 ->
-    if Types.path_equal path1 path2 then []
-    else [ModuleTypeMismatch (
+    if Types.path_equal path1 path2 then acc.empty
+    else acc.singleton (ModuleTypeMismatch (
       Printf.sprintf "module type %s is not compatible with %s"
-        (Types.path_to_string path1) (Types.path_to_string path2), "")]
+        (Types.path_to_string path1) (Types.path_to_string path2), ""))
 
   | Module_types.ModTypeIdent path, _ ->
-    [ModuleTypeMismatch (
-      Printf.sprintf "could not expand module type %s" (Types.path_to_string path), "")]
+    acc.singleton (ModuleTypeMismatch (
+      Printf.sprintf "could not expand module type %s" (Types.path_to_string path), ""))
 
   | _, Module_types.ModTypeIdent path ->
-    [ModuleTypeMismatch (
-      Printf.sprintf "could not expand module type %s" (Types.path_to_string path), "")]
+    acc.singleton (ModuleTypeMismatch (
+      Printf.sprintf "could not expand module type %s" (Types.path_to_string path), ""))
 
   | _ ->
-    [ModuleTypeMismatch ("module type mismatch", "")]
+    acc.singleton (ModuleTypeMismatch ("module type mismatch", ""))
+
+(** {1 Public Matching Functions} *)
+
+(** Check if an implementation signature satisfies a specification signature.
+    Stops on first error. *)
+let match_signature ctx loc impl_sig spec_sig : match_result =
+  match_signature_generic first_error_accumulator ctx loc impl_sig spec_sig
+
+(** Check if an implementation module type matches a specification module type.
+    Stops on first error. *)
+let match_module_type ctx loc impl_mty spec_mty : match_result =
+  match_module_type_generic first_error_accumulator ctx loc impl_mty spec_mty
+
+(** Check signature, collecting all errors. Useful for LSP diagnostics. *)
+let match_signature_all ctx loc impl_sig spec_sig : match_errors =
+  match_signature_generic all_errors_accumulator ctx loc impl_sig spec_sig
+
+(** Check module type, collecting all errors. Useful for LSP diagnostics. *)
+let match_module_type_all ctx loc impl_mty spec_mty : match_errors =
+  match_module_type_generic all_errors_accumulator ctx loc impl_mty spec_mty
 
 (** Convert accumulated errors to a single match_result for backward compatibility *)
 let errors_to_result errors =

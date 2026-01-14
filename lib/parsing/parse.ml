@@ -50,148 +50,113 @@ type supplier = unit -> Parser.token * Lexing.position * Lexing.position
 let make_supplier (ls : Error_recovery.lexer_state) : supplier =
   fun () -> Error_recovery.read_token ls
 
-(** Helper to continue parsing from current position after error recovery.
-    This is defined at module level to avoid issues with nested recursive functions. *)
+(** Tracking state for error reporting during incremental parsing. *)
+type tracking_state = {
+  mutable current_token : Parser.token;
+  mutable current_start : Lexing.position;
+  mutable current_end : Lexing.position;
+}
+
+(** Create initial tracking state. *)
+let make_tracking_state filename = {
+  current_token = Parser.EOF;
+  current_start = { Lexing.pos_fname = filename; pos_lnum = 1; pos_bol = 0; pos_cnum = 0 };
+  current_end = { Lexing.pos_fname = filename; pos_lnum = 1; pos_bol = 0; pos_cnum = 0 };
+}
+
+(** Wrap a supplier to track current token position for error reporting. *)
+let wrap_tracking_supplier tracking supplier () =
+  let token, start_pos, end_pos = supplier () in
+  tracking.current_token <- token;
+  tracking.current_start <- start_pos;
+  tracking.current_end <- end_pos;
+  (token, start_pos, end_pos)
+
+(** Get current error location from tracking state. *)
+let tracking_error_location tracking =
+  Parsing_utils.location_from_positions tracking.current_start tracking.current_end
+
+(** Helper to continue parsing from current position after error recovery. *)
 let rec parse_from_lexer_state filename ls errors =
-  let supplier = make_supplier ls in
-  let current_token = ref Parser.EOF in
-  let current_start = ref {
-    Lexing.pos_fname = filename;
-    pos_lnum = 1;
-    pos_bol = 0;
-    pos_cnum = 0;
-  } in
-  let current_end = ref !current_start in
+  let tracking = make_tracking_state filename in
+  let tracking_supplier = wrap_tracking_supplier tracking (make_supplier ls) in
 
-  let tracking_supplier () =
-    let token, start_pos, end_pos = supplier () in
-    current_token := token;
-    current_start := start_pos;
-    current_end := end_pos;
-    (token, start_pos, end_pos)
-  in
-
-  (* Get the current position for the new parser *)
   let token, start_pos, end_pos = tracking_supplier () in
   let initial = Parser.Incremental.structure start_pos in
 
   let rec inner_loop checkpoint =
     match checkpoint with
     | I.InputNeeded _env ->
-      let token, start_pos, end_pos = tracking_supplier () in
-      let checkpoint = I.offer checkpoint (token, start_pos, end_pos) in
-      inner_loop checkpoint
+        let token, start_pos, end_pos = tracking_supplier () in
+        inner_loop (I.offer checkpoint (token, start_pos, end_pos))
 
     | I.Shifting _ | I.AboutToReduce _ ->
-      let checkpoint = I.resume checkpoint in
-      inner_loop checkpoint
+        inner_loop (I.resume checkpoint)
 
     | I.HandlingError _env ->
-      let error_loc = Parsing_utils.location_from_positions !current_start !current_end in
-      errors := Printf.sprintf "Syntax error at line %d, column %d"
-        error_loc.start_pos.line error_loc.start_pos.column :: !errors;
-      let error_span = Error_recovery.synchronize_to_structure ls in
-      let error_item = Error_recovery.make_structure_error error_span "Syntax error" in
-      begin match !current_token with
-      | Parser.EOF -> [error_item]
-      | _ ->
-        let rest = parse_from_lexer_state filename ls errors in
-        error_item :: rest
-      end
+        let error_loc = tracking_error_location tracking in
+        errors := Printf.sprintf "Syntax error at line %d, column %d"
+          error_loc.start_pos.line error_loc.start_pos.column :: !errors;
+
+        let error_span = Error_recovery.synchronize_to_structure ls in
+        let error_item = Error_recovery.make_structure_error error_span "Syntax error" in
+
+        begin match tracking.current_token with
+        | Parser.EOF -> [error_item]
+        | _ -> error_item :: parse_from_lexer_state filename ls errors
+        end
 
     | I.Accepted result -> result
-
     | I.Rejected -> []
   in
-  (* Offer the first token we already read *)
-  let checkpoint = I.offer initial (token, start_pos, end_pos) in
-  inner_loop checkpoint
+
+  inner_loop (I.offer initial (token, start_pos, end_pos))
 
 (** Parse a structure with error recovery.
     Returns the AST and a list of error messages. *)
 let structure_from_string_tolerant ?(filename = "<string>") content
     : Syntax_tree.structure * string list =
   let ls = Error_recovery.create_lexer_state filename content in
-  let supplier = make_supplier ls in
-
-  (* Track current token for error reporting *)
-  let current_token = ref Parser.EOF in
-  let current_start = ref {
-    Lexing.pos_fname = filename;
-    pos_lnum = 1;
-    pos_bol = 0;
-    pos_cnum = 0;
-  } in
-  let current_end = ref !current_start in
-
-  (* Wrap supplier to track current token *)
-  let tracking_supplier () =
-    let token, start_pos, end_pos = supplier () in
-    current_token := token;
-    current_start := start_pos;
-    current_end := end_pos;
-    (token, start_pos, end_pos)
-  in
-
-  (* Errors collected during parsing *)
+  let tracking = make_tracking_state filename in
+  let tracking_supplier = wrap_tracking_supplier tracking (make_supplier ls) in
   let errors = ref [] in
 
-  (* Initial checkpoint *)
-  let initial = Parser.Incremental.structure {
-    Lexing.pos_fname = filename;
-    pos_lnum = 1;
-    pos_bol = 0;
-    pos_cnum = 0;
-  } in
+  let initial_pos = tracking.current_start in
+  let initial = Parser.Incremental.structure initial_pos in
 
-  (* Run the incremental parser with error recovery *)
   let rec loop checkpoint =
     match checkpoint with
     | I.InputNeeded _env ->
-      let token, start_pos, end_pos = tracking_supplier () in
-      let checkpoint = I.offer checkpoint (token, start_pos, end_pos) in
-      loop checkpoint
+        let token, start_pos, end_pos = tracking_supplier () in
+        loop (I.offer checkpoint (token, start_pos, end_pos))
 
     | I.Shifting _ | I.AboutToReduce _ ->
-      let checkpoint = I.resume checkpoint in
-      loop checkpoint
+        loop (I.resume checkpoint)
 
     | I.HandlingError _env ->
-      (* Record the error location *)
-      let error_loc = Parsing_utils.location_from_positions !current_start !current_end in
-      errors := Printf.sprintf "Syntax error at line %d, column %d"
-        error_loc.start_pos.line error_loc.start_pos.column :: !errors;
+        let error_loc = tracking_error_location tracking in
+        errors := Printf.sprintf "Syntax error at line %d, column %d"
+          error_loc.start_pos.line error_loc.start_pos.column :: !errors;
 
-      (* Skip to next structure-level synchronization point *)
-      let error_span = Error_recovery.synchronize_to_structure ls in
+        let error_span = Error_recovery.synchronize_to_structure ls in
+        let error_item = Error_recovery.make_structure_error error_span "Syntax error" in
 
-      (* Create error node *)
-      let error_item = Error_recovery.make_structure_error error_span "Syntax error" in
-
-      (* For structure-level recovery, we can't easily restart parsing from here
-         with the incremental API. Instead, we'll parse the rest separately and
-         concatenate. This is a simplified recovery strategy. *)
-
-      (* Continue parsing from the sync point *)
-      begin match !current_token with
-      | Parser.EOF ->
-        (* At EOF, just return what we have with the error node *)
-        ([error_item], List.rev !errors)
-      | _ ->
-        (* Try to parse the rest of the file *)
-        let remaining_result = parse_from_lexer_state filename ls errors in
-        (error_item :: remaining_result, List.rev !errors)
-      end
+        begin match tracking.current_token with
+        | Parser.EOF ->
+            ([error_item], List.rev !errors)
+        | _ ->
+            let remaining = parse_from_lexer_state filename ls errors in
+            (error_item :: remaining, List.rev !errors)
+        end
 
     | I.Accepted result ->
-      (result, List.rev !errors)
+        (result, List.rev !errors)
 
     | I.Rejected ->
-      (* Should not happen with proper error handling *)
-      let error_loc = Parsing_utils.location_from_positions !current_start !current_end in
-      errors := Printf.sprintf "Parser rejected at line %d"
-        error_loc.start_pos.line :: !errors;
-      ([], List.rev !errors)
+        let error_loc = tracking_error_location tracking in
+        errors := Printf.sprintf "Parser rejected at line %d"
+          error_loc.start_pos.line :: !errors;
+        ([], List.rev !errors)
   in
 
   loop initial

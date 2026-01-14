@@ -17,7 +17,6 @@ let rec format_type_arrow node =
       let domain_doc = format_type domain in
       let arrow_doc = format_token arrow_tok in
       let codomain_doc = format_type codomain in
-      (* Use ^^ since trivia already has spacing *)
       group (domain_doc ^^ arrow_doc ^^ codomain_doc)
   | _ -> format_children node
 
@@ -54,7 +53,6 @@ and format_type_record_field node =
       let name_doc = format_token name_tok in
       let colon_doc = format_token colon_tok in
       let ty_doc = format_type ty in
-      (* Use ^^ since trivia already has spacing *)
       group (name_doc ^^ colon_doc ^^ ty_doc)
   | _ -> format_children node
 

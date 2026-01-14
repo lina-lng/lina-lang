@@ -44,7 +44,6 @@ let rec format_let_expr node =
       in
       let in_doc = format_token in_kw in
       let body_doc = format_expression body in
-      (* Use ^^ since trivia already has spacing *)
       group (let_doc ^^ rec_doc ^^ bindings_doc ^^ in_doc ^^ body_doc)
   | _ -> format_children node
 
@@ -59,7 +58,6 @@ and format_binding node =
       in
       let eq_doc = format_token eq in
       let body_doc = format_expression body in
-      (* Use ^^ since trivia already has spacing *)
       group (pat_doc ^^ ty_doc ^^ eq_doc ^^ body_doc)
   | _ -> format_children node
 
@@ -83,7 +81,6 @@ and format_if_expr node =
             else_doc ^^ else_body
         | _ -> empty
       in
-      (* Use ^^ since trivia already has spacing *)
       group (if_doc ^^ cond_doc ^^ then_doc ^^ then_body ^^ else_part)
   | _ -> format_children node
 
@@ -103,7 +100,6 @@ and format_match_expr node =
             let formatted = List.map format_match_arm arms in
             concat_list formatted
       in
-      (* Use ^^ since trivia already has spacing *)
       group (match_doc ^^ scrut_doc ^^ with_doc ^^ arms_doc)
   | _ -> format_children node
 
@@ -124,7 +120,6 @@ and format_match_arm node =
       in
       let arrow_doc = format_token arrow_tok in
       let body_doc = format_expression body in
-      (* Use ^^ since trivia already has spacing *)
       group (bar_doc ^^ pat_doc ^^ guard_doc ^^ arrow_doc ^^ body_doc)
   | _ -> format_children node
 
@@ -143,7 +138,6 @@ and format_function_expr node =
       in
       let arrow_doc = format_token arrow_tok in
       let body_doc = format_expression body in
-      (* Use ^^ since trivia already has spacing *)
       group (fun_doc ^^ params_doc ^^ arrow_doc ^^ body_doc)
   | _ -> format_children node
 
@@ -159,7 +153,6 @@ and format_apply_expr node =
             let formatted = List.map format_expression args in
             concat_list formatted
       in
-      (* Use ^^ since trivia already has spacing *)
       group (func_doc ^^ args_doc)
   | None -> format_children node
 
@@ -169,10 +162,8 @@ and format_infix_expr node =
   with
   | Some left, Some op, Some right ->
       let left_doc = format_expression left in
-      (* Use format_token which includes trivia - this handles spacing *)
       let op_doc = format_token op in
       let right_doc = format_expression right in
-      (* Just concatenate - trivia already has the spacing *)
       group (left_doc ^^ op_doc ^^ right_doc)
   | _ -> format_children node
 
@@ -218,7 +209,6 @@ and format_record_field node =
        | Some eq, Some value ->
            let eq_doc = format_token eq in
            let value_doc = format_expression value in
-           (* Use ^^ since trivia already has spacing *)
            group (name_doc ^^ eq_doc ^^ value_doc)
        | _ ->
            (* Punning: just the name *)
@@ -245,7 +235,6 @@ and format_record_update node =
             let formatted = List.map format_record_field fields in
             concat_list formatted
       in
-      (* Use ^^ since trivia already has spacing *)
       group (lbrace_doc ^^ base_doc ^^ with_doc ^^ fields_doc ^^ rbrace_doc)
   | _ -> format_children node
 
@@ -267,7 +256,6 @@ and format_constraint_expr node =
       let expr_doc = format_expression expr in
       let colon_doc = format_token colon_tok in
       let ty_doc = format_type ty in
-      (* Use ^^ since trivia already has spacing *)
       group (expr_doc ^^ colon_doc ^^ ty_doc)
   | _ -> format_children node
 
@@ -279,7 +267,6 @@ and format_sequence_expr node =
       let first_doc = format_expression first in
       let semi_doc = format_token semi_tok in
       let second_doc = format_expression second in
-      (* Use ^^ since trivia already has spacing/newlines *)
       group (first_doc ^^ semi_doc ^^ second_doc)
   | _ -> format_children node
 
@@ -305,7 +292,6 @@ and format_constructor_expr node =
       (match Constructor_expr.argument node with
        | Some arg ->
            let arg_doc = format_expression arg in
-           (* Use ^^ since trivia already has spacing *)
            group (name_doc ^^ arg_doc)
        | None -> name_doc)
   | None -> format_children node

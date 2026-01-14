@@ -630,13 +630,17 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
                    local M = {id = id_17, applied = applied_18}
 
        We use mb_id (the original identifier) so references between bindings resolve correctly.
+
+       Note: We accumulate statements in reverse order using List.rev_append for O(n)
+       complexity instead of O(n²) from repeated @ operations.
     *)
-    let binding_stmts, binding_names, ctx = List.fold_left (fun (stmts, names, ctx) (binding : Lambda.module_binding) ->
+    let rev_binding_stmts, binding_names, ctx = List.fold_left (fun (rev_stmts, names, ctx) (binding : Lambda.module_binding) ->
       (* Use the original identifier so references between bindings work *)
       let binding_var = mangle_identifier binding.mb_id in
       let inner_stmts, ctx = generate_top_level_binding ctx binding_var binding.mb_value in
-      (stmts @ inner_stmts, (Lambda.module_binding_name binding, binding_var) :: names, ctx)
+      (List.rev_append inner_stmts rev_stmts, (Lambda.module_binding_name binding, binding_var) :: names, ctx)
     ) ([], [], ctx) bindings in
+    let binding_stmts = List.rev rev_binding_stmts in
     let binding_names = List.rev binding_names in
     (* Create table with references to the local variables *)
     let fields = List.map (fun (name, var) ->
@@ -686,14 +690,18 @@ let generate_top_level ctx (lambda : Lambda.lambda) : block * context =
     context and threads it through all translation functions, collecting
     singleton registrations along the way.
 
+    Note: We accumulate statements in reverse order using List.rev_append for O(n)
+    complexity instead of O(n²) from repeated @ operations.
+
     @param lambdas The Lambda IR nodes to translate
     @return A Lua chunk (list of statements) *)
 let generate lambdas =
-  let body, final_ctx =
-    List.fold_left (fun (acc, ctx) lambda ->
+  let rev_body, final_ctx =
+    List.fold_left (fun (rev_acc, ctx) lambda ->
       let stmts, ctx = generate_top_level ctx lambda in
-      (acc @ stmts, ctx)
+      (List.rev_append stmts rev_acc, ctx)
     ) ([], empty_context) lambdas
   in
+  let body = List.rev rev_body in
   let preamble = generate_singleton_preamble final_ctx in
   preamble @ body

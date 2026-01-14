@@ -149,6 +149,40 @@ val instantiate_constructor_with_ctx :
   Types.constructor_info ->
   Types.type_expression option * Types.type_expression
 
+(** {1 Constructor Lookup} *)
+
+(** Result of looking up and instantiating a constructor. *)
+type constructor_result = {
+  constructor_info : Types.constructor_info;
+  expected_arg_type : Types.type_expression option;
+  result_type : Types.type_expression;
+}
+
+(** [lookup_constructor ctx loc name] looks up a constructor by name and instantiates it.
+
+    Combines constructor lookup with instantiation in a single operation.
+    This is used by both expression and pattern inference.
+
+    @param ctx The typing context
+    @param loc Source location for error messages
+    @param name The constructor name
+    @return Constructor info with instantiated argument and result types
+    @raise Type_error if constructor is not found *)
+val lookup_constructor :
+  Typing_context.t -> Location.t -> string -> constructor_result
+
+(** [check_private_type ctx loc ctor_info] checks that a constructor's type is not private.
+
+    Private types cannot be constructed directly (but can be pattern matched).
+    This check is only needed for expressions, not patterns.
+
+    @param ctx The typing context
+    @param loc Source location for error messages
+    @param ctor_info The constructor info to check
+    @raise Type_error if the type is private *)
+val check_private_type :
+  Typing_context.t -> Location.t -> Types.constructor_info -> unit
+
 (** {1 Signature Match Context Creation} *)
 
 (** [make_module_type_lookup ctx] creates a function that looks up module types

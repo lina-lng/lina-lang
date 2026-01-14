@@ -68,15 +68,17 @@ let rec infer_pattern ctx (pattern : pattern) =
     (typed_pattern, ty, ctx)
 
   | PatternTuple patterns ->
-    let typed_patterns, types, ctx =
+    let typed_patterns_rev, types_rev, ctx =
       List.fold_left (fun (pats, tys, ctx) p ->
         let pat, ty, ctx = infer_pattern ctx p in
         (pat :: pats, ty :: tys, ctx)
       ) ([], [], ctx) patterns
     in
-    let typed_patterns = List.rev typed_patterns in
-    let types = List.rev types in
+
+    let typed_patterns = List.rev typed_patterns_rev in
+    let types = List.rev types_rev in
     let ty = TypeTuple types in
+
     let typed_pattern = {
       pattern_desc = TypedPatternTuple typed_patterns;
       pattern_type = ty;
@@ -85,36 +87,28 @@ let rec infer_pattern ctx (pattern : pattern) =
     (typed_pattern, ty, ctx)
 
   | PatternConstructor (name, arg_pattern) ->
-    let env = Typing_context.environment ctx in
-    begin match Environment.find_constructor name env with
-    | None ->
-      Compiler_error.type_error loc
-        (Printf.sprintf "Unbound constructor: %s" name)
-    | Some constructor_info ->
-      let expected_arg_ty, result_ty =
-        Inference_utils.instantiate_constructor_with_ctx ctx constructor_info
-      in
-      Inference_utils.check_constructor_arity loc name
-        ~has_arg:(Option.is_some arg_pattern)
-        ~expects_arg:(Option.is_some expected_arg_ty);
-      let typed_arg, ctx = match arg_pattern, expected_arg_ty with
-        | None, None -> (None, ctx)
-        | Some p, Some expected_ty ->
-          let typed_p, actual_ty, ctx = infer_pattern ctx p in
-          unify ctx loc expected_ty actual_ty;
-          (Some typed_p, ctx)
-        | Some _, None | None, Some _ ->
-          (* Constructor arity was already checked by check_constructor_arity *)
-          Compiler_error.internal_error
-            "Constructor arity mismatch after arity check"
-      in
-      let typed_pattern = {
-        pattern_desc = TypedPatternConstructor (constructor_info, typed_arg);
-        pattern_type = result_ty;
-        pattern_location = loc;
-      } in
-      (typed_pattern, result_ty, ctx)
-    end
+    let result = Inference_utils.lookup_constructor ctx loc name in
+    (* Note: No private type check for patterns - can match on private types *)
+    Inference_utils.check_constructor_arity loc name
+      ~has_arg:(Option.is_some arg_pattern)
+      ~expects_arg:(Option.is_some result.expected_arg_type);
+    let typed_arg, ctx = match arg_pattern, result.expected_arg_type with
+      | None, None -> (None, ctx)
+      | Some pat, Some expected_ty ->
+        let typed_pat, actual_ty, ctx = infer_pattern ctx pat in
+        unify ctx loc expected_ty actual_ty;
+        (Some typed_pat, ctx)
+      | Some _, None | None, Some _ ->
+        (* Constructor arity was already checked by check_constructor_arity *)
+        Compiler_error.internal_error
+          "Constructor arity mismatch after arity check"
+    in
+    let typed_pattern = {
+      pattern_desc = TypedPatternConstructor (result.constructor_info, typed_arg);
+      pattern_type = result.result_type;
+      pattern_location = loc;
+    } in
+    (typed_pattern, result.result_type, ctx)
 
   | PatternAlias (inner_pattern, name) ->
     (* Note: typed_inner is discarded because TypedPatternAlias doesn't exist yet.

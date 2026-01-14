@@ -42,28 +42,25 @@ let push_visiting state path =
 let rec expand state mty =
   match mty with
   | Module_types.ModTypeSig sig_ ->
-    (* Recursively expand types within signature *)
-    Module_types.ModTypeSig (expand_signature state sig_)
+      Module_types.ModTypeSig (expand_signature state sig_)
 
   | Module_types.ModTypeFunctor (param, result) ->
-    (* Expand parameter and result types *)
-    let expanded_parameter_type = expand state param.Module_types.parameter_type in
-    let expanded_result = expand state result in
-    Module_types.ModTypeFunctor (
-      { param with Module_types.parameter_type = expanded_parameter_type },
-      expanded_result
-    )
+      let expanded_parameter_type = expand state param.Module_types.parameter_type in
+      let expanded_result = expand state result in
+      Module_types.ModTypeFunctor (
+        { param with Module_types.parameter_type = expanded_parameter_type },
+        expanded_result
+      )
 
   | Module_types.ModTypeIdent path ->
-    (* This is the key case: resolve and expand *)
-    check_cycle state path;
-    begin match state.env_lookup path with
-    | Some resolved_mty ->
-      let state' = push_visiting state path in
-      expand state' resolved_mty
-    | None ->
-      raise (Expansion_error (ModuleTypeNotFound path))
-    end
+      check_cycle state path;
+      begin match state.env_lookup path with
+      | Some resolved_mty ->
+          let state' = push_visiting state path in
+          expand state' resolved_mty
+      | None ->
+          raise (Expansion_error (ModuleTypeNotFound path))
+      end
 
 and expand_signature state sig_ =
   List.map (expand_signature_item state) sig_
@@ -71,20 +68,13 @@ and expand_signature state sig_ =
 and expand_signature_item state item =
   match item with
   | Module_types.SigValue (name, desc) ->
-    (* Value types don't contain module types directly *)
-    Module_types.SigValue (name, desc)
-
+      Module_types.SigValue (name, desc)
   | Module_types.SigType (name, decl) ->
-    (* Type declarations don't contain module types directly *)
-    Module_types.SigType (name, decl)
-
+      Module_types.SigType (name, decl)
   | Module_types.SigModule (name, mty) ->
-    (* Recursively expand nested module types *)
-    Module_types.SigModule (name, expand state mty)
-
+      Module_types.SigModule (name, expand state mty)
   | Module_types.SigModuleType (name, mty_opt) ->
-    (* Expand the module type definition if present *)
-    Module_types.SigModuleType (name, Option.map (expand state) mty_opt)
+      Module_types.SigModuleType (name, Option.map (expand state) mty_opt)
 
 (** Try to expand, returning None on failure instead of raising. *)
 let try_expand state mty =

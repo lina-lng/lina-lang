@@ -175,3 +175,33 @@ val free_type_variables : type_expression -> type_variable list
     @param ty The type expression
     @return List of variables with level > [level] *)
 val free_type_variables_above_level : int -> type_expression -> type_variable list
+
+(** {1 Weak Variable Detection} *)
+
+(** [has_weak_variables ty] returns true if [ty] contains any weak type variables.
+
+    Weak variables are non-generalizable and cannot satisfy polymorphic signatures.
+    This is used to detect weak type escape at module boundaries.
+
+    @param ty The type to check
+    @return [true] if any type variable in [ty] is marked weak *)
+val has_weak_variables : type_expression -> bool
+
+(** {1 Path Qualification} *)
+
+(** [qualify_path_local ~type_names ~prefix ty] qualifies [PathLocal] references
+    in [ty] with the given [prefix].
+
+    Only type names in [type_names] are qualified. Other [PathLocal] references
+    are left unchanged. This is used for module strengthening to replace local
+    type references with qualified paths.
+
+    Example: [qualify_path_local ~type_names:["t"] ~prefix:(PathIdent m) (PathLocal "t")]
+    returns [PathDot (PathIdent m, "t")].
+
+    @param type_names List of type names defined in the current signature
+    @param prefix The path prefix to add to matching [PathLocal] references
+    @param ty The type to transform
+    @return The type with qualified paths *)
+val qualify_path_local :
+  type_names:string list -> prefix:path -> type_expression -> type_expression

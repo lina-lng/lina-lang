@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-all clean fmt
+.PHONY: build test test-integration test-ocaml-compat test-all clean fmt
 
 # Build the project
 build:
@@ -12,8 +12,12 @@ test:
 test-integration:
 	./test/integration/run_tests.sh
 
-# Run all tests
-test-all: test test-integration
+# Run OCaml compatibility tests
+test-ocaml-compat:
+	./test/ocaml_compatibility/run_comparison.sh
+
+# Run ALL tests (unit + integration + OCaml compatibility)
+test-all: test test-integration test-ocaml-compat
 
 # Remove build artifacts
 clean:

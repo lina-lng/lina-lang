@@ -40,7 +40,6 @@ and format_constructor_pattern node =
       (match Constructor_pattern.argument node with
        | Some arg ->
            let arg_doc = format_pattern arg in
-           (* Use ^^ since trivia already has spacing *)
            group (name_doc ^^ arg_doc)
        | None -> name_doc)
   | None -> format_children node
@@ -68,7 +67,6 @@ and format_record_pattern_field node =
        | Some eq, Some pat ->
            let eq_doc = format_token eq in
            let pat_doc = format_pattern pat in
-           (* Use ^^ since trivia already has spacing *)
            group (name_doc ^^ eq_doc ^^ pat_doc)
        | _ ->
            (* Punning: just the name *)
@@ -83,7 +81,6 @@ and format_alias_pattern node =
       let pat_doc = format_pattern pat in
       let as_doc = format_token as_kw in
       let name_doc = format_token name in
-      (* Use ^^ since trivia already has spacing *)
       group (pat_doc ^^ as_doc ^^ name_doc)
   | _ -> format_children node
 
@@ -97,7 +94,6 @@ and format_constraint_pattern node =
       let pat_doc = format_pattern pat in
       let colon_doc = format_token colon_tok in
       let ty_doc = format_type ty in
-      (* Use ^^ since trivia already has spacing *)
       group (pat_doc ^^ colon_doc ^^ ty_doc)
   | _ -> format_children node
 

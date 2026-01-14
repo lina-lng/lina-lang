@@ -172,3 +172,17 @@ let free_type_variables ty =
 
 let free_type_variables_above_level level ty =
   collect_variables (fun tv -> tv.level > level) ty
+
+(** {1 Weak Variable Detection} *)
+
+let has_weak_variables ty =
+  exists_variable (fun tv -> tv.weak) ty
+
+(** {1 Path Qualification} *)
+
+let qualify_path_local ~type_names ~prefix ty =
+  map (function
+    | TypeConstructor (PathLocal name, args) when List.mem name type_names ->
+      TypeConstructor (PathDot (prefix, name), args)
+    | ty -> ty
+  ) ty

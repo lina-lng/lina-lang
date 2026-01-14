@@ -24,116 +24,6 @@ let unify ctx loc ty1 ty2 =
 (** Type of constant literals *)
 let type_of_constant = Inference_utils.type_of_constant
 
-(** {1 Pattern Binding Collection} *)
-
-(** Collect all variable bindings from a typed pattern.
-    Returns a list of (name, identifier, type) tuples. *)
-let rec collect_pattern_bindings pattern =
-  match pattern.pattern_desc with
-  | TypedPatternVariable id ->
-    [(Identifier.name id, id, pattern.pattern_type)]
-  | TypedPatternWildcard
-  | TypedPatternConstant _
-  | TypedPatternLocallyAbstract _ ->
-    []
-  | TypedPatternTuple patterns ->
-    List.concat_map collect_pattern_bindings patterns
-  | TypedPatternConstructor (_, None) ->
-    []
-  | TypedPatternConstructor (_, Some p) ->
-    collect_pattern_bindings p
-  | TypedPatternRecord (fields, _) ->
-    List.concat_map (fun f -> collect_pattern_bindings f.typed_pattern_field_pattern) fields
-  | TypedPatternPolyVariant (_, None) ->
-    []
-  | TypedPatternPolyVariant (_, Some p) ->
-    collect_pattern_bindings p
-  | TypedPatternError _ ->
-    []
-
-(** {1 Polymorphic Recursion Support} *)
-
-(** Binding info for recursive bindings - tracks whether standard or polymorphic recursion *)
-type rec_binding_info =
-  | PolyRecBinding of {
-      name : string;
-      id : Identifier.t;
-      scheme : type_scheme;
-      rigid_vars : (string * type_variable) list;
-      binding : binding;
-    }
-  | StandardRecBinding of {
-      name : string;
-      id : Identifier.t;
-      mono_type : type_expression;
-      binding : binding;
-    }
-
-(** Extract polymorphic recursion annotation from a binding.
-    Returns [Some (name, forall_vars, body_ty)] if the binding has form:
-    [let name : type a b. body_ty = ...]
-    Returns [None] otherwise. *)
-let extract_poly_rec_annotation (binding : binding) =
-  match binding.binding_pattern.Location.value with
-  | PatternConstraint (inner_pat, ty_expr) ->
-    begin match ty_expr.Location.value with
-    | TypeForall (vars, body) ->
-      begin match inner_pat.Location.value with
-      | PatternVariable name -> Some (name, vars, body, ty_expr.Location.location)
-      | _ -> None
-      end
-    | _ -> None
-    end
-  | _ -> None
-
-(** Check a TypeForall annotation for polymorphic recursion.
-    Creates rigid type variables for bound names and checks the body type. *)
-let check_forall_annotation ctx forall_vars body_ty_expr =
-  (* Create rigid type variables for each bound name.
-     Note: We accumulate in reverse order during fold_left for O(1) cons,
-     then reverse at the end. This is the standard OCaml idiom for mapping
-     with state threading, used throughout the inference code. *)
-  let rigid_vars, ctx =
-    List.fold_left (fun (vars, ctx) name ->
-      let tv, ctx = Typing_context.new_rigid_type_variable ctx in
-      match tv with
-      | TypeVariable tv_rec -> ((name, tv_rec) :: vars, ctx)
-      | _ -> Compiler_error.internal_error "new_rigid_type_variable didn't return TypeVariable"
-    ) ([], ctx) forall_vars
-  in
-  let rigid_vars = List.rev rigid_vars in
-  (* Check the body type with rigid vars as parameters *)
-  let param_names = List.map fst rigid_vars in
-  let param_vars = List.map snd rigid_vars in
-  let body_type, ctx = Type_expression_check.check_type_expression_with_params ctx param_names param_vars body_ty_expr in
-  (* Build scheme: the rigid vars become quantified variables *)
-  let scheme = { quantified_variables = param_vars; body = body_type } in
-  (scheme, rigid_vars, ctx)
-
-(** Extract a module path from nested record access expressions.
-
-    Given [M.N.x], this extracts [["M"; "N"]] when [M] and [M.N] are modules.
-    Returns [None] if the expression is not a module path.
-
-    @param env The typing environment for module lookups
-    @param expr The expression to extract from
-    @return [Some path_components] if expr is a module path, [None] otherwise *)
-let rec extract_module_path env expr =
-  match expr.Location.value with
-  | ExpressionConstructor (name, None) ->
-    (* Check if this is a module *)
-    begin match Environment.find_module name env with
-    | Some _ -> Some [name]
-    | None -> None
-    end
-  | ExpressionRecordAccess (inner, component) ->
-    (* Recursively check if inner is a module path *)
-    begin match extract_module_path env inner with
-    | Some path -> Some (path @ [component])
-    | None -> None
-    end
-  | _ -> None
-
 (** [infer_expression ctx expr] infers the type of an expression.
 
     @param ctx The typing context
@@ -178,41 +68,28 @@ let rec infer_expression ctx (expr : expression) =
     }, ctx)
 
   | ExpressionConstructor (name, arg_expr) ->
-    begin match Environment.find_constructor name env with
-    | None -> Inference_utils.error_unbound_constructor loc name
-    | Some constructor_info ->
-      (* Check if the type is private - private types cannot be constructed *)
-      let () =
-        match Environment.find_type constructor_info.constructor_type_name env with
-        | Some type_decl when type_decl.declaration_private ->
-          Compiler_error.type_error loc
-            (Printf.sprintf "Cannot construct value of private type %s"
-               constructor_info.constructor_type_name)
-        | _ -> ()
-      in
-      let expected_arg_ty, result_ty =
-        Inference_utils.instantiate_constructor_with_ctx ctx constructor_info
-      in
-      Inference_utils.check_constructor_arity loc name
-        ~has_arg:(Option.is_some arg_expr)
-        ~expects_arg:(Option.is_some expected_arg_ty);
-      let typed_arg, ctx = match arg_expr, expected_arg_ty with
-        | None, None -> (None, ctx)
-        | Some e, Some expected_ty ->
-          let typed_e, ctx = infer_expression ctx e in
-          unify ctx loc expected_ty typed_e.expression_type;
-          (Some typed_e, ctx)
-        | Some _, None | None, Some _ ->
-          (* Constructor arity was already checked by check_constructor_arity *)
-          Compiler_error.internal_error
-            "Constructor arity mismatch after arity check"
-      in
-      ({
-        expression_desc = TypedExpressionConstructor (constructor_info, typed_arg);
-        expression_type = result_ty;
-        expression_location = loc;
-      }, ctx)
-    end
+    let result = Inference_utils.lookup_constructor ctx loc name in
+    (* Check if the type is private - private types cannot be constructed *)
+    Inference_utils.check_private_type ctx loc result.constructor_info;
+    Inference_utils.check_constructor_arity loc name
+      ~has_arg:(Option.is_some arg_expr)
+      ~expects_arg:(Option.is_some result.expected_arg_type);
+    let typed_arg, ctx = match arg_expr, result.expected_arg_type with
+      | None, None -> (None, ctx)
+      | Some expr, Some expected_ty ->
+        let typed_expr, ctx = infer_expression ctx expr in
+        unify ctx loc expected_ty typed_expr.expression_type;
+        (Some typed_expr, ctx)
+      | Some _, None | None, Some _ ->
+        (* Constructor arity was already checked by check_constructor_arity *)
+        Compiler_error.internal_error
+          "Constructor arity mismatch after arity check"
+    in
+    ({
+      expression_desc = TypedExpressionConstructor (result.constructor_info, typed_arg);
+      expression_type = result.result_type;
+      expression_location = loc;
+    }, ctx)
 
   | ExpressionApply (func_expr, arg_exprs) ->
     let typed_func, ctx = infer_expression ctx func_expr in
@@ -281,23 +158,7 @@ let rec infer_expression ctx (expr : expression) =
     }, ctx)
 
   | ExpressionIf (cond_expr, then_expr, else_expr_opt) ->
-    let typed_cond, ctx = infer_expression ctx cond_expr in
-    unify ctx loc type_bool typed_cond.expression_type;
-    let typed_then, ctx = infer_expression ctx then_expr in
-    let typed_else, ctx = match else_expr_opt with
-      | Some else_expr ->
-        let typed_else, ctx = infer_expression ctx else_expr in
-        unify ctx loc typed_then.expression_type typed_else.expression_type;
-        (Some typed_else, ctx)
-      | None ->
-        unify ctx loc type_unit typed_then.expression_type;
-        (None, ctx)
-    in
-    ({
-      expression_desc = TypedExpressionIf (typed_cond, typed_then, typed_else);
-      expression_type = typed_then.expression_type;
-      expression_location = loc;
-    }, ctx)
+    Control_infer.infer_if ~infer_expr:infer_expression ctx loc cond_expr then_expr else_expr_opt
 
   | ExpressionSequence (first_expr, second_expr) ->
     let typed_first, ctx = infer_expression ctx first_expr in
@@ -320,200 +181,16 @@ let rec infer_expression ctx (expr : expression) =
     ({ typed_inner with expression_type = constraint_ty }, ctx)
 
   | ExpressionRecord record_fields ->
-    (* Check for duplicate fields *)
-    let field_names = List.map (fun rf -> rf.field_name.Location.value) record_fields in
-    let rec check_duplicates seen = function
-      | [] -> ()
-      | name :: rest ->
-        if List.mem name seen then
-          Compiler_error.type_error loc
-            (Printf.sprintf "The record field %s is defined several times" name)
-        else
-          check_duplicates (name :: seen) rest
-    in
-    check_duplicates [] field_names;
-    (* Infer types for each field value *)
-    let typed_record_fields, ctx = List.fold_left (fun (fields, ctx) record_field ->
-      let field_name = record_field.field_name.Location.value in
-      let typed_field_value, ctx = infer_expression ctx record_field.field_value in
-      let typed_field = {
-        Typed_tree.typed_field_name = field_name;
-        typed_field_value;
-      } in
-      (typed_field :: fields, ctx)
-    ) ([], ctx) record_fields in
-    let typed_record_fields = List.rev typed_record_fields in
-    (* Build row type from inferred field types *)
-    let row_field_types = List.map (fun typed_field ->
-      (typed_field.Typed_tree.typed_field_name,
-       RowFieldPresent typed_field.typed_field_value.expression_type)
-    ) typed_record_fields in
-    let record_type = Types.type_record_closed row_field_types in
-    ({
-      expression_desc = TypedExpressionRecord typed_record_fields;
-      expression_type = record_type;
-      expression_location = loc;
-    }, ctx)
+    Record_infer.infer_record ~infer_expr:infer_expression ctx loc record_fields
 
   | ExpressionRecordAccess (record_expression, field_name) ->
-    (* Check if record_expression is a module path *)
-    begin match extract_module_path env record_expression with
-    | Some path_components ->
-      (* This is module access: look up field in the module at path *)
-      let (base_binding, mod_binding) = Module_type_check.lookup_module_path env path_components loc in
-      (* Build internal path from the ROOT module's name *)
-      let internal_path = Module_type_check.module_path_to_internal_path base_binding.binding_id path_components in
-      begin match mod_binding.Module_types.binding_type with
-      | Module_types.ModTypeSig sig_ ->
-        (* First check if field_name is a submodule *)
-        begin match Module_types.find_module_in_sig field_name sig_ with
-        | Some _submod_type ->
-          (* field_name is a submodule - return a module access to it *)
-          let extended_path = Types.PathDot (internal_path, field_name) in
-          (* Return a module access expression *)
-          (* The type will be the submodule type, but we represent it as unit for now *)
-          (* since we don't have proper module values at the expression level *)
-          ({
-            expression_desc = TypedExpressionModuleAccess (extended_path, field_name);
-            expression_type = TypeConstructor (PathBuiltin BuiltinUnit, []);
-            expression_location = loc;
-          }, ctx)
-        | None ->
-          (* Check if field_name is a value *)
-          begin match Module_types.find_value_in_sig field_name sig_ with
-          | Some val_desc ->
-            let ty, ctx = Typing_context.instantiate ctx val_desc.value_type in
-            ({
-              expression_desc = TypedExpressionModuleAccess (internal_path, field_name);
-              expression_type = ty;
-              expression_location = loc;
-            }, ctx)
-          | None ->
-            let path_str = String.concat "." path_components in
-            Compiler_error.type_error loc
-              (Printf.sprintf "Value %s not found in module %s" field_name path_str)
-          end
-        end
-      | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
-        (* ensure_module_accessible raises for these cases *)
-        Inference_utils.ensure_module_accessible loc mod_binding.Module_types.binding_type;
-        (* If we reach here, ensure_module_accessible failed to raise *)
-        Compiler_error.internal_error
-          "Unreachable code after module accessibility check"
-      end
-    | None ->
-      (* Normal record access *)
-      let typed_record_expression, ctx = infer_expression ctx record_expression in
-      let field_type, ctx = Typing_context.new_type_variable ctx in
-      let row_tail, ctx = Typing_context.new_type_variable ctx in
-      let expected_record_type = Types.type_record_open
-        [(field_name, RowFieldPresent field_type)] ~row_var:row_tail in
-      unify ctx loc expected_record_type typed_record_expression.expression_type;
-      ({
-        expression_desc = TypedExpressionRecordAccess (typed_record_expression, field_name);
-        expression_type = field_type;
-        expression_location = loc;
-      }, ctx)
-    end
+    Record_infer.infer_record_access ~infer_expr:infer_expression ctx loc record_expression field_name
 
   | ExpressionRecordUpdate (base_expression, update_fields) ->
-    (* Infer the base record expression type *)
-    let typed_base_expression, ctx = infer_expression ctx base_expression in
-    (* Infer types for each update field *)
-    let typed_update_fields, ctx = List.fold_left (fun (fields, ctx) update_field ->
-      let field_name = update_field.field_name.Location.value in
-      let typed_field_value, ctx = infer_expression ctx update_field.field_value in
-      let typed_field = {
-        Typed_tree.typed_field_name = field_name;
-        typed_field_value;
-      } in
-      (typed_field :: fields, ctx)
-    ) ([], ctx) update_fields in
-    let typed_update_fields = List.rev typed_update_fields in
-    (* Build expected row type from update fields *)
-    let update_field_types = List.map (fun typed_field ->
-      (typed_field.Typed_tree.typed_field_name,
-       RowFieldPresent typed_field.typed_field_value.expression_type)
-    ) typed_update_fields in
-    let row_tail, ctx = Typing_context.new_type_variable ctx in
-    let expected_base_type = Types.type_record_open update_field_types ~row_var:row_tail in
-    unify ctx loc expected_base_type typed_base_expression.expression_type;
-    (* Result type is same as base type *)
-    ({
-      expression_desc = TypedExpressionRecordUpdate (typed_base_expression, typed_update_fields);
-      expression_type = typed_base_expression.expression_type;
-      expression_location = loc;
-    }, ctx)
+    Record_infer.infer_record_update ~infer_expr:infer_expression ctx loc base_expression update_fields
 
   | ExpressionMatch (scrutinee_expression, match_arms) ->
-    (* Infer type of the scrutinee *)
-    let typed_scrutinee, ctx = infer_expression ctx scrutinee_expression in
-    let scrutinee_type = typed_scrutinee.expression_type in
-    (* Create fresh type variable for the result *)
-    let result_type, ctx = Typing_context.new_type_variable ctx in
-    (* Check if scrutinee contains rigid type variables (GADT case) *)
-    let scrutinee_has_rigid = Gadt.has_rigid_variables scrutinee_type in
-    (* Type-check each match arm *)
-    let typed_match_arms, ctx = List.fold_left (fun (arms, ctx) match_arm ->
-      (* Infer pattern type and get bindings *)
-      let typed_pattern, pattern_type, arm_ctx = Pattern_infer.infer_pattern ctx match_arm.arm_pattern in
-      (* Extract GADT equations if applicable *)
-      let gadt_equations =
-        if scrutinee_has_rigid then
-          let extraction = Gadt.extract_equations scrutinee_type pattern_type in
-          if extraction.success then extraction.equations else []
-        else
-          []
-      in
-      (* Unify pattern type with scrutinee type (for non-rigid parts) *)
-      unify ctx match_arm.arm_location scrutinee_type pattern_type;
-      (* Type-check guard if present - must be bool *)
-      let typed_guard, arm_ctx = match match_arm.arm_guard with
-        | None -> (None, arm_ctx)
-        | Some guard_expression ->
-          let typed_guard_expression, arm_ctx = infer_expression arm_ctx guard_expression in
-          unify arm_ctx guard_expression.Location.location type_bool typed_guard_expression.expression_type;
-          (Some typed_guard_expression, arm_ctx)
-      in
-      (* Type-check arm body with pattern bindings *)
-      let typed_arm_expression, _arm_ctx = infer_expression arm_ctx match_arm.arm_expression in
-      (* Check for existential type escape.
-         Existential type variables introduced by a GADT pattern cannot appear
-         in the result type of the match branch. *)
-      let existential_ids = Gadt.collect_existentials_from_pattern typed_pattern in
-      begin match Gadt.check_existential_escape existential_ids typed_arm_expression.expression_type with
-      | Some _escaped_id ->
-        Compiler_error.type_error match_arm.arm_location
-          "This expression has a type containing an existential type variable \
-           that would escape its scope"
-      | None -> ()
-      end;
-      (* Unify arm result with expected result type.
-         For GADT branches, apply equations to the result type first, so that
-         a rigid type variable like 'a' becomes 'int' after equation a=int. *)
-      let expected_result_type =
-        if gadt_equations <> [] then
-          Gadt.apply_equations gadt_equations result_type
-        else
-          result_type
-      in
-      unify ctx match_arm.arm_location expected_result_type typed_arm_expression.expression_type;
-      let typed_arm = {
-        Typed_tree.typed_arm_pattern = typed_pattern;
-        typed_arm_guard = typed_guard;
-        typed_arm_expression;
-        typed_arm_location = match_arm.arm_location;
-      } in
-      (typed_arm :: arms, ctx)
-    ) ([], ctx) match_arms in
-    let typed_match_arms = List.rev typed_match_arms in
-    (* Check exhaustiveness and redundancy *)
-    Pattern_check.check_match env loc scrutinee_type typed_match_arms;
-    ({
-      expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
-      expression_type = result_type;
-      expression_location = loc;
-    }, ctx)
+    Control_infer.infer_match ~infer_expr:infer_expression ctx loc scrutinee_expression match_arms
 
   | ExpressionModuleAccess (module_path, value_name) ->
     let path_modules = module_path.Location.value in
@@ -706,68 +383,10 @@ and infer_expression_with_expected ctx expected_type (expr : expression) =
 
   | ExpressionMatch (scrutinee_expression, match_arms), Some expected_ty
     when Gadt.has_rigid_variables expected_ty ->
-    (* Special handling for match expressions with expected types containing rigid variables.
-       This is critical for GADT pattern matching where the return type is a locally
-       abstract type that gets refined in each branch. *)
+    (* Special handling for match expressions with expected types containing rigid variables. *)
     let loc = expr.Location.location in
-    let env = Typing_context.environment ctx in
-    let typed_scrutinee, ctx = infer_expression ctx scrutinee_expression in
-    let scrutinee_type = typed_scrutinee.expression_type in
-    (* Type-check each match arm *)
-    let typed_match_arms, ctx = List.fold_left (fun (arms, ctx) match_arm ->
-      let typed_pattern, pattern_type, arm_ctx = Pattern_infer.infer_pattern ctx match_arm.arm_pattern in
-      (* Extract GADT equations.
-         For GADT branches, we DON'T unify scrutinee with pattern type directly
-         because that would try to unify rigid type variables. Instead, equations
-         capture the type refinements that happen in each branch. *)
-      let gadt_equations =
-        let extraction = Gadt.extract_equations scrutinee_type pattern_type in
-        if extraction.success then extraction.equations else []
-      in
-      (* For GADT matches, skip direct unification of scrutinee with pattern type.
-         The equations capture the relationship. For non-GADT parts, unify separately. *)
-      if gadt_equations = [] then
-        unify ctx match_arm.arm_location scrutinee_type pattern_type;
-      (* Type-check guard if present *)
-      let typed_guard, arm_ctx = match match_arm.arm_guard with
-        | None -> (None, arm_ctx)
-        | Some guard_expression ->
-          let typed_guard_expression, arm_ctx = infer_expression arm_ctx guard_expression in
-          unify arm_ctx guard_expression.Location.location type_bool typed_guard_expression.expression_type;
-          (Some typed_guard_expression, arm_ctx)
-      in
-      (* Type-check arm body *)
-      let typed_arm_expression, _arm_ctx = infer_expression arm_ctx match_arm.arm_expression in
-      (* Check for existential type escape.
-         Existential type variables introduced by a GADT pattern cannot appear
-         in the result type of the match branch. *)
-      let existential_ids = Gadt.collect_existentials_from_pattern typed_pattern in
-      begin match Gadt.check_existential_escape existential_ids typed_arm_expression.expression_type with
-      | Some _escaped_id ->
-        Compiler_error.type_error match_arm.arm_location
-          "This expression has a type containing an existential type variable \
-           that would escape its scope"
-      | None -> ()
-      end;
-      (* Apply GADT equations to expected type.
-         For GADT branches, this transforms 'a' into 'int' when we have equation a=int. *)
-      let expected_branch_type = Gadt.apply_equations gadt_equations expected_ty in
-      unify ctx match_arm.arm_location expected_branch_type typed_arm_expression.expression_type;
-      let typed_arm = {
-        Typed_tree.typed_arm_pattern = typed_pattern;
-        typed_arm_guard = typed_guard;
-        typed_arm_expression;
-        typed_arm_location = match_arm.arm_location;
-      } in
-      (typed_arm :: arms, ctx)
-    ) ([], ctx) match_arms in
-    let typed_match_arms = List.rev typed_match_arms in
-    Pattern_check.check_match env loc scrutinee_type typed_match_arms;
-    ({
-      expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
-      expression_type = expected_ty;
-      expression_location = loc;
-    }, ctx)
+    Control_infer.infer_match_with_expected ~infer_expr:infer_expression
+      ctx loc expected_ty scrutinee_expression match_arms
 
   | _, Some expected_ty ->
     (* Other expressions: infer then unify with expected *)
@@ -783,235 +402,14 @@ and infer_expression_with_expected ctx expected_type (expr : expression) =
 
 (** [infer_bindings ctx rec_flag bindings] infers types for a list of bindings.
 
+    Delegates to [Binding_infer.infer_bindings] with the appropriate callbacks.
+
     @param ctx The typing context
     @param rec_flag Whether the bindings are recursive
     @param bindings The list of bindings to infer
     @return A pair [(typed_bindings, updated_ctx)] *)
 and infer_bindings ctx rec_flag bindings =
-  match rec_flag with
-  | Nonrecursive ->
-    let ctx = Typing_context.enter_level ctx in
-    let typed_bindings, ctx =
-      List.fold_left (fun (bs, ctx) (binding : binding) ->
-        (* Check for TypeForall annotation (e.g., let f : type a. a -> a = ...) *)
-        match extract_poly_rec_annotation binding with
-        | Some (name, forall_vars, body_ty_expr, _loc) ->
-          (* Non-recursive binding with TypeForall: similar to poly-rec but simpler *)
-          let scheme, rigid_vars, ctx = check_forall_annotation ctx forall_vars body_ty_expr in
-          let id = Identifier.create name in
-          (* Create fresh rigid type variables for the expected type so that
-             the original scheme's type variables remain unlinked. This ensures
-             that later instantiation of the scheme works correctly. *)
-          let fresh_rigid_vars, ctx =
-            List.fold_left (fun (acc, ctx) (var_name, tv) ->
-              let fresh, ctx = Typing_context.new_rigid_type_variable ctx in
-              let fresh_tv = match fresh with Types.TypeVariable ftv -> ftv | _ -> assert false in
-              ((var_name, tv.Types.id, fresh_tv) :: acc, ctx)
-            ) ([], ctx) rigid_vars
-          in
-          let expected_type =
-            Type_traversal.map (fun ty ->
-              match Types.representative ty with
-              | Types.TypeVariable tv ->
-                begin match List.find_opt (fun (_, orig_id, _) -> orig_id = tv.Types.id) fresh_rigid_vars with
-                | Some (_, _, fresh_tv) -> Types.TypeVariable fresh_tv
-                | None -> ty
-                end
-              | _ -> ty
-            ) scheme.Types.body
-          in
-          (* Add fresh rigid vars as type aliases for body checking *)
-          let body_env =
-            List.fold_left (fun env (var_name, _, fresh_tv) ->
-              let decl = {
-                Types.declaration_name = var_name;
-                declaration_parameters = [];
-                declaration_variances = [];
-                declaration_manifest = Some (Types.TypeVariable fresh_tv);
-                declaration_kind = Types.DeclarationAbstract;
-                declaration_private = false;
-                declaration_constraints = [];
-              } in
-              Environment.add_type var_name decl env
-            ) (Typing_context.environment ctx) fresh_rigid_vars
-          in
-          let body_ctx = Typing_context.with_environment body_env ctx in
-          let typed_expr, _body_ctx =
-            infer_expression_with_expected body_ctx (Some expected_type) binding.binding_expression
-          in
-          let ctx = Typing_context.leave_level ctx in
-          let env = Typing_context.environment ctx in
-          let env = Environment.add_value name id scheme binding.binding_location env in
-          let ctx = Typing_context.with_environment env ctx in
-          let ctx = Typing_context.enter_level ctx in
-          let typed_pat = {
-            pattern_desc = TypedPatternVariable id;
-            pattern_type = scheme.body;
-            pattern_location = binding.binding_pattern.Location.location;
-          } in
-          let typed_binding = {
-            Typed_tree.binding_pattern = typed_pat;
-            binding_expression = typed_expr;
-            binding_location = binding.binding_location;
-          } in
-          (typed_binding :: bs, ctx)
-
-        | None ->
-          (* Standard non-recursive binding *)
-          let typed_expr, ctx = infer_expression ctx binding.binding_expression in
-          let ctx = Typing_context.leave_level ctx in
-          let level = Typing_context.current_level ctx in
-          let ctx = Typing_context.enter_level ctx in
-          let typed_pat, pat_ty, ctx = Pattern_infer.infer_pattern ctx binding.binding_pattern in
-          unify ctx binding.binding_location pat_ty typed_expr.expression_type;
-          let env = Typing_context.environment ctx in
-          (* For all patterns (including tuple/record patterns), we need to generalize
-             each variable binding. Pattern_infer adds bindings with trivial schemes,
-             so we need to re-add them with properly generalized schemes.
-             Apply value restriction: only generalize if expression is a value. *)
-          let env =
-            let pattern_bindings = collect_pattern_bindings typed_pat in
-            List.fold_left (fun env (name, id, ty) ->
-              let binding_scheme =
-                Inference_utils.compute_binding_scheme_with_env ~level ~env typed_expr ty
-              in
-              Environment.add_value name id binding_scheme binding.binding_location env
-            ) env pattern_bindings
-          in
-          let ctx = Typing_context.with_environment env ctx in
-          let typed_binding = {
-            Typed_tree.binding_pattern = typed_pat;
-            binding_expression = typed_expr;
-            binding_location = binding.binding_location;
-          } in
-          (typed_binding :: bs, ctx)
-      ) ([], ctx) bindings
-    in
-    let ctx = Typing_context.leave_level ctx in
-    (List.rev typed_bindings, ctx)
-
-  | Recursive ->
-    let ctx = Typing_context.enter_level ctx in
-    let env = Typing_context.environment ctx in
-
-    (* First pass: analyze bindings and set up environment *)
-    let env, binding_info_list, ctx =
-      List.fold_left (fun (env, info_list, ctx) (binding : binding) ->
-        match extract_poly_rec_annotation binding with
-        | Some (name, forall_vars, body_ty_expr, _loc) ->
-          (* Polymorphic recursion: create scheme from annotation *)
-          let scheme, rigid_vars, ctx = check_forall_annotation ctx forall_vars body_ty_expr in
-          let id = Identifier.create name in
-          (* Add with full scheme so recursive calls instantiate fresh vars *)
-          let env = Environment.add_value name id scheme binding.binding_location env in
-          let info = PolyRecBinding { name; id; scheme; rigid_vars; binding } in
-          (env, info :: info_list, ctx)
-
-        | None ->
-          (* Standard recursive binding *)
-          begin match binding.binding_pattern.Location.value with
-          | PatternVariable name ->
-            let mono_type, ctx = Typing_context.new_type_variable ctx in
-            let id = Identifier.create name in
-            let env = Environment.add_value name id (trivial_scheme mono_type) binding.binding_location env in
-            let info = StandardRecBinding { name; id; mono_type; binding } in
-            (env, info :: info_list, ctx)
-          | PatternConstraint (inner_pat, _ty_expr) ->
-            (* Non-forall constraint - extract name and use standard approach *)
-            begin match inner_pat.Location.value with
-            | PatternVariable name ->
-              let mono_type, ctx = Typing_context.new_type_variable ctx in
-              let id = Identifier.create name in
-              let env = Environment.add_value name id (trivial_scheme mono_type) binding.binding_location env in
-              let info = StandardRecBinding { name; id; mono_type; binding } in
-              (env, info :: info_list, ctx)
-            | _ ->
-              Compiler_error.type_error binding.binding_location
-                "Recursive bindings must be simple variables"
-            end
-          | _ ->
-            Compiler_error.type_error binding.binding_location
-              "Recursive bindings must be simple variables"
-          end
-      ) (env, [], ctx) bindings
-    in
-    let binding_info_list = List.rev binding_info_list in
-    let ctx = Typing_context.with_environment env ctx in
-
-    (* Second pass: type-check bodies *)
-    let typed_bindings, ctx =
-      List.fold_left (fun (typed_bindings, ctx) info ->
-        match info with
-        | PolyRecBinding { name = _; id; scheme; rigid_vars; binding } ->
-          (* Add rigid vars as type aliases for body checking *)
-          let body_env =
-            List.fold_left (fun env (var_name, tv) ->
-              let decl = {
-                Types.declaration_name = var_name;
-                declaration_parameters = [];
-                declaration_variances = [];
-                declaration_manifest = Some (TypeVariable tv);
-                declaration_kind = Types.DeclarationAbstract;
-                declaration_private = false;
-                declaration_constraints = [];
-              } in
-              Environment.add_type var_name decl env
-            ) (Typing_context.environment ctx) rigid_vars
-          in
-          let body_ctx = Typing_context.with_environment body_env ctx in
-          (* Type-check the body expression with expected type from annotation *)
-          let typed_expr, _body_ctx =
-            infer_expression_with_expected body_ctx (Some scheme.body) binding.binding_expression
-          in
-          (* Unify inferred type with annotated type (may be partially done already) *)
-          unify ctx binding.binding_location scheme.body typed_expr.expression_type;
-          let typed_pat = {
-            pattern_desc = TypedPatternVariable id;
-            pattern_type = scheme.body;
-            pattern_location = binding.binding_pattern.Location.location;
-          } in
-          let typed_binding = {
-            Typed_tree.binding_pattern = typed_pat;
-            binding_expression = typed_expr;
-            binding_location = binding.binding_location;
-          } in
-          (typed_binding :: typed_bindings, ctx)
-
-        | StandardRecBinding { name = _; id; mono_type; binding } ->
-          (* Standard recursive binding *)
-          let typed_expr, ctx = infer_expression ctx binding.binding_expression in
-          unify ctx binding.binding_location mono_type typed_expr.expression_type;
-          let typed_pat = {
-            pattern_desc = TypedPatternVariable id;
-            pattern_type = mono_type;
-            pattern_location = binding.binding_pattern.Location.location;
-          } in
-          let typed_binding = {
-            Typed_tree.binding_pattern = typed_pat;
-            binding_expression = typed_expr;
-            binding_location = binding.binding_location;
-          } in
-          (typed_binding :: typed_bindings, ctx)
-      ) ([], ctx) binding_info_list
-    in
-    let typed_bindings = List.rev typed_bindings in
-
-    (* Third pass: generalize and update environment *)
-    let ctx = Typing_context.leave_level ctx in
-    let level = Typing_context.current_level ctx in
-    let env = Typing_context.environment ctx in
-    let env =
-      List.fold_left2 (fun env info typed_binding ->
-        match info with
-        | PolyRecBinding { name; id; scheme; rigid_vars = _; binding = _ } ->
-          (* Poly-rec binding: keep the annotation scheme *)
-          Environment.add_value name id scheme typed_binding.binding_location env
-
-        | StandardRecBinding { name; id; mono_type; binding = _ } ->
-          (* Standard binding: generalize as normal *)
-          let scheme = Inference_utils.compute_binding_scheme_with_env ~level ~env typed_binding.binding_expression mono_type in
-          Environment.add_value name id scheme typed_binding.binding_location env
-      ) env binding_info_list typed_bindings
-    in
-    let ctx = Typing_context.with_environment env ctx in
-    (typed_bindings, ctx)
+  Binding_infer.infer_bindings
+    ~infer_expr:infer_expression
+    ~infer_expr_expected:infer_expression_with_expected
+    ctx rec_flag bindings

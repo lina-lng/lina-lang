@@ -45,13 +45,15 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
     end
 
   | TypeConstructor (longident, args) ->
-    (* Process type arguments first, threading var_map through *)
-    let arg_types, ctx, var_map =
-      List.fold_left (fun (types, ctx, var_map) arg ->
+    (* Process type arguments first, threading var_map through.
+       Note: We accumulate in reverse order using cons for O(n) complexity. *)
+    let rev_arg_types, ctx, var_map =
+      List.fold_left (fun (rev_types, ctx, var_map) arg ->
         let ty, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars arg in
-        (types @ [ty], ctx, var_map)
+        (ty :: rev_types, ctx, var_map)
       ) ([], ctx, var_map) args
     in
+    let arg_types = List.rev rev_arg_types in
 
     (* Helper to look up a local type by name (handles builtins, var_map, and environment) *)
     let lookup_local_type name =
@@ -219,21 +221,24 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
     (TypeArrow (arg, ret), ctx, var_map)
 
   | TypeTuple tys ->
-    let types, ctx, var_map =
-      List.fold_left (fun (types, ctx, var_map) ty ->
+    (* Note: We accumulate in reverse order using cons for O(n) complexity. *)
+    let rev_types, ctx, var_map =
+      List.fold_left (fun (rev_types, ctx, var_map) ty ->
         let ty, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars ty in
-        (types @ [ty], ctx, var_map)
+        (ty :: rev_types, ctx, var_map)
       ) ([], ctx, var_map) tys
     in
-    (TypeTuple types, ctx, var_map)
+    (TypeTuple (List.rev rev_types), ctx, var_map)
 
   | TypeRecord (fields, is_open) ->
-    let row_fields, ctx, var_map =
-      List.fold_left (fun (fields, ctx, var_map) field ->
+    (* Note: We accumulate in reverse order using cons for O(n) complexity. *)
+    let rev_row_fields, ctx, var_map =
+      List.fold_left (fun (rev_fields, ctx, var_map) field ->
         let ty, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars field.type_field_type in
-        (fields @ [(field.type_field_name, RowFieldPresent ty)], ctx, var_map)
+        ((field.type_field_name, RowFieldPresent ty) :: rev_fields, ctx, var_map)
       ) ([], ctx, var_map) fields
     in
+    let row_fields = List.rev rev_row_fields in
     let row_more, ctx =
       if is_open then Typing_context.new_type_variable ctx
       else (TypeRowEmpty, ctx)

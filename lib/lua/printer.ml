@@ -1,7 +1,15 @@
+(** Lua AST pretty printer.
+
+    Uses Buffer-based internal functions for O(n) string building. *)
+
 open Lua_ast
 
-let indent_string level =
-  String.make (level * 2) ' '
+(** {1 Helper Functions} *)
+
+let add_indent buf level =
+  for _ = 1 to level * 2 do
+    Buffer.add_char buf ' '
+  done
 
 let escape_string s =
   let buf = Buffer.create (String.length s * 2) in
@@ -38,54 +46,7 @@ let unary_operator_to_string = function
   | OpNot -> "not "
   | OpLength -> "#"
 
-let rec print_expression_prec prec expr =
-  match expr with
-  | ExpressionNil -> "nil"
-  | ExpressionBool true -> "true"
-  | ExpressionBool false -> "false"
-  | ExpressionNumber n ->
-    if Float.is_integer n then
-      Printf.sprintf "%.0f" n
-    else
-      Printf.sprintf "%g" n
-  | ExpressionString s ->
-    Printf.sprintf "\"%s\"" (escape_string s)
-  | ExpressionVariable name -> name
-  | ExpressionTable fields ->
-    let field_strs = List.map print_table_field fields in
-    "{" ^ String.concat ", " field_strs ^ "}"
-  | ExpressionIndex (obj, idx) ->
-    Printf.sprintf "%s[%s]" (print_expression_prec 100 obj) (print_expression idx)
-  | ExpressionField (obj, field) ->
-    Printf.sprintf "%s.%s" (print_expression_prec 100 obj) field
-  | ExpressionCall (func, args) ->
-    let func_str = match func with
-      | ExpressionFunction _ ->
-        "(" ^ print_expression_prec 0 func ^ ")"
-      | _ ->
-        print_expression_prec 100 func
-    in
-    let arg_strs = List.map print_expression args in
-    Printf.sprintf "%s(%s)" func_str (String.concat ", " arg_strs)
-  | ExpressionMethodCall (obj, method_name, args) ->
-    let obj_str = print_expression_prec 100 obj in
-    let arg_strs = List.map print_expression args in
-    Printf.sprintf "%s:%s(%s)" obj_str method_name (String.concat ", " arg_strs)
-  | ExpressionBinaryOp (op, left, right) ->
-    let op_prec = operator_precedence op in
-    let left_str = print_expression_prec op_prec left in
-    let right_str = print_expression_prec (op_prec + 1) right in
-    let result = Printf.sprintf "%s %s %s" left_str (binary_operator_to_string op) right_str in
-    if op_prec < prec then "(" ^ result ^ ")" else result
-  | ExpressionUnaryOp (op, operand) ->
-    let operand_str = print_expression_prec 90 operand in
-    Printf.sprintf "%s%s" (unary_operator_to_string op) operand_str
-  | ExpressionFunction (params, body) ->
-    let params_str = String.concat ", " params in
-    let body_str = print_block 1 body in
-    Printf.sprintf "function(%s)\n%s\nend" params_str body_str
-
-and operator_precedence = function
+let operator_precedence = function
   | OpOr -> 10
   | OpAnd -> 20
   | OpEqual | OpNotEqual | OpLess | OpGreater | OpLessEqual | OpGreaterEqual -> 30
@@ -94,93 +55,280 @@ and operator_precedence = function
   | OpMul | OpDiv | OpMod -> 60
   | OpPow -> 70
 
-and print_table_field = function
+(** {1 Buffer-Based Printing Functions} *)
+
+let rec print_expression_prec_to_buf buf prec expr =
+  match expr with
+  | ExpressionNil ->
+    Buffer.add_string buf "nil"
+  | ExpressionBool true ->
+    Buffer.add_string buf "true"
+  | ExpressionBool false ->
+    Buffer.add_string buf "false"
+  | ExpressionNumber n ->
+    if Float.is_integer n then
+      Printf.bprintf buf "%.0f" n
+    else
+      Printf.bprintf buf "%g" n
+  | ExpressionString s ->
+    Buffer.add_char buf '"';
+    Buffer.add_string buf (escape_string s);
+    Buffer.add_char buf '"'
+  | ExpressionVariable name ->
+    Buffer.add_string buf name
+  | ExpressionTable fields ->
+    Buffer.add_char buf '{';
+    print_table_fields_to_buf buf fields;
+    Buffer.add_char buf '}'
+  | ExpressionIndex (obj, idx) ->
+    print_expression_prec_to_buf buf 100 obj;
+    Buffer.add_char buf '[';
+    print_expression_to_buf buf idx;
+    Buffer.add_char buf ']'
+  | ExpressionField (obj, field) ->
+    print_expression_prec_to_buf buf 100 obj;
+    Buffer.add_char buf '.';
+    Buffer.add_string buf field
+  | ExpressionCall (func, args) ->
+    begin match func with
+    | ExpressionFunction _ ->
+      Buffer.add_char buf '(';
+      print_expression_prec_to_buf buf 0 func;
+      Buffer.add_char buf ')'
+    | _ ->
+      print_expression_prec_to_buf buf 100 func
+    end;
+    Buffer.add_char buf '(';
+    print_expressions_to_buf buf args;
+    Buffer.add_char buf ')'
+  | ExpressionMethodCall (obj, method_name, args) ->
+    print_expression_prec_to_buf buf 100 obj;
+    Buffer.add_char buf ':';
+    Buffer.add_string buf method_name;
+    Buffer.add_char buf '(';
+    print_expressions_to_buf buf args;
+    Buffer.add_char buf ')'
+  | ExpressionBinaryOp (op, left, right) ->
+    let op_prec = operator_precedence op in
+    let needs_parens = op_prec < prec in
+    if needs_parens then Buffer.add_char buf '(';
+    print_expression_prec_to_buf buf op_prec left;
+    Buffer.add_char buf ' ';
+    Buffer.add_string buf (binary_operator_to_string op);
+    Buffer.add_char buf ' ';
+    print_expression_prec_to_buf buf (op_prec + 1) right;
+    if needs_parens then Buffer.add_char buf ')'
+  | ExpressionUnaryOp (op, operand) ->
+    Buffer.add_string buf (unary_operator_to_string op);
+    print_expression_prec_to_buf buf 90 operand
+  | ExpressionFunction (params, body) ->
+    Buffer.add_string buf "function(";
+    print_string_list_to_buf buf params;
+    Buffer.add_string buf ")\n";
+    print_block_to_buf buf 1 body;
+    Buffer.add_string buf "\nend"
+
+and print_expression_to_buf buf expr =
+  print_expression_prec_to_buf buf 0 expr
+
+and print_expressions_to_buf buf exprs =
+  match exprs with
+  | [] -> ()
+  | [expr] -> print_expression_to_buf buf expr
+  | expr :: rest ->
+    print_expression_to_buf buf expr;
+    List.iter (fun expr ->
+      Buffer.add_string buf ", ";
+      print_expression_to_buf buf expr
+    ) rest
+
+and print_string_list_to_buf buf strings =
+  match strings with
+  | [] -> ()
+  | [s] -> Buffer.add_string buf s
+  | s :: rest ->
+    Buffer.add_string buf s;
+    List.iter (fun s ->
+      Buffer.add_string buf ", ";
+      Buffer.add_string buf s
+    ) rest
+
+and print_table_fields_to_buf buf fields =
+  match fields with
+  | [] -> ()
+  | [field] -> print_table_field_to_buf buf field
+  | field :: rest ->
+    print_table_field_to_buf buf field;
+    List.iter (fun field ->
+      Buffer.add_string buf ", ";
+      print_table_field_to_buf buf field
+    ) rest
+
+and print_table_field_to_buf buf field =
+  match field with
   | FieldArray expr ->
-    print_expression expr
+    print_expression_to_buf buf expr
   | FieldNamed (name, expr) ->
-    Printf.sprintf "%s = %s" name (print_expression expr)
+    Buffer.add_string buf name;
+    Buffer.add_string buf " = ";
+    print_expression_to_buf buf expr
   | FieldIndexed (key, value) ->
-    Printf.sprintf "[%s] = %s" (print_expression key) (print_expression value)
+    Buffer.add_char buf '[';
+    print_expression_to_buf buf key;
+    Buffer.add_string buf "] = ";
+    print_expression_to_buf buf value
 
-and print_expression expr = print_expression_prec 0 expr
-
-and print_lvalue = function
-  | LvalueVariable name -> name
+and print_lvalue_to_buf buf lvalue =
+  match lvalue with
+  | LvalueVariable name ->
+    Buffer.add_string buf name
   | LvalueIndex (obj, idx) ->
-    Printf.sprintf "%s[%s]" (print_expression obj) (print_expression idx)
+    print_expression_to_buf buf obj;
+    Buffer.add_char buf '[';
+    print_expression_to_buf buf idx;
+    Buffer.add_char buf ']'
   | LvalueField (obj, field) ->
-    Printf.sprintf "%s.%s" (print_expression obj) field
+    print_expression_to_buf buf obj;
+    Buffer.add_char buf '.';
+    Buffer.add_string buf field
 
-and print_statement_at_level level stmt =
-  let indent = indent_string level in
+and print_lvalues_to_buf buf lvalues =
+  match lvalues with
+  | [] -> ()
+  | [lvalue] -> print_lvalue_to_buf buf lvalue
+  | lvalue :: rest ->
+    print_lvalue_to_buf buf lvalue;
+    List.iter (fun lvalue ->
+      Buffer.add_string buf ", ";
+      print_lvalue_to_buf buf lvalue
+    ) rest
+
+and print_statement_to_buf buf level stmt =
+  add_indent buf level;
   match stmt with
   | StatementLocal (names, []) ->
-    Printf.sprintf "%slocal %s" indent (String.concat ", " names)
+    Buffer.add_string buf "local ";
+    print_string_list_to_buf buf names
   | StatementLocal (names, values) ->
-    let names_str = String.concat ", " names in
-    let values_str = String.concat ", " (List.map print_expression values) in
-    Printf.sprintf "%slocal %s = %s" indent names_str values_str
+    Buffer.add_string buf "local ";
+    print_string_list_to_buf buf names;
+    Buffer.add_string buf " = ";
+    print_expressions_to_buf buf values
   | StatementAssign (lvalues, values) ->
-    let lvalues_str = String.concat ", " (List.map print_lvalue lvalues) in
-    let values_str = String.concat ", " (List.map print_expression values) in
-    Printf.sprintf "%s%s = %s" indent lvalues_str values_str
+    print_lvalues_to_buf buf lvalues;
+    Buffer.add_string buf " = ";
+    print_expressions_to_buf buf values
   | StatementCall (func, args) ->
-    let func_str = print_expression func in
-    let args_str = String.concat ", " (List.map print_expression args) in
-    Printf.sprintf "%s%s(%s)" indent func_str args_str
+    print_expression_to_buf buf func;
+    Buffer.add_char buf '(';
+    print_expressions_to_buf buf args;
+    Buffer.add_char buf ')'
   | StatementIf (branches, else_block) ->
-    let first_branch = match branches with
-      | [] -> ""
-      | (cond, block) :: rest ->
-        let cond_str = print_expression cond in
-        let block_str = print_block (level + 1) block in
-        let first = Printf.sprintf "%sif %s then\n%s" indent cond_str block_str in
-        let elseifs = List.map (fun (cond, block) ->
-          let cond_str = print_expression cond in
-          let block_str = print_block (level + 1) block in
-          Printf.sprintf "\n%selseif %s then\n%s" indent cond_str block_str
-        ) rest in
-        first ^ String.concat "" elseifs
-    in
-    let else_str = match else_block with
-      | None -> ""
-      | Some block ->
-        let block_str = print_block (level + 1) block in
-        Printf.sprintf "\n%selse\n%s" indent block_str
-    in
-    Printf.sprintf "%s%s\n%send" first_branch else_str indent
+    print_if_branches_to_buf buf level branches;
+    begin match else_block with
+    | None -> ()
+    | Some block ->
+      Buffer.add_char buf '\n';
+      add_indent buf level;
+      Buffer.add_string buf "else\n";
+      print_block_to_buf buf (level + 1) block
+    end;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
   | StatementWhile (cond, block) ->
-    let cond_str = print_expression cond in
-    let block_str = print_block (level + 1) block in
-    Printf.sprintf "%swhile %s do\n%s\n%send" indent cond_str block_str indent
+    Buffer.add_string buf "while ";
+    print_expression_to_buf buf cond;
+    Buffer.add_string buf " do\n";
+    print_block_to_buf buf (level + 1) block;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
   | StatementForIn (names, iterator_expressions, block) ->
-    let names_str = String.concat ", " names in
-    let iterator_str = String.concat ", " (List.map print_expression iterator_expressions) in
-    let block_str = print_block (level + 1) block in
-    Printf.sprintf "%sfor %s in %s do\n%s\n%send" indent names_str iterator_str block_str indent
+    Buffer.add_string buf "for ";
+    print_string_list_to_buf buf names;
+    Buffer.add_string buf " in ";
+    print_expressions_to_buf buf iterator_expressions;
+    Buffer.add_string buf " do\n";
+    print_block_to_buf buf (level + 1) block;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
   | StatementReturn [] ->
-    Printf.sprintf "%sreturn" indent
+    Buffer.add_string buf "return"
   | StatementReturn exprs ->
-    let exprs_str = String.concat ", " (List.map print_expression exprs) in
-    Printf.sprintf "%sreturn %s" indent exprs_str
+    Buffer.add_string buf "return ";
+    print_expressions_to_buf buf exprs
   | StatementBreak ->
-    Printf.sprintf "%sbreak" indent
+    Buffer.add_string buf "break"
   | StatementDo block ->
-    let block_str = print_block (level + 1) block in
-    Printf.sprintf "%sdo\n%s\n%send" indent block_str indent
+    Buffer.add_string buf "do\n";
+    print_block_to_buf buf (level + 1) block;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
   | StatementLocalFunction (name, params, body) ->
-    let params_str = String.concat ", " params in
-    let body_str = print_block (level + 1) body in
-    Printf.sprintf "%slocal function %s(%s)\n%s\n%send" indent name params_str body_str indent
+    Buffer.add_string buf "local function ";
+    Buffer.add_string buf name;
+    Buffer.add_char buf '(';
+    print_string_list_to_buf buf params;
+    Buffer.add_string buf ")\n";
+    print_block_to_buf buf (level + 1) body;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
   | StatementFunction (name, params, body) ->
-    let params_str = String.concat ", " params in
-    let body_str = print_block (level + 1) body in
-    Printf.sprintf "%sfunction %s(%s)\n%s\n%send" indent name params_str body_str indent
+    Buffer.add_string buf "function ";
+    Buffer.add_string buf name;
+    Buffer.add_char buf '(';
+    print_string_list_to_buf buf params;
+    Buffer.add_string buf ")\n";
+    print_block_to_buf buf (level + 1) body;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
 
-and print_block level stmts =
-  let stmt_strs = List.map (print_statement_at_level level) stmts in
-  String.concat "\n" stmt_strs
+and print_if_branches_to_buf buf level branches =
+  match branches with
+  | [] -> ()
+  | (cond, block) :: rest ->
+    Buffer.add_string buf "if ";
+    print_expression_to_buf buf cond;
+    Buffer.add_string buf " then\n";
+    print_block_to_buf buf (level + 1) block;
+    List.iter (fun (cond, block) ->
+      Buffer.add_char buf '\n';
+      add_indent buf level;
+      Buffer.add_string buf "elseif ";
+      print_expression_to_buf buf cond;
+      Buffer.add_string buf " then\n";
+      print_block_to_buf buf (level + 1) block
+    ) rest
 
-let print_statement stmt = print_statement_at_level 0 stmt
+and print_block_to_buf buf level stmts =
+  match stmts with
+  | [] -> ()
+  | [stmt] -> print_statement_to_buf buf level stmt
+  | stmt :: rest ->
+    print_statement_to_buf buf level stmt;
+    List.iter (fun stmt ->
+      Buffer.add_char buf '\n';
+      print_statement_to_buf buf level stmt
+    ) rest
 
-let print_chunk chunk = print_block 0 chunk
+(** {1 Public API} *)
+
+let print_expression expr =
+  let buf = Buffer.create 256 in
+  print_expression_prec_to_buf buf 0 expr;
+  Buffer.contents buf
+
+let print_statement stmt =
+  let buf = Buffer.create 256 in
+  print_statement_to_buf buf 0 stmt;
+  Buffer.contents buf
+
+let print_chunk chunk =
+  let buf = Buffer.create 4096 in
+  print_block_to_buf buf 0 chunk;
+  Buffer.contents buf

@@ -77,6 +77,34 @@ let extract_typed_module_path mexpr =
   | Typed_tree.TypedModulePath path -> Some path
   | _ -> None
 
+(** {1 Error Helpers} *)
+
+(** Kind of unbound entity for error messages. *)
+type unbound_kind =
+  | UnboundVariable
+  | UnboundConstructor
+  | UnboundModule
+  | UnboundType
+  | UnboundModuleType
+
+let unbound_kind_to_string = function
+  | UnboundVariable -> "variable"
+  | UnboundConstructor -> "constructor"
+  | UnboundModule -> "module"
+  | UnboundType -> "type"
+  | UnboundModuleType -> "module type"
+
+let error_unbound kind loc name =
+  Compiler_error.type_error loc
+    (Printf.sprintf "Unbound %s: %s" (unbound_kind_to_string kind) name)
+
+(* Convenience functions for backward compatibility *)
+let error_unbound_variable loc name = error_unbound UnboundVariable loc name
+let error_unbound_constructor loc name = error_unbound UnboundConstructor loc name
+let error_unbound_module loc name = error_unbound UnboundModule loc name
+let error_unbound_type loc name = error_unbound UnboundType loc name
+let error_unbound_module_type loc name = error_unbound UnboundModuleType loc name
+
 (** {1 Constructor Instantiation} *)
 
 (** [instantiate_constructor_with_ctx ctx ctor] instantiates a constructor
@@ -92,6 +120,47 @@ let instantiate_constructor_with_ctx ctx ctor =
   let level = Typing_context.current_level ctx in
   let fresh_var () = Types.new_type_variable_at_level level in
   Type_utils.instantiate_constructor ~fresh_var ctor
+
+(** {1 Constructor Lookup} *)
+
+(** Result of looking up and instantiating a constructor. *)
+type constructor_result = {
+  constructor_info : Types.constructor_info;
+  expected_arg_type : Types.type_expression option;
+  result_type : Types.type_expression;
+}
+
+(** [lookup_constructor ctx loc name] looks up a constructor and instantiates it.
+
+    @param ctx The typing context
+    @param loc Source location for error messages
+    @param name The constructor name
+    @return Constructor info with instantiated types
+    @raise Type_error if constructor is not found *)
+let lookup_constructor ctx loc name =
+  let env = Typing_context.environment ctx in
+  match Environment.find_constructor name env with
+  | None -> error_unbound_constructor loc name
+  | Some constructor_info ->
+    let expected_arg_type, result_type = instantiate_constructor_with_ctx ctx constructor_info in
+    { constructor_info; expected_arg_type; result_type }
+
+(** [check_private_type ctx loc ctor_info] checks that a constructor's type is not private.
+
+    Private types cannot be constructed (but can be pattern matched).
+
+    @param ctx The typing context
+    @param loc Source location for error messages
+    @param ctor_info The constructor info to check
+    @raise Type_error if the type is private *)
+let check_private_type ctx loc ctor_info =
+  let env = Typing_context.environment ctx in
+  match Environment.find_type ctor_info.Types.constructor_type_name env with
+  | Some type_decl when type_decl.Types.declaration_private ->
+    Compiler_error.type_error loc
+      (Printf.sprintf "Cannot construct value of private type %s"
+         ctor_info.Types.constructor_type_name)
+  | _ -> ()
 
 (** {1 Signature Match Context Creation} *)
 
@@ -124,31 +193,3 @@ type unification_error_details = {
 type inference_error =
   | CompilerError of Common.Compiler_error.t
   | UnificationError of unification_error_details
-
-(** {1 Error Helpers} *)
-
-(** Kind of unbound entity for error messages. *)
-type unbound_kind =
-  | UnboundVariable
-  | UnboundConstructor
-  | UnboundModule
-  | UnboundType
-  | UnboundModuleType
-
-let unbound_kind_to_string = function
-  | UnboundVariable -> "variable"
-  | UnboundConstructor -> "constructor"
-  | UnboundModule -> "module"
-  | UnboundType -> "type"
-  | UnboundModuleType -> "module type"
-
-let error_unbound kind loc name =
-  Compiler_error.type_error loc
-    (Printf.sprintf "Unbound %s: %s" (unbound_kind_to_string kind) name)
-
-(* Convenience functions for backward compatibility *)
-let error_unbound_variable loc name = error_unbound UnboundVariable loc name
-let error_unbound_constructor loc name = error_unbound UnboundConstructor loc name
-let error_unbound_module loc name = error_unbound UnboundModule loc name
-let error_unbound_type loc name = error_unbound UnboundType loc name
-let error_unbound_module_type loc name = error_unbound UnboundModuleType loc name
