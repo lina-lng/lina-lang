@@ -1,0 +1,5 @@
+(* Error: constructor type mismatch *)
+(* Expected: REJECT - Some expects one argument, None expects none *)
+
+let x = Some
+let y = None 42

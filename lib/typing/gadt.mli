@@ -93,3 +93,23 @@ val apply_equations_to_scheme : equation list -> type_scheme -> type_scheme
     @param scrutinee_type The type of the value being matched
     @return true if GADT equation extraction should be performed *)
 val needs_gadt_handling : constructor_info -> type_expression -> bool
+
+(** {1 Existential Type Variables} *)
+
+(** [check_existential_escape existential_ids ty] checks if a type contains
+    any of the given existential type variables.
+
+    @param existential_ids List of type variable IDs that are existential
+    @param ty The type to check
+    @return [Some var_id] if an existential escapes, [None] otherwise *)
+val check_existential_escape : int list -> type_expression -> int option
+
+(** [collect_existentials_from_pattern pattern] extracts existential type
+    variable IDs introduced by a pattern.
+
+    For example, when matching [Any x] where [Any : 'a -> any_expr],
+    the pattern introduces an existential type for x.
+
+    @param pattern The typed pattern to examine
+    @return List of existential type variable IDs introduced by this pattern *)
+val collect_existentials_from_pattern : Typed_tree.typed_pattern -> int list

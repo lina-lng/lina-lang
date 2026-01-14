@@ -55,7 +55,8 @@ let has_prefix prefix str =
 
 (** Determine completion kind based on type: Function if arrow type, Variable otherwise. *)
 let kind_of_type_scheme (scheme : Typing.Types.type_scheme) =
-  match scheme.body with
+  (* Follow type variable links to get the actual type *)
+  match Typing.Types.representative scheme.body with
   | Typing.Types.TypeArrow _ -> Function
   | _ -> Variable
 

@@ -40,7 +40,7 @@ let make_binding pattern expression loc =
 %left COMMA
 %nonassoc THEN
 %nonassoc ELSE
-%left EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
+%left EQUAL EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
 %left PLUS MINUS
 %left STAR SLASH
 %nonassoc unary_minus
@@ -215,21 +215,34 @@ constructor_declaration:
     { { constructor_name = make_located name $loc(name);
         constructor_argument = Some ty;
         constructor_return_type = None } }
+  (* GADT constructor with argument: Name : arg_type -> return_type
+     Note: arg must be non_arrow_type_expression to avoid ambiguity with the no-arg case *)
+  | name = UPPERCASE_IDENTIFIER; COLON; arg = non_arrow_type_expression; ARROW; ret = type_expression
+    { { constructor_name = make_located name $loc(name);
+        constructor_argument = Some arg;
+        constructor_return_type = Some ret } }
   (* GADT constructor without argument: Name : return_type *)
   | name = UPPERCASE_IDENTIFIER; COLON; ret = type_expression
     { { constructor_name = make_located name $loc(name);
         constructor_argument = None;
         constructor_return_type = Some ret } }
-  (* GADT constructor with argument: Name : arg_type -> return_type *)
-  | name = UPPERCASE_IDENTIFIER; COLON; arg = type_expression; ARROW; ret = type_expression
-    { { constructor_name = make_located name $loc(name);
-        constructor_argument = Some arg;
-        constructor_return_type = Some ret } }
 
 type_expression:
-  | t = simple_type_expression { t }
-  | t1 = type_expression; ARROW; t2 = type_expression
+  | t = arrow_type_expression { t }
+  (* Polymorphic recursion annotation: type a b. body
+     This has the lowest precedence - extends all the way to the right *)
+  | TYPE; vars = nonempty_list(LOWERCASE_IDENTIFIER); DOT; body = type_expression
+    { make_located (TypeForall (vars, body)) $loc }
+
+(* Arrow types - TypeForall cannot appear on the left of an arrow *)
+arrow_type_expression:
+  | t = non_arrow_type_expression { t }
+  | t1 = non_arrow_type_expression; ARROW; t2 = arrow_type_expression
     { make_located (TypeArrow (t1, t2)) $loc }
+
+(* Types that are not arrows or foralls *)
+non_arrow_type_expression:
+  | t = simple_type_expression { t }
   | ts = tuple_type_expression
     { make_located (TypeTuple ts) $loc }
 
@@ -242,12 +255,33 @@ tuple_type_expression:
 simple_type_expression:
   | var = TYPE_VARIABLE
     { make_located (TypeVariable var) $loc }
+  (* Simple type: int, option *)
   | name = LOWERCASE_IDENTIFIER
-    { make_located (TypeConstructor (name, [])) $loc }
+    { make_located (TypeConstructor (make_located (Lident name) $loc, [])) $loc }
+  (* Qualified type: M.t, M.N.t *)
+  | mod_name = UPPERCASE_IDENTIFIER; DOT; type_name = LOWERCASE_IDENTIFIER
+    { let mod_lid = make_located (Lident mod_name) $loc(mod_name) in
+      make_located (TypeConstructor (make_located (Ldot (mod_lid, type_name)) $loc, [])) $loc }
+  | mod_name = UPPERCASE_IDENTIFIER; DOT; rest = qualified_type_path
+    { let mod_lid = make_located (Lident mod_name) $loc(mod_name) in
+      let (path, type_name) = rest in
+      let full_path = List.fold_left (fun acc m ->
+        make_located (Ldot (acc, m)) $loc
+      ) mod_lid path in
+      make_located (TypeConstructor (make_located (Ldot (full_path, type_name)) $loc, [])) $loc }
+  (* Type application with simple type: 'a option *)
   | arg = simple_type_expression; name = LOWERCASE_IDENTIFIER
-    { make_located (TypeConstructor (name, [arg])) $loc }
+    { make_located (TypeConstructor (make_located (Lident name) $loc(name), [arg])) $loc }
+  (* Type application with qualified type: 'a M.t *)
+  | arg = simple_type_expression; mod_name = UPPERCASE_IDENTIFIER; DOT; type_name = LOWERCASE_IDENTIFIER
+    { let mod_lid = make_located (Lident mod_name) $loc(mod_name) in
+      make_located (TypeConstructor (make_located (Ldot (mod_lid, type_name)) $loc, [arg])) $loc }
+  (* Multi-arg type application: (int, string) result *)
   | LPAREN; args = separated_list(COMMA, type_expression); RPAREN; name = LOWERCASE_IDENTIFIER
-    { make_located (TypeConstructor (name, args)) $loc }
+    { make_located (TypeConstructor (make_located (Lident name) $loc(name), args)) $loc }
+  | LPAREN; args = separated_list(COMMA, type_expression); RPAREN; mod_name = UPPERCASE_IDENTIFIER; DOT; type_name = LOWERCASE_IDENTIFIER
+    { let mod_lid = make_located (Lident mod_name) $loc(mod_name) in
+      make_located (TypeConstructor (make_located (Ldot (mod_lid, type_name)) $loc, args)) $loc }
   | LPAREN; t = type_expression; RPAREN
     { t }
   | LBRACE; fields = separated_list(SEMICOLON, type_record_field); RBRACE
@@ -263,6 +297,14 @@ simple_type_expression:
     { make_located (TypePolyVariant (PolyRowAtMost (fields, []))) $loc }
   | LBRACKET; LESS; fields = poly_variant_fields; GREATER; required = separated_nonempty_list(BAR, BACKTICK_TAG); RBRACKET
     { make_located (TypePolyVariant (PolyRowAtMost (fields, required))) $loc }
+
+(* Helper for multi-level qualified type paths like M.N.t (after initial M.) *)
+(* Returns (module_path_list, type_name) where module_path_list is the intermediate modules *)
+qualified_type_path:
+  | m = UPPERCASE_IDENTIFIER; DOT; type_name = LOWERCASE_IDENTIFIER
+    { ([m], type_name) }
+  | m = UPPERCASE_IDENTIFIER; DOT; rest = qualified_type_path
+    { let (path, type_name) = rest in ([m] @ path, type_name) }
 
 expression_eof:
   | e = expression; EOF { e }
@@ -309,8 +351,9 @@ simple_expression:
   | MINUS { "-" }
   | STAR { "*" }
   | SLASH { "/" }
+  | EQUAL { "=" }
   | EQUAL_EQUAL { "==" }
-  | NOT_EQUAL { "!=" }
+  | NOT_EQUAL { "<>" }
   | LESS { "<" }
   | GREATER { ">" }
   | LESS_EQUAL { "<=" }
@@ -322,6 +365,10 @@ application_expression:
     {
       match func.value with
       | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [arg])) $loc
+      (* Constructor application: Some x becomes ExpressionConstructor("Some", Some x) *)
+      | ExpressionConstructor (name, None) -> make_located (ExpressionConstructor (name, Some arg)) $loc
+      (* Polymorphic variant application: `Tag x becomes ExpressionPolyVariant("Tag", Some x) *)
+      | ExpressionPolyVariant (tag, None) -> make_located (ExpressionPolyVariant (tag, Some arg)) $loc
       | _ -> make_located (ExpressionApply (func, [arg])) $loc
     }
 
@@ -358,17 +405,13 @@ atomic_expression:
     { make_located (ExpressionVariable name) $loc }
   | name = UPPERCASE_IDENTIFIER
     { make_located (ExpressionConstructor (name, None)) $loc }
-  | name = UPPERCASE_IDENTIFIER; arg = atomic_expression
-    { make_located (ExpressionConstructor (name, Some arg)) $loc }
   | LBRACE; fields = separated_list(SEMICOLON, record_field); RBRACE
     { make_located (ExpressionRecord fields) $loc }
   | LBRACE; base = simple_expression; WITH; fields = separated_nonempty_list(SEMICOLON, record_field); RBRACE
     { make_located (ExpressionRecordUpdate (base, fields)) $loc }
-  (* Polymorphic variant expression: `Tag or `Tag arg *)
+  (* Polymorphic variant expression: `Tag (arg applied at application level) *)
   | tag = BACKTICK_TAG
     { make_located (ExpressionPolyVariant (tag, None)) $loc }
-  | tag = BACKTICK_TAG; arg = atomic_expression
-    { make_located (ExpressionPolyVariant (tag, Some arg)) $loc }
 
 expression_tuple:
   | e1 = expression; COMMA; e2 = expression

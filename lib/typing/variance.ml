@@ -69,6 +69,15 @@ let to_annotation = function
   | Invariant -> "" (* No annotation means invariant *)
   | Bivariant -> "_" (* Underscore for unused/phantom *)
 
+(** Type lookup function for finding type declarations *)
+type type_lookup = Types.path -> Types.type_declaration option
+
+(** Default type lookup that returns None (used when no environment available) *)
+let no_lookup : type_lookup = fun _ -> None
+
+(** Global reference for type lookup - set before variance checking *)
+let current_type_lookup : type_lookup ref = ref no_lookup
+
 let get_constructor_variances (path : Types.path) (param_count : int) : t list =
   match path with
   | Types.PathBuiltin Types.BuiltinRef ->
@@ -78,9 +87,17 @@ let get_constructor_variances (path : Types.path) (param_count : int) : t list =
     (* Other builtins have no type parameters *)
     []
   | _ ->
-    (* Most type constructors are covariant in their parameters.
-       TODO: Look up declared variances from type declarations. *)
-    List.init param_count (fun _ -> Covariant)
+    (* Look up declared variances from type declaration *)
+    match !current_type_lookup path with
+    | Some decl when decl.Types.declaration_variances <> [] ->
+      decl.Types.declaration_variances
+    | Some decl ->
+      (* No declared variances - infer from type definition *)
+      (* For now, assume covariant if no info available *)
+      List.init (List.length decl.Types.declaration_parameters) (fun _ -> Covariant)
+    | None ->
+      (* Type not found - assume covariant *)
+      List.init param_count (fun _ -> Covariant)
 
 (** {1 Variance Checking in Types}
 
@@ -196,3 +213,20 @@ and check_in_poly_variant_row
     Entry point that starts in a covariant context. *)
 let check_in_type (target_var : Types.type_variable) (ty : Types.type_expression) : t =
   check_in_context target_var Covariant ty
+
+(** Set the type lookup function for variance checking.
+    Should be called before checking variance with an environment-based lookup. *)
+let set_type_lookup (lookup : type_lookup) : unit =
+  current_type_lookup := lookup
+
+(** Check variance with a specific type lookup function. *)
+let check_in_type_with_lookup
+    ~(type_lookup : type_lookup)
+    (target_var : Types.type_variable)
+    (ty : Types.type_expression)
+  : t =
+  let old_lookup = !current_type_lookup in
+  current_type_lookup := type_lookup;
+  let result = check_in_context target_var Covariant ty in
+  current_type_lookup := old_lookup;
+  result

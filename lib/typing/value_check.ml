@@ -24,8 +24,14 @@ type 'expr value_shape =
       (** Let binding - binding expressions and body *)
   | ShapeConstraint of 'expr
       (** Type constraint - inner expression (syntax AST only) *)
+  | ShapeIf of 'expr * 'expr option
+      (** If expression - then branch and optional else branch.
+          A value if both branches are values (OCaml extended VR). *)
+  | ShapeMatch of 'expr list
+      (** Match expression - list of branch bodies.
+          A value if all branches are values (OCaml extended VR). *)
   | ShapeNonValue
-      (** Apply, match, if, sequence, etc. - never a value *)
+      (** Apply, sequence, ref, etc. - never a value *)
 
 (** Module signature for expression types that can be checked for value-ness. *)
 module type EXPRESSION = sig
@@ -45,9 +51,18 @@ module Make (E : EXPRESSION) = struct
     | ShapeConstructor None -> true
     | ShapeConstructor (Some arg) -> is_value arg
     | ShapeRecord field_values -> List.for_all is_value field_values
-    | ShapeLet (binding_exprs, body) ->
-      List.for_all is_value binding_exprs && is_value body
+    | ShapeLet (_binding_exprs, body) ->
+      (* OCaml extended VR: let expression is a value if the body is a value.
+         The bindings don't need to be values - only the body determines
+         whether type variables can be generalized safely. *)
+      is_value body
     | ShapeConstraint inner -> is_value inner
+    | ShapeIf (then_branch, else_branch) ->
+      (* OCaml extended VR: if-expression is a value when all branches are values *)
+      is_value then_branch && Option.fold ~none:true ~some:is_value else_branch
+    | ShapeMatch branches ->
+      (* OCaml extended VR: match is a value when all branches are values *)
+      List.for_all is_value branches
     | ShapeNonValue -> false
 end
 
@@ -76,10 +91,14 @@ module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = 
       in
       ShapeLet (binding_exprs, body)
 
+    (* Conditional expressions - values if all branches are values (OCaml extended VR) *)
+    | Typed_tree.TypedExpressionIf (_, then_branch, else_branch) ->
+      ShapeIf (then_branch, else_branch)
+    | Typed_tree.TypedExpressionMatch (_, arms) ->
+      ShapeMatch (List.map (fun (arm : Typed_tree.typed_match_arm) -> arm.Typed_tree.typed_arm_expression) arms)
+
     (* Non-values *)
     | Typed_tree.TypedExpressionApply _ -> ShapeNonValue
-    | Typed_tree.TypedExpressionMatch _ -> ShapeNonValue
-    | Typed_tree.TypedExpressionIf _ -> ShapeNonValue
     | Typed_tree.TypedExpressionSequence _ -> ShapeNonValue
     | Typed_tree.TypedExpressionRecordAccess _ -> ShapeNonValue
     | Typed_tree.TypedExpressionRecordUpdate _ -> ShapeNonValue
@@ -119,10 +138,14 @@ module SyntaxExpression : EXPRESSION with type t = Parsing.Syntax_tree.expressio
     | Parsing.Syntax_tree.ExpressionConstraint (inner, _) ->
       ShapeConstraint inner
 
+    (* Conditional expressions - values if all branches are values (OCaml extended VR) *)
+    | Parsing.Syntax_tree.ExpressionIf (_, then_branch, else_branch) ->
+      ShapeIf (then_branch, else_branch)
+    | Parsing.Syntax_tree.ExpressionMatch (_, arms) ->
+      ShapeMatch (List.map (fun (arm : Parsing.Syntax_tree.match_arm) -> arm.Parsing.Syntax_tree.arm_expression) arms)
+
     (* Non-values *)
     | Parsing.Syntax_tree.ExpressionApply _ -> ShapeNonValue
-    | Parsing.Syntax_tree.ExpressionMatch _ -> ShapeNonValue
-    | Parsing.Syntax_tree.ExpressionIf _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionSequence _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionRecordAccess _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionRecordUpdate _ -> ShapeNonValue
@@ -159,9 +182,30 @@ type variance = Types.variance =
     Delegates to {!Variance.check_in_type}. *)
 let check_variance = Variance.check_in_type
 
+(** Check the variance with a type lookup for declared variances. *)
+let check_variance_with_lookup ~type_lookup target_var ty =
+  Variance.check_in_type_with_lookup ~type_lookup target_var ty
+
 (** Check if a type variable can be generalized under relaxed value restriction.
     A variable can be generalized if it appears only in covariant positions
-    or does not appear at all. *)
+    or does not appear at all.
+
+    This version uses a type lookup to find declared variances. *)
+let can_generalize_relaxed_with_lookup
+    ~(type_lookup : Types.path -> Types.type_declaration option)
+    (target_var : Types.type_variable)
+    (ty : Types.type_expression)
+  : bool =
+  match check_variance_with_lookup ~type_lookup target_var ty with
+  | Covariant | Bivariant -> true
+  | Contravariant | Invariant -> false
+
+(** Check if a type variable can be generalized under relaxed value restriction.
+    A variable can be generalized if it appears only in covariant positions
+    or does not appear at all.
+
+    Note: This version doesn't look up declared variances - use
+    [can_generalize_relaxed_with_lookup] for full accuracy. *)
 let can_generalize_relaxed (target_var : Types.type_variable) (ty : Types.type_expression) : bool =
   match check_variance target_var ty with
   | Covariant | Bivariant -> true

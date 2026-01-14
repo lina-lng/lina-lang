@@ -1,0 +1,17 @@
+(* Variance: tuple is covariant in all parameters *)
+(* Expected: ACCEPT - ('a * 'b) is covariant in both 'a and 'b *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let id x = x
+
+(* id (Nil, Nil) is NOT a value *)
+(* Tuple is covariant in both positions *)
+(* So relaxed VR allows generalization *)
+let pair = id (Nil, Nil)
+
+(* Should be polymorphic in both components *)
+let _ = (pair : (int list * bool list))
+let _ = (pair : (string list * float list))
+
+let _ = print 0

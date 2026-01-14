@@ -1,0 +1,20 @@
+(* Value restriction: partial application is a syntactic value *)
+(* Expected: ACCEPT - partial application produces a lambda (value) *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let map f lst =
+  match lst with
+  | Nil -> Nil
+  | Cons (x, xs) -> Cons (f x, map f xs)
+
+let id x = x
+
+(* Partial application: (map id) is a syntactic value (a lambda) *)
+let map_id = map id
+
+(* Should be polymorphic - usable at multiple types *)
+let int_list = map_id (Cons (1, Cons (2, Nil)))
+let bool_list = map_id (Cons (true, Cons (false, Nil)))
+
+let _ = print 0

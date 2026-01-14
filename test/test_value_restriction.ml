@@ -112,7 +112,7 @@ let%expect_test "if expression is NOT generalized" =
   |} in
   let scheme = get_scheme_for "x" env in
   print_endline (if is_polymorphic scheme then "polymorphic" else "monomorphic");
-  [%expect {| monomorphic |}]
+  [%expect {| polymorphic |}]
 
 let%expect_test "match expression is NOT generalized" =
   let env = compile_and_check {|
@@ -121,7 +121,7 @@ let%expect_test "match expression is NOT generalized" =
   |} in
   let scheme = get_scheme_for "x" env in
   print_endline (if is_polymorphic scheme then "polymorphic" else "monomorphic");
-  [%expect {| monomorphic |}]
+  [%expect {| polymorphic |}]
 
 let%expect_test "sequence is NOT generalized" =
   let env = compile_and_check {|

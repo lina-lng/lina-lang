@@ -1,0 +1,20 @@
+(* GADTs: type-aware exhaustiveness checking *)
+(* Expected: ACCEPT - no warning for type-unreachable constructors *)
+
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+
+(* When scrutinee is bool expr, Int is type-unreachable *)
+(* Should NOT warn about missing Int case *)
+let eval_bool (e : bool expr) : bool =
+  match e with
+  | Bool b -> b
+
+(* When scrutinee is int expr, Bool is type-unreachable *)
+(* Should NOT warn about missing Bool case *)
+let eval_int (e : int expr) : int =
+  match e with
+  | Int n -> n
+
+let () = print_int (eval_int (Int 42))

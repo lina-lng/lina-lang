@@ -93,6 +93,54 @@ val check_type_expression_with_params :
   Parsing.Syntax_tree.type_expression ->
   Types.type_expression * Typing_context.t
 
+(** [check_gadt_return_type ctx param_names param_vars ty_expr]
+    checks a GADT constructor return type, accumulating fresh type variables.
+
+    This ensures that multiple occurrences of the same type variable name
+    (like 'a in [('a, 'a) eq]) map to the same semantic variable, which is
+    essential for GADT constructors that constrain type parameters.
+
+    @param ctx The typing context
+    @param param_names List of type parameter names from the type declaration
+    @param param_vars Corresponding list of semantic type variables
+    @param ty_expr The syntactic return type expression
+    @return A tuple [(type_expr, updated_ctx, gadt_params)] where gadt_params
+            are the fresh type variables introduced in the return type
+    @raise Compiler_error.Type_error on unbound types *)
+val check_gadt_return_type :
+  Typing_context.t ->
+  string list ->
+  Types.type_variable list ->
+  Parsing.Syntax_tree.type_expression ->
+  Types.type_expression * Typing_context.t * Types.type_variable list
+
+(** [check_gadt_constructor ctx param_names param_vars arg_ty_expr_opt ret_ty_expr]
+    checks a GADT constructor's argument and return types together, ensuring
+    type variables are shared between them.
+
+    For a constructor like [Pair : ('a expr * 'b expr) -> ('a * 'b) expr],
+    this ensures that 'a and 'b refer to the same type variables in both
+    the argument and return type positions.
+
+    The function parses the return type first (accumulating fresh type variables),
+    then parses the argument type using the same variable mapping.
+
+    @param ctx The typing context
+    @param param_names List of type parameter names from the type declaration
+    @param param_vars Corresponding list of semantic type variables
+    @param arg_ty_expr_opt Optional syntactic argument type expression
+    @param ret_ty_expr The syntactic return type expression
+    @return A tuple [(arg_type, ret_type, gadt_params, ctx)] where gadt_params
+            are the fresh type variables introduced in the constructor
+    @raise Compiler_error.Type_error on unbound types *)
+val check_gadt_constructor :
+  Typing_context.t ->
+  string list ->
+  Types.type_variable list ->
+  Parsing.Syntax_tree.type_expression option ->
+  Parsing.Syntax_tree.type_expression ->
+  Types.type_expression option * Types.type_expression * Types.type_variable list * Typing_context.t
+
 (** [module_path_to_internal_path base_id path_modules] converts a module path
     to an internal path representation.
 

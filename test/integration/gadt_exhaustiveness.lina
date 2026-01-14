@@ -1,0 +1,27 @@
+(* GADT exhaustiveness - should compile without warnings for
+   type-unreachable constructors *)
+
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+
+(* Only Bool can produce bool expr - no warning for missing Int *)
+let eval_bool (e : bool expr) : bool =
+  match e with
+  | Bool b -> b
+
+(* Only Int can produce int expr - no warning for missing Bool *)
+let eval_int (e : int expr) : int =
+  match e with
+  | Int n -> n
+
+(* Test with polymorphic scrutinee - all constructors required *)
+let eval (type a) (e : a expr) : a =
+  match e with
+  | Int n -> n
+  | Bool b -> b
+
+let _ = print (eval_bool (Bool true))
+let _ = print (eval_int (Int 42))
+let _ = print (eval (Int 100))
+let _ = print (eval (Bool false))

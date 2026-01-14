@@ -21,6 +21,8 @@ let rec strip_type_locations (t : Syntax_tree.type_expression) :
         Syntax_tree.TypeRecord (List.map strip_type_record_field_locations fields, is_open)
     | Syntax_tree.TypePolyVariant row ->
         Syntax_tree.TypePolyVariant (strip_poly_variant_row_locations row)
+    | Syntax_tree.TypeForall (vars, body) ->
+        Syntax_tree.TypeForall (vars, strip_type_locations body)
   in
   { value = desc; location = Location.none }
 

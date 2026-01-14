@@ -1,0 +1,15 @@
+(* Relaxed value restriction: invariant type vars NOT generalized *)
+(* Expected: REJECT - ref is invariant, blocks generalization *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let make_ref_list () = ref Nil
+
+(* make_ref_list () is NOT a value *)
+(* 'a list ref is invariant in 'a (ref is invariant) *)
+(* Relaxed VR does NOT help with invariant types *)
+let r = make_ref_list ()
+
+(* Should NOT be polymorphic - first use fixes type *)
+let _ = r := Cons (1, Nil)
+let _ = r := Cons (true, Nil)

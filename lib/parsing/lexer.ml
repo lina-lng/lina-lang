@@ -372,6 +372,7 @@ let lex_real_token state =
   (* Comparison operators - multi-char first *)
   | "==" -> make_token EQUAL_EQUAL state
   | "!=" -> make_token NOT_EQUAL state
+  | "<>" -> make_token NOT_EQUAL state
   | '!' -> make_token BANG state
   | "<=" -> make_token LESS_EQUAL state
   | ">=" -> make_token GREATER_EQUAL state

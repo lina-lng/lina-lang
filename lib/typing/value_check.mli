@@ -107,7 +107,28 @@ val check_variance : Types.type_variable -> Types.type_expression -> variance
     A variable can be generalized if it appears only in covariant positions
     or does not appear at all (bivariant).
 
+    Note: This version doesn't look up declared variances from type definitions.
+    Use [can_generalize_relaxed_with_lookup] for full accuracy with user-defined
+    types that have contravariant parameters.
+
     @param type_var The type variable to check
     @param ty The type expression containing the variable
     @return [true] if safe to generalize under relaxed rules *)
 val can_generalize_relaxed : Types.type_variable -> Types.type_expression -> bool
+
+(** [can_generalize_relaxed_with_lookup ~type_lookup type_var ty] is like
+    [can_generalize_relaxed] but uses a type lookup function to find
+    declared variances for user-defined type constructors.
+
+    This is more accurate for types with non-covariant parameters, e.g.:
+    - [type 'a consumer = Consumer of ('a -> unit)] - 'a is contravariant
+
+    @param type_lookup Function to look up type declarations by path
+    @param type_var The type variable to check
+    @param ty The type expression containing the variable
+    @return [true] if safe to generalize under relaxed rules *)
+val can_generalize_relaxed_with_lookup :
+  type_lookup:(Types.path -> Types.type_declaration option) ->
+  Types.type_variable ->
+  Types.type_expression ->
+  bool

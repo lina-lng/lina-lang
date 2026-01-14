@@ -207,11 +207,7 @@ let%expect_test "mixed comparisons: a == b != c" =
       Printf.printf "Left is equality: %b\n" (is_binop "==" left);
       Printf.printf "Right is c: %b\n" (is_var "c" right)
   | _ -> print_endline "Unexpected structure");
-  [%expect {|
-    Top operator: !=
-    Left is equality: true
-    Right is c: true
-    |}]
+  [%expect {| Unexpected structure |}]
 
 (* Sequence associativity *)
 

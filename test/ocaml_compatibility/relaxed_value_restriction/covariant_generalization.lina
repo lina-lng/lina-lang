@@ -1,0 +1,16 @@
+(* Relaxed value restriction: covariant type vars generalized for non-values *)
+(* Expected: ACCEPT - list is covariant, so 'a list can be generalized *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let id x = x
+
+(* id Nil is an APPLICATION (not a syntactic value) *)
+(* But 'a list is covariant in 'a, so relaxed VR allows generalization *)
+let empty = id Nil
+
+(* Should be polymorphic - usable at multiple types *)
+let int_list : int list = empty
+let bool_list : bool list = empty
+
+let _ = print 0

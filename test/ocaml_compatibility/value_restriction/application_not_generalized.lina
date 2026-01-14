@@ -1,0 +1,14 @@
+(* Value restriction: function application is NOT a syntactic value *)
+(* Expected: REJECT - r should have weak/mono type, not polymorphic *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let id x = x
+
+(* Application (id Nil) is NOT a syntactic value *)
+(* With strict value restriction, this gets weak type '_a list *)
+let r = id Nil
+
+(* Trying to use at different types should fail *)
+let _ = match r with Nil -> 0 | Cons (x, _) -> x
+let _ = match r with Nil -> true | Cons (x, _) -> x

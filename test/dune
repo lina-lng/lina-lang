@@ -217,3 +217,11 @@
  (modules test_error_nodes)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; GADT (Generalized Algebraic Data Types) tests
+(library
+ (name test_gadts)
+ (libraries parsing typing lambda lua driver common unix)
+ (modules test_gadts)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

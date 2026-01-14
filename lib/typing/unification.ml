@@ -197,19 +197,21 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
   if ty1 == ty2 then ()
   else match ty1, ty2 with
   | TypeVariable tv1, TypeVariable tv2 ->
-    (* Don't link rigid variables - they're handled by GADT equation extraction *)
+    (* Handle rigid type variables carefully.
+       Rigid variables come from locally abstract types: (type a).
+       They must not escape or unify with concrete types. *)
     if tv1.rigid && tv2.rigid then begin
       (* Both rigid - must be the same variable *)
       if tv1.id <> tv2.id then
         unification_error location ty1 ty2
           "Cannot unify different rigid type variables"
-    end else if tv1.rigid then
+    end else if tv1.rigid then begin
       (* tv1 is rigid - don't link it, link tv2 instead if not rigid *)
       if not tv2.rigid then tv2.link <- Some ty1
-    else if tv2.rigid then
+    end else if tv2.rigid then begin
       (* tv2 is rigid - don't link it *)
       tv1.link <- Some ty2
-    else begin
+    end else begin
       (* Neither is rigid - normal unification *)
       if tv1.level < tv2.level then
         tv2.link <- Some ty1
@@ -218,11 +220,28 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
     end
 
   | TypeVariable tv, ty | ty, TypeVariable tv ->
-    (* Don't link rigid variables - GADT equations handle the type refinement *)
     if tv.rigid then
-      (* Rigid variable: succeed without linking.
-         The GADT equation extraction records this relationship. *)
-      ()
+      (* Rigid variable: cannot unify with concrete types.
+         This ensures (type a) in function parameters stays abstract.
+         Only type variables can be unified with rigid variables. *)
+      begin match ty with
+      | TypeVariable tv2 when not tv2.rigid ->
+        (* Non-rigid variable can be linked to rigid variable *)
+        tv2.link <- Some (TypeVariable tv)
+      | TypeVariable tv2 when tv2.rigid && tv.id = tv2.id ->
+        (* Same rigid variable - OK *)
+        ()
+      | TypeVariable tv2 when tv2.rigid ->
+        (* Different rigid variables - error *)
+        unification_error location (TypeVariable tv) ty
+          "Cannot unify different rigid type variables"
+      | _ ->
+        (* Rigid variable vs concrete type - error *)
+        unification_error location (TypeVariable tv) ty
+          (Printf.sprintf "The type %s is abstract and cannot be unified with %s"
+            (type_expression_to_string (TypeVariable tv))
+            (type_expression_to_string ty))
+      end
     else begin
       occurs_check location tv ty;
       tv.link <- Some ty

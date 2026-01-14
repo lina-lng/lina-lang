@@ -42,11 +42,27 @@ let ensure_module_accessible loc (mty : Module_types.module_type) =
 
 (** {1 Value Restriction and Generalization} *)
 
+(** Compute binding scheme with environment for proper variance checking. *)
+let compute_binding_scheme_with_env ~level ~env typed_expr ty =
+  if Value_check.is_value typed_expr then
+    Type_scheme.generalize ~level ty
+  else begin
+    (* Relaxed value restriction: generalize covariant-only variables.
+       Use the environment to look up declared variances for user-defined types. *)
+    let type_lookup path = Environment.find_type_by_path path env in
+    let predicate tv ty =
+      Value_check.can_generalize_relaxed_with_lookup ~type_lookup tv ty
+    in
+    Type_scheme.generalize_with_filter ~level predicate ty
+  end
+
 let compute_binding_scheme ~level typed_expr ty =
   if Value_check.is_value typed_expr then
     Type_scheme.generalize ~level ty
   else
-    (* Relaxed value restriction: generalize covariant-only variables *)
+    (* Relaxed value restriction: generalize covariant-only variables.
+       Note: This version doesn't look up declared variances - use
+       compute_binding_scheme_with_env for full accuracy. *)
     Type_scheme.generalize_with_filter ~level Value_check.can_generalize_relaxed ty
 
 (** {1 Module Path Extraction} *)

@@ -1,0 +1,13 @@
+(* Locally abstract types: with type annotation *)
+(* Expected: ACCEPT - 'type a.' annotation for polymorphic recursion *)
+
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+
+let rec eval : type a. a expr -> a = fun e ->
+  match e with
+  | Int n -> n
+  | Bool b -> b
+
+let () = print_int (eval (Int 42))

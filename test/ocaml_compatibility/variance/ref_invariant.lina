@@ -1,0 +1,14 @@
+(* Variance: ref is invariant in its type parameter *)
+(* Expected: REJECT - ref is invariant, cannot generalize *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let id x = x
+
+(* ref (id Nil) is NOT a value *)
+(* ref is invariant, so relaxed VR doesn't help *)
+let r = ref (id Nil)
+
+(* Should fail - r is monomorphic after first use *)
+let _ = (r : int list ref)
+let _ = (r : bool list ref)

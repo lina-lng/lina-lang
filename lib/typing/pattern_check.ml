@@ -28,9 +28,9 @@ type witness =
 
 (* Constructor signature - all constructors of a type *)
 type constructor_signature =
-  | SigVariant of (string * bool) list  (* (name, has_arg) pairs *)
+  | SigVariant of (string * Types.type_expression option) list  (* (name, arg_type) pairs *)
   | SigBool
-  | SigTuple of int
+  | SigTuple of int * Types.type_expression list  (* arity, element types *)
   | SigInfinite  (* int, float, string *)
 
 (* Convert typed pattern to simple pattern *)
@@ -88,9 +88,35 @@ and constant_to_string = function
   | ConstString s -> Printf.sprintf "\"%s\"" s
   | ConstBool b -> string_of_bool b
 
-(* Get constructor signature from environment *)
-let get_signature env (ty : Types.type_expression) : constructor_signature =
-  match Types.representative ty with
+(** Check if a GADT constructor can produce the scrutinee type.
+    For non-GADTs, always returns true. For GADTs, checks if the
+    constructor's result type can unify with the scrutinee type.
+    Uses fresh type copies to avoid polluting the original types. *)
+let is_constructor_reachable env scrutinee_type (ctor : Types.constructor_info) =
+  if not ctor.constructor_is_gadt then
+    true  (* Non-GADT constructors are always reachable *)
+  else
+    (* Create fresh type variables at generic level for copies *)
+    let fresh_var () = Types.new_type_variable_at_level Types.generic_level in
+    (* Instantiate constructor with fresh variables *)
+    let _, instantiated_result =
+      Type_utils.instantiate_constructor ~fresh_var ctor in
+    (* Create a fresh copy of scrutinee to avoid polluting it *)
+    let scrutinee_copy =
+      Type_scheme.instantiate_all_fresh ~fresh_var scrutinee_type in
+    (* Try unification - if it fails, constructor is unreachable *)
+    try
+      let type_lookup path = Environment.find_type_by_path path env in
+      Unification.unify ~type_lookup Location.none
+        scrutinee_copy instantiated_result;
+      true
+    with Unification.Unification_error _ ->
+      false
+
+(* Get constructor signature from environment.
+   For GADT types, filters out constructors that cannot produce the scrutinee type. *)
+let get_signature env (scrutinee_type : Types.type_expression) : constructor_signature =
+  match Types.representative scrutinee_type with
   | Types.TypeConstructor (Types.PathBuiltin Types.BuiltinBool, _) ->
     SigBool
   | Types.TypeConstructor (Types.PathBuiltin _, _) ->
@@ -98,13 +124,35 @@ let get_signature env (ty : Types.type_expression) : constructor_signature =
   | Types.TypeConstructor (Types.PathLocal name, _) ->
     begin match Environment.find_type_constructors name env with
     | Some ctors ->
+      (* Filter out type-unreachable GADT constructors *)
+      let reachable_ctors = List.filter
+        (is_constructor_reachable env scrutinee_type) ctors in
       let ctor_info = List.map (fun (c : Types.constructor_info) ->
-        (c.constructor_name, Option.is_some c.constructor_argument_type)
-      ) ctors in
+        (c.constructor_name, c.constructor_argument_type)
+      ) reachable_ctors in
       SigVariant ctor_info
     | None -> SigInfinite
     end
-  | Types.TypeTuple elements -> SigTuple (List.length elements)
+  | Types.TypeConstructor (Types.PathIdent _, _) ->
+    (* Handle module-qualified type paths *)
+    begin match Environment.find_type_by_path (match Types.representative scrutinee_type with
+      | Types.TypeConstructor (path, _) -> path
+      | _ -> Types.PathLocal "") env
+    with
+    | Some decl ->
+      begin match decl.Types.declaration_kind with
+      | Types.DeclarationVariant ctors ->
+        let reachable_ctors = List.filter
+          (is_constructor_reachable env scrutinee_type) ctors in
+        let ctor_info = List.map (fun (c : Types.constructor_info) ->
+          (c.constructor_name, c.constructor_argument_type)
+        ) reachable_ctors in
+        SigVariant ctor_info
+      | _ -> SigInfinite
+      end
+    | None -> SigInfinite
+    end
+  | Types.TypeTuple elements -> SigTuple (List.length elements, elements)
   | _ -> SigInfinite
 
 (* Check if a pattern is a wildcard (matches anything) *)
@@ -142,7 +190,7 @@ let is_complete_signature (heads : simple_pattern list) (sig_ : constructor_sign
     (* Tuple has one constructor, complete if any tuple pattern present *)
     List.exists (function PatTuple _ -> true | _ -> false) heads
   | SigVariant ctors ->
-    List.for_all (fun (constructor_name, _) ->
+    List.for_all (fun (constructor_name, _arg_type) ->
       List.exists (function
         | PatConstructor (name, _) -> name = constructor_name
         | _ -> false
@@ -154,7 +202,7 @@ let head_arity (head : simple_pattern) (sig_ : constructor_signature) : int =
   match head, sig_ with
   | PatTuple pats, _ -> List.length pats
   | PatConstructor (name, _), SigVariant ctors ->
-    if List.exists (fun (n, has_arg) -> n = name && has_arg) ctors then 1
+    if List.exists (fun (ctor_name, arg_type) -> ctor_name = name && Option.is_some arg_type) ctors then 1
     else 0
   | PatConstructor (_, Some _), _ -> 1
   | PatConstructor (_, None), _ -> 0
@@ -213,27 +261,27 @@ let default_matrix (matrix : pattern_matrix) : pattern_matrix =
       else None
   ) matrix
 
-(* Get all constructors from a signature *)
-let all_constructors (sig_ : constructor_signature) : (simple_pattern * int) list =
+(* Get all constructors from a signature with their argument types *)
+let all_constructors (sig_ : constructor_signature) : (simple_pattern * int * Types.type_expression option) list =
   match sig_ with
   | SigBool ->
-    [(PatConstant (ConstBool true), 0); (PatConstant (ConstBool false), 0)]
-  | SigTuple arity ->
-    [(PatTuple (List.init arity (fun _ -> PatWildcard)), arity)]
+    [(PatConstant (ConstBool true), 0, None); (PatConstant (ConstBool false), 0, None)]
+  | SigTuple (arity, _element_types) ->
+    [(PatTuple (List.init arity (fun _ -> PatWildcard)), arity, None)]
   | SigVariant ctors ->
-    List.map (fun (name, has_arg) ->
-      let arg = if has_arg then Some PatWildcard else None in
-      (PatConstructor (name, arg), if has_arg then 1 else 0)
+    List.map (fun (name, arg_type) ->
+      let arg = if Option.is_some arg_type then Some PatWildcard else None in
+      (PatConstructor (name, arg), (if Option.is_some arg_type then 1 else 0), arg_type)
     ) ctors
   | SigInfinite ->
     []
 
-(* Find a missing constructor not covered by heads *)
-let find_missing_constructor (heads : simple_pattern list) (sig_ : constructor_signature) : (simple_pattern * int) option =
+(* Find a missing constructor not covered by heads, returning (pattern, arity, arg_type option) *)
+let find_missing_constructor (heads : simple_pattern list) (sig_ : constructor_signature) : (simple_pattern * int * Types.type_expression option) option =
   let all = all_constructors sig_ in
-  List.find_opt (fun (ctor, _) ->
-    not (List.exists (fun h ->
-      match ctor, h with
+  List.find_opt (fun (ctor, _arity, _arg_type) ->
+    not (List.exists (fun head ->
+      match ctor, head with
       | PatConstant c1, PatConstant c2 -> c1 = c2
       | PatConstructor (n1, _), PatConstructor (n2, _) -> n1 = n2
       | PatTuple _, PatTuple _ -> true
@@ -261,7 +309,7 @@ let rec is_useful_with_witness env (types : Types.type_expression list) (matrix 
       | Some sub_witness ->
         (* Found! Build witness with missing constructor *)
         begin match find_missing_constructor heads sig_ with
-        | Some (missing, arity) ->
+        | Some (missing, arity, _arg_type) ->
           let wit = make_witness missing arity sub_witness in
           Some wit
         | None ->
@@ -276,10 +324,11 @@ let rec is_useful_with_witness env (types : Types.type_expression list) (matrix 
           (* Non-wildcard pattern in incomplete signature *)
           let head = first_pat in
           let arity = head_arity head sig_ in
+          let arg_type = get_constructor_arg_type head sig_ in
           let specialized = specialize matrix head arity in
           match expand_pattern first_pat head arity with
           | Some sub_pats ->
-            let sub_types = make_sub_types first_ty arity in
+            let sub_types = make_sub_types env first_ty arg_type arity in
             begin match is_useful_with_witness env (sub_types @ rest_types) specialized (sub_pats @ rest_vector) with
             | Some sub_witness -> Some (extract_witness head arity sub_witness)
             | None -> None
@@ -293,11 +342,11 @@ let rec is_useful_with_witness env (types : Types.type_expression list) (matrix 
 
 and try_all_constructors env ty rest_types sig_ matrix vector =
   let all = all_constructors sig_ in
-  List.find_map (fun (ctor, arity) ->
+  List.find_map (fun (ctor, arity, arg_type) ->
     let specialized = specialize matrix ctor arity in
     match expand_pattern (List.hd vector) ctor arity with
     | Some sub_pats ->
-      let sub_types = make_sub_types ty arity in
+      let sub_types = make_sub_types env ty arg_type arity in
       begin match is_useful_with_witness env (sub_types @ rest_types) specialized (sub_pats @ List.tl vector) with
       | Some sub_witness ->
         Some (extract_witness ctor arity sub_witness)
@@ -308,14 +357,29 @@ and try_all_constructors env ty rest_types sig_ matrix vector =
       None
   ) all
 
+(* Look up constructor argument type from signature by pattern *)
+and get_constructor_arg_type (head : simple_pattern) (sig_ : constructor_signature) : Types.type_expression option =
+  match head with
+  | PatConstructor (name, _) ->
+    begin match sig_ with
+    | SigVariant ctors ->
+      begin match List.find_opt (fun (ctor_name, _) -> ctor_name = name) ctors with
+      | Some (_, arg_type) -> arg_type
+      | None -> None
+      end
+    | _ -> None
+    end
+  | _ -> None
+
 and try_existing_constructors env ty rest_types heads matrix vector =
   List.find_map (fun head ->
     let sig_ = get_signature env ty in
     let arity = head_arity head sig_ in
+    let arg_type = get_constructor_arg_type head sig_ in
     let specialized = specialize matrix head arity in
     match expand_pattern (List.hd vector) head arity with
     | Some sub_pats ->
-      let sub_types = make_sub_types ty arity in
+      let sub_types = make_sub_types env ty arg_type arity in
       begin match is_useful_with_witness env (sub_types @ rest_types) specialized (sub_pats @ List.tl vector) with
       | Some sub_witness ->
         Some (extract_witness head arity sub_witness)
@@ -324,11 +388,19 @@ and try_existing_constructors env ty rest_types heads matrix vector =
     | None -> None
   ) heads
 
-and make_sub_types ty arity =
-  (* Create placeholder types for sub-patterns *)
-  (* For proper handling, we'd need to track types through patterns *)
-  (* For now, use the same type (works for simple cases) *)
-  List.init arity (fun _ -> ty)
+(* Create sub-pattern types from constructor argument type or tuple elements *)
+and make_sub_types env scrutinee_type arg_type_opt arity =
+  match arg_type_opt with
+  | Some arg_ty ->
+    (* Constructor has argument - use its type for the single sub-pattern *)
+    [arg_ty]
+  | None ->
+    (* No explicit argument type - check if scrutinee is a tuple *)
+    match get_signature env scrutinee_type with
+    | SigTuple (_n, element_types) -> element_types
+    | _ ->
+      (* Fallback: replicate scrutinee type (works for non-variant cases) *)
+      List.init arity (fun _ -> scrutinee_type)
 
 and make_witness (ctor : simple_pattern) (arity : int) (sub_witness : witness) : witness =
   match ctor with

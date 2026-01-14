@@ -31,7 +31,7 @@ let%expect_test "value definition: recursive" =
 let%expect_test "value definition: multiple with and" =
   let result = format "let rec even n = n = 0 and odd n = n <> 0" in
   print_string result;
-  [%expect {| let rec even n = n = 0 and odd n = n <> 0 |}]
+  [%expect {| let rec even n = n = 0 and odd n = n != 0 |}]
 
 let%expect_test "value definition: with type annotation" =
   let result = format "let x : int = 42" in

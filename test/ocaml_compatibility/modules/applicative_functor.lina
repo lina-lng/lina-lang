@@ -1,0 +1,23 @@
+(* Modules: applicative functor semantics *)
+(* Expected: ACCEPT - F(M).t = F(M).t when applied to same paths *)
+
+module type T = sig
+  type t
+end
+
+module F (X : T) = struct
+  type t = X.t
+end
+
+module M = struct
+  type t = int
+end
+
+module A = F (M)
+module B = F (M)
+
+(* With applicative functor semantics, A.t = B.t *)
+let f (x : A.t) : B.t = x
+let g (x : B.t) : A.t = x
+
+let _ = print 0

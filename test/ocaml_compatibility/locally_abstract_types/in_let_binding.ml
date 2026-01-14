@@ -1,0 +1,9 @@
+(* Locally abstract types: in let binding *)
+(* Expected: ACCEPT - locally abstract type in let *)
+
+let f (type a) (x : a) : a =
+  let y : a = x in
+  y
+
+let result = f 42
+let () = print_int result

@@ -92,12 +92,34 @@ val ensure_module_accessible : Location.t -> Module_types.module_type -> unit
     - For syntactic values: full generalization
     - For non-values: only covariant type variables are generalized
 
+    Note: This version doesn't look up declared variances from type definitions.
+    Use [compute_binding_scheme_with_env] for full accuracy with user-defined types.
+
     @param level The current binding level (from {!Typing_context.current_level})
     @param typed_expr The typed expression (to check if it's a value)
     @param ty The type to generalize
     @return A type scheme with appropriately generalized variables *)
 val compute_binding_scheme :
   level:int -> Typed_tree.typed_expression -> Types.type_expression -> Types.type_scheme
+
+(** [compute_binding_scheme_with_env ~level ~env typed_expr ty] is like
+    [compute_binding_scheme] but uses the environment to look up declared
+    variances for user-defined type constructors.
+
+    This correctly handles types with non-covariant parameters, e.g.:
+    - [type 'a consumer = Consumer of ('a -> unit)] - 'a is contravariant
+
+    @param level The current binding level
+    @param env The typing environment for type lookup
+    @param typed_expr The typed expression (to check if it's a value)
+    @param ty The type to generalize
+    @return A type scheme with appropriately generalized variables *)
+val compute_binding_scheme_with_env :
+  level:int ->
+  env:Environment.t ->
+  Typed_tree.typed_expression ->
+  Types.type_expression ->
+  Types.type_scheme
 
 (** {1 Module Path Extraction} *)
 

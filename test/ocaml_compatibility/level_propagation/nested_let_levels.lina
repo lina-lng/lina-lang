@@ -1,0 +1,11 @@
+(* Level propagation: nested let properly assigns levels *)
+(* Expected: ACCEPT - inner binding can be polymorphic *)
+
+let outer =
+  let inner = fun x -> x in
+  (* inner should be polymorphic within outer *)
+  let a = inner 42 in
+  let b = inner true in
+  a
+
+let _ = print outer

@@ -1,0 +1,14 @@
+(* Value restriction: ref is invariant, NEVER polymorphic *)
+(* Expected: REJECT - ref is invariant, so type variable cannot be generalized *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+(* ref Nil is an application (not a value) AND ref is invariant *)
+(* Even with relaxed value restriction, this cannot be polymorphic *)
+let r = ref Nil
+
+(* First use fixes the type *)
+let _ = r := Cons (1, Nil)
+
+(* Second use at different type MUST fail *)
+let _ = r := Cons (true, Nil)

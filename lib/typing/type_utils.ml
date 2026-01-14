@@ -94,6 +94,8 @@ and substitute_path_in_row ~old_path ~new_path (row : row) : row =
   { row_fields = new_fields; row_more = new_more }
 
 and substitute_path_in_type ~old_path ~new_path ty =
+  (* Follow type variable links to get the actual type structure *)
+  let ty = representative ty in
   match ty with
   | TypeConstructor (path, args) ->
     let new_type_path = substitute_path_prefix ~old_path ~new_path path in

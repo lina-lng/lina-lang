@@ -1,0 +1,45 @@
+(* Polymorphic recursion tests *)
+
+(* GADT definition with Add constructor (tuple argument) *)
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+  | Add : (int expr * int expr) -> int expr
+
+(* Polymorphic recursive GADT evaluator
+   This requires polymorphic recursion because:
+   - In the Int branch, a = int
+   - In the Bool branch, a = bool
+   - In the Add branch, a = int but recursive calls use fresh type variables *)
+let rec eval : type a. a expr -> a = fun e ->
+  match e with
+  | Int n -> n
+  | Bool b -> b
+  | Add (x, y) -> eval x + eval y
+
+(* Test all constructors *)
+let _ = print (eval (Int 42))
+let _ = print (eval (Bool true))
+let _ = print (eval (Int 100))
+let _ = print (eval (Bool false))
+
+(* Test Add with recursive eval calls *)
+let _ = print (eval (Add (Int 10, Int 32)))
+let _ = print (eval (Add (Add (Int 1, Int 2), Int 3)))
+
+(* Simple polymorphic recursion (non-GADT) *)
+let rec id : type a. a -> a = fun x -> x
+
+let _ = print (id 200)
+let _ = print (id true)
+
+(* Expected output:
+   42
+   true
+   100
+   false
+   42
+   6
+   200
+   true
+*)

@@ -1,0 +1,21 @@
+(* Modules: basic functor *)
+(* Expected: ACCEPT - simple functor definition *)
+
+module type SHOW = sig
+  type t
+  val show : t -> string
+end
+
+module MakeShowable (S : SHOW) = struct
+  let display x = S.show x
+end
+
+module IntShow = struct
+  type t = int
+  let show n = "int"
+end
+
+module ShowInt = MakeShowable (IntShow)
+
+let result = ShowInt.display 42
+let () = print_int 0

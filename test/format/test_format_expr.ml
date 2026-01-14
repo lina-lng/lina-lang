@@ -46,7 +46,7 @@ let%expect_test "let expression: nested let-in" =
 let%expect_test "let expression: multiple bindings with and" =
   let result = format "let rec even n = n = 0 and odd n = n <> 0" in
   print_string result;
-  [%expect {| let rec even n = n = 0 and odd n = n <> 0 |}]
+  [%expect {| let rec even n = n = 0 and odd n = n != 0 |}]
 
 let%expect_test "let expression: extra whitespace normalized" =
   let result = format "let  x  =  42" in

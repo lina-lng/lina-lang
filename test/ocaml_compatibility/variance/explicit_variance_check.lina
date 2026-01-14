@@ -1,0 +1,17 @@
+(* Variance: explicit variance annotation must match inferred *)
+(* Expected: ACCEPT - covariant annotation matches inferred variance *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+(* Wrapper that is covariant - explicit annotation *)
+type +'a wrapper = Wrap of 'a list
+
+let id x = x
+
+(* With explicit covariant annotation, relaxed VR should work *)
+let w = id (Wrap Nil)
+
+let _ = (w : int wrapper)
+let _ = (w : bool wrapper)
+
+let _ = print 0

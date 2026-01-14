@@ -1,0 +1,19 @@
+(* Variance: function result position is covariant *)
+(* Expected: ACCEPT - 'a in (unit -> 'a) is covariant *)
+
+type 'a producer = MkProducer of (unit -> 'a)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+let id x = x
+
+(* id (MkProducer (fun () -> Nil)) is NOT a value *)
+(* 'a producer has 'a in covariant position (function result) *)
+(* Covariant vars can be generalized with relaxed VR *)
+let p = id (MkProducer (fun () -> Nil))
+
+(* Should work - covariant position allows generalization *)
+let _ = (p : int list producer)
+let _ = (p : bool list producer)
+
+let _ = print 0

@@ -29,8 +29,8 @@ module M = struct
 end
 |});
   [%expect{|
-    local x_11 = 42
-    local M_12 = {x = x_11}
+    local x_13 = 42
+    local M_14 = {x = x_13}
     |}]
 
 let%expect_test "module with multiple bindings" =
@@ -41,15 +41,15 @@ module Math = struct
 end
 |});
   [%expect{|
-    local function add_15(x_13, y_14)
-      return x_13 + y_14
+    local function add_17(x_15, y_16)
+      return x_15 + y_16
     end
-    local function sub_18(x_16, y_17)
-      return x_16 - y_17
+    local function sub_20(x_18, y_19)
+      return x_18 - y_19
     end
-    local add_15 = add_15
-    local sub_18 = sub_18
-    local Math_19 = {add = add_15, sub = sub_18}
+    local add_17 = add_17
+    local sub_20 = sub_20
+    local Math_21 = {add = add_17, sub = sub_20}
     |}]
 
 let%expect_test "module value access" =
@@ -60,9 +60,9 @@ end
 let y = M.x
 |});
   [%expect{|
-    local x_20 = 42
-    local M_21 = {x = x_20}
-    local y_22 = M_21.x
+    local x_22 = 42
+    local M_23 = {x = x_22}
+    local y_24 = M_23.x
     |}]
 
 let%expect_test "module function access and call" =
@@ -86,9 +86,9 @@ module Outer = struct
 end
 |});
   [%expect{|
-    local x_29 = 42
-    local Inner_30 = {x = x_29}
-    local Outer_31 = {Inner = Inner_30}
+    local x_31 = 42
+    local Inner_32 = {x = x_31}
+    local Outer_33 = {Inner = Inner_32}
     |}]
 
 let%expect_test "nested module access" =
@@ -115,9 +115,9 @@ end = struct
 end
 |});
   [%expect{|
-    local x_38 = 42
-    local hidden_39 = 99
-    local M_40 = {x = x_38, hidden = hidden_39}
+    local x_40 = 42
+    local hidden_41 = 99
+    local M_42 = {x = x_40, hidden = hidden_41}
     |}]
 
 let%expect_test "signature hides value" =
@@ -131,10 +131,10 @@ end
 let y = M.x
 |});
   [%expect{|
-    local x_41 = 42
-    local hidden_42 = 99
-    local M_43 = {x = x_41, hidden = hidden_42}
-    local y_44 = M_43.x
+    local x_43 = 42
+    local hidden_44 = 99
+    local M_45 = {x = x_43, hidden = hidden_44}
+    local y_46 = M_45.x
     |}]
 
 let%expect_test "signature mismatch - missing value" =
@@ -172,8 +172,8 @@ module MakeDouble = functor (X : sig val x : int end) -> struct
 end
 |});
   [%expect{|
-    local MakeDouble_54 = function(X_52)
-      return {doubled = X_52.x + X_52.x}
+    local MakeDouble_56 = function(X_54)
+      return {doubled = X_54.x + X_54.x}
     end
     |}]
 
@@ -244,12 +244,12 @@ open M
 let z = x + y
 |});
   [%expect{|
-    local x_84 = 10
-    local y_85 = 20
-    local M_86 = {x = x_84, y = y_85}
-    local x_87 = M_86.x
-    local y_88 = M_86.y
-    local z_89 = x_87 + y_88
+    local x_86 = 10
+    local y_87 = 20
+    local M_88 = {x = x_86, y = y_87}
+    local x_89 = M_88.x
+    local y_90 = M_88.y
+    local z_91 = x_89 + y_90
     |}]
 
 let%expect_test "open module - runtime" =
@@ -484,8 +484,8 @@ module Empty = struct end
 let _ = print 1
 |});
   [%expect{|
-    local Empty_182 = {}
-    local _top_183 = print(1)
+    local Empty_184 = {}
+    local _top_185 = print(1)
     |}]
 
 let%expect_test "single value module" =
@@ -583,10 +583,6 @@ let _ = print (Stack.top s)
   [%expect{|
     3
     2
-    File "<string>", line 7, characters 14-28:
-    Warning: Non-exhaustive pattern matching, missing case: Push Empty
-    File "<string>", line 10, characters 14-22:
-    Warning: Non-exhaustive pattern matching, missing case: Push Empty
     |}]
 
 let%expect_test "counter module" =
@@ -993,13 +989,13 @@ let f (x : t) = match x with
   | B n -> n
 |});
   [%expect{|
-    local function f_359(x_357)
-      local _scrutinee_360 = x_357
-      if _scrutinee_360._tag == 1 then
-        local n_358 = _scrutinee_360._0
-        return n_358
+    local function f_361(x_359)
+      local _scrutinee_362 = x_359
+      if _scrutinee_362._tag == 1 then
+        local n_360 = _scrutinee_362._0
+        return n_360
       else
-        if _scrutinee_360._tag == 0 then
+        if _scrutinee_362._tag == 0 then
           return 0
         else
           return error("Match failure")
@@ -1028,8 +1024,8 @@ let%expect_test "locally abstract type parses" =
 let f (type a) (x : a) = x
 |});
   [%expect{|
-    local function f_369(x_368)
-      return x_368
+    local function f_371(x_370)
+      return x_370
     end
     |}]
 
@@ -1039,8 +1035,8 @@ let%expect_test "locally abstract type introduces scoped type" =
 let f (type a) (x : a) (y : a) = (x, y)
 |});
   [%expect{|
-    local function f_373(x_371, y_372)
-      return {x_371, y_372}
+    local function f_375(x_373, y_374)
+      return {x_373, y_374}
     end
     |}]
 
@@ -1049,8 +1045,8 @@ let%expect_test "locally abstract type with multiple type params" =
 let f (type a) (type b) (x : a) (y : b) = (x, y)
 |});
   [%expect{|
-    local function f_378(x_376, y_377)
-      return {x_376, y_377}
+    local function f_380(x_378, y_379)
+      return {x_378, y_379}
     end
     |}]
 

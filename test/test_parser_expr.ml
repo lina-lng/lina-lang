@@ -595,7 +595,19 @@ let%expect_test "type annotation" =
              end_pos =
              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
            },
-         { Location.value = (Syntax_tree.TypeConstructor ("int", []));
+         { Location.value =
+           (Syntax_tree.TypeConstructor (
+              { Location.value = (Syntax_tree.Lident "int");
+                location =
+                { Location.start_pos =
+                  { Location.filename = "<string>"; line = 1; column = 5;
+                    offset = 5 };
+                  end_pos =
+                  { Location.filename = "<string>"; line = 1; column = 8;
+                    offset = 8 }
+                  }
+                },
+              []));
            location =
            { Location.start_pos =
              { Location.filename = ""; line = 0; column = 0; offset = 0 };

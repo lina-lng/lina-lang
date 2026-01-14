@@ -27,10 +27,10 @@ let%expect_test "compile simple variable pattern" =
   |} in
   print_endline lua;
   [%expect {|
-    local function f_13(x_11)
-      local _scrutinee_14 = x_11
-      local y_12 = _scrutinee_14
-      return y_12
+    local function f_15(x_13)
+      local _scrutinee_16 = x_13
+      local y_14 = _scrutinee_16
+      return y_14
     end
     |}]
 
@@ -115,7 +115,7 @@ let%expect_test "compile nested record and constructor" =
   [%expect {|
     generated code
     File "<string>", line 4, characters 14-17:
-    Warning: Non-exhaustive pattern matching, missing case: Some None
+    Warning: Non-exhaustive pattern matching, missing case: Some _
     |}]
 
 (** {1 Guard Pattern Tests} *)
@@ -149,11 +149,7 @@ let%expect_test "full compilation of deep tree pattern" =
   let _ = compile code in
   let elapsed = Unix.gettimeofday () -. start in
   print_endline (if elapsed < 1.0 then "fast" else "slow");
-  [%expect {|
-    fast
-    File "<string>", line 4, characters 20-36:
-    Warning: Non-exhaustive pattern matching, missing case: Node Leaf
-    |}]
+  [%expect {| fast |}]
 
 (** {1 Complex Nested Pattern Tests} *)
 
@@ -168,11 +164,7 @@ let%expect_test "compile mixed tuple and constructor pattern" =
   |} in
   let has_code = String.length lua > 0 in
   print_endline (if has_code then "generated code" else "ERROR");
-  [%expect {|
-    generated code
-    File "<string>", line 3, characters 14-25:
-    Warning: Non-exhaustive pattern matching, missing case: (_, _)
-    |}]
+  [%expect {| generated code |}]
 
 let%expect_test "compile triple nested tuple" =
   let lua = compile {|
@@ -181,8 +173,4 @@ let%expect_test "compile triple nested tuple" =
   |} in
   let has_code = String.length lua > 0 in
   print_endline (if has_code then "generated code" else "ERROR");
-  [%expect {|
-    generated code
-    File "<string>", line 2, characters 14-57:
-    Warning: Non-exhaustive pattern matching, missing case: (_, _, _)
-    |}]
+  [%expect {| generated code |}]

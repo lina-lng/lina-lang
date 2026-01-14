@@ -224,7 +224,9 @@ let initial =
   let env = add_builtin ">" comparison_int_type env in
   let env = add_builtin "<=" comparison_int_type env in
   let env = add_builtin ">=" comparison_int_type env in
+  let env = add_builtin "=" comparison_int_type env in
   let env = add_builtin "==" comparison_int_type env in
   let env = add_builtin "!=" comparison_int_type env in
+  let env = add_builtin "<>" comparison_int_type env in
   let env = add_builtin "print" polymorphic_print_type env in
   env

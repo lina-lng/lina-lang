@@ -39,12 +39,14 @@ type type_expression = type_expression_desc Location.located
 
 and type_expression_desc =
   | TypeVariable of string
-  | TypeConstructor of string * type_expression list
+  | TypeConstructor of longident * type_expression list  (** Type constructor with optional module path: [int], [M.t] *)
   | TypeTuple of type_expression list
   | TypeArrow of type_expression * type_expression
   | TypeRecord of type_record_field list * bool
   | TypePolyVariant of poly_variant_row
       (** Polymorphic variant type: [[ `A | `B of int ]] *)
+  | TypeForall of string list * type_expression
+      (** Universally quantified type for polymorphic recursion: [type a b. body] *)
 [@@deriving show, eq]
 
 (** A polymorphic variant type row.

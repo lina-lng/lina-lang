@@ -84,34 +84,54 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
       let indexed_constructors = List.mapi (fun index ctor -> (index, ctor)) constructors in
       let constructor_infos, ctx =
         List.fold_left (fun (infos, ctx) (tag_index, (ctor : constructor_declaration)) ->
-          (* Parse the constructor argument type using the parameter mapping.
-             This ensures that 'a in "Some of 'a" refers to the same variable
-             as the 'a type parameter. Use ctx_with_type so recursive references work. *)
-          let arg_type, ctx = match ctor.constructor_argument with
-            | Some ty_expr ->
-              let ty, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
-              (Some ty, ctx)
-            | None -> (None, ctx)
-          in
-          (* Handle GADT constructor return types *)
-          let ctor_result_type, is_gadt, ctx = match ctor.constructor_return_type with
+          (* Handle GADT vs non-GADT constructors differently:
+             - For GADT constructors, parse arg and return types together to share type variables
+             - For non-GADT constructors, just parse the argument type *)
+          let arg_type, ctor_result_type, is_gadt, ctor_type_params, existentials, ctx =
+            match ctor.constructor_return_type with
             | Some ret_ty_expr ->
-              (* GADT constructor with explicit return type *)
-              let ret_ty, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ret_ty_expr in
-              (ret_ty, true, ctx)
+              (* GADT constructor with explicit return type.
+                 Use check_gadt_constructor to ensure type variables like 'a and 'b in
+                 `Pair : ('a expr * 'b expr) -> ('a * 'b) expr` are properly shared
+                 between the argument and result types. *)
+              let arg_ty, ret_ty, gadt_params, ctx =
+                Module_type_check.check_gadt_constructor ctx_with_type param_names type_params
+                  ctor.constructor_argument ret_ty_expr
+              in
+              (* Compute existential type variables (in argument but not in result).
+                 For GADT constructors like `Any : 'a -> any_expr`, the 'a appears
+                 in the argument but not in the result, making it existential. *)
+              let existentials =
+                match arg_ty with
+                | None -> []
+                | Some arg_ty_val ->
+                  let arg_vars = Type_traversal.free_type_variables arg_ty_val in
+                  let result_vars = Type_traversal.free_type_variables ret_ty in
+                  let result_var_ids = List.map (fun tv -> tv.Types.id) result_vars in
+                  List.filter (fun tv -> not (List.mem tv.Types.id result_var_ids)) arg_vars
+              in
+              (* For GADTs, the constructor's type parameters are the fresh variables
+                 introduced in the return type (e.g., 'a and 'b in Pair). *)
+              (arg_ty, ret_ty, true, gadt_params, existentials, ctx)
             | None ->
-              (* Standard constructor - result is the type applied to parameters *)
-              (result_type, false, ctx)
+              (* Standard (non-GADT) constructor - just parse the argument type.
+                 Result is the type applied to parameters. *)
+              let arg_type, ctx = match ctor.constructor_argument with
+                | Some ty_expr ->
+                  let ty, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
+                  (Some ty, ctx)
+                | None -> (None, ctx)
+              in
+              (* For non-GADT constructors, no existentials and type params are the declaration's params *)
+              (arg_type, result_type, false, type_params, [], ctx)
           in
-          (* TODO: Compute existential type variables (in argument but not in result) *)
-          let existentials = [] in
           let ctor_info = {
             constructor_name = ctor.constructor_name.Location.value;
             constructor_tag_index = tag_index;
             constructor_type_name = type_decl.type_name.Location.value;
             constructor_argument_type = arg_type;
             constructor_result_type = ctor_result_type;
-            constructor_type_parameters = type_params;
+            constructor_type_parameters = ctor_type_params;
             constructor_is_gadt = is_gadt;
             constructor_existentials = existentials;
           } in
@@ -460,10 +480,15 @@ and infer_module_expression ctx (mexpr : module_expression) =
       let parameter_type, ctx = Module_type_check.check_module_type ctx param.functor_param_type in
       let env = Typing_context.environment ctx in
       let parameter_id = Identifier.create parameter_name in
+      (* Strengthen the parameter type so that types like `t` in the signature
+         become qualified as `S.t` when accessed from the functor body.
+         This is essential for functor application to work correctly. *)
+      let parameter_path = Types.PathIdent parameter_id in
+      let strengthened_param_type = Signature_match.strengthen_module_type parameter_path parameter_type in
       let param_binding = Module_types.{
         binding_name = parameter_name;
         binding_id = parameter_id;
-        binding_type = parameter_type;
+        binding_type = strengthened_param_type;
         binding_alias = None;
       } in
       (* Add parameter to environment for checking body *)

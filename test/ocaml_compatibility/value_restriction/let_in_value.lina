@@ -1,0 +1,14 @@
+(* Value restriction: let-in where body is a value *)
+(* Expected: ACCEPT - let x = ... in <value> is a value if body is a value *)
+
+(* Let-in with value body is a syntactic value *)
+let f =
+  let unused = 42 in
+  fun x -> x
+
+(* f should be polymorphic *)
+let int_result = f 42
+let bool_result = f true
+let str_result = f "hello"
+
+let _ = print int_result

@@ -1,0 +1,18 @@
+(* Value restriction: match expression is NOT a syntactic value *)
+(* Expected: depends on relaxed VR - testing same behavior in both *)
+
+type 'a option = None | Some of 'a
+
+let cond = true
+
+(* Match expression is NOT a syntactic value *)
+let f = match cond with
+  | true -> (fun x -> x)
+  | false -> (fun x -> x)
+
+(* If not generalized, second use at different type fails *)
+(* With relaxed VR, function type is covariant in result, so might work *)
+let int_result = f 42
+let bool_result = f true
+
+let _ = print int_result

@@ -185,3 +185,70 @@ let apply_equations_to_scheme equations scheme =
     @return true if GADT equation extraction should be performed *)
 let needs_gadt_handling constructor_info scrutinee_type =
   constructor_info.constructor_is_gadt && has_rigid_variables scrutinee_type
+
+(** Check if a type contains any of the given existential type variables.
+
+    @param existential_ids Set of type variable IDs that are existential
+    @param ty The type to check
+    @return Some var_id if an existential escapes, None otherwise *)
+let check_existential_escape existential_ids ty =
+  let found = ref None in
+  Type_traversal.iter (fun t ->
+    match t with
+    | TypeVariable tv when List.mem tv.id existential_ids ->
+      found := Some tv.id
+    | _ -> ()
+  ) ty;
+  !found
+
+(** Extract existential type variable IDs from a typed pattern.
+    These are the fresh type variables created when instantiating
+    a GADT constructor with existentials.
+
+    For example, when matching `Any x` where `Any : 'a -> any_expr`,
+    the pattern introduces an existential type for x.
+
+    @param pattern The typed pattern to examine
+    @return List of existential type variable IDs introduced by this pattern *)
+let rec collect_existentials_from_pattern (pattern : Typed_tree.typed_pattern) =
+  match pattern.pattern_desc with
+  | Typed_tree.TypedPatternConstructor (ctor_info, arg_opt) ->
+    (* Only GADT constructors with existentials can introduce existential types.
+       The constructor_existentials field contains the *original* existential
+       type variable IDs. We need to find the *fresh* instantiated variables
+       that correspond to them in the pattern's types.
+
+       The existential variables appear in the argument type but not in the result type.
+       After instantiation, they're still in the argument type but not the result type. *)
+    let arg_existentials =
+      if ctor_info.constructor_existentials = [] then
+        []
+      else
+        match arg_opt with
+        | Some arg_pattern ->
+          (* Collect type variables from the argument pattern's type *)
+          let arg_vars = Type_traversal.free_type_variables arg_pattern.pattern_type in
+          (* Collect type variables from the pattern's result type
+             (which is the instantiated constructor result type) *)
+          let result_vars = Type_traversal.free_type_variables pattern.pattern_type in
+          let result_var_ids = List.map (fun tv -> tv.id) result_vars in
+          (* Existentials are in arg but not in result *)
+          List.filter_map (fun tv ->
+            if not (List.mem tv.id result_var_ids) then Some tv.id
+            else None
+          ) arg_vars
+        | None -> []
+    in
+    (* Also collect from nested patterns *)
+    let nested = match arg_opt with
+      | Some arg_pattern -> collect_existentials_from_pattern arg_pattern
+      | None -> []
+    in
+    arg_existentials @ nested
+  | Typed_tree.TypedPatternTuple patterns ->
+    List.concat_map collect_existentials_from_pattern patterns
+  | Typed_tree.TypedPatternRecord (fields, _) ->
+    List.concat_map (fun (f : Typed_tree.typed_record_pattern_field) ->
+      collect_existentials_from_pattern f.typed_pattern_field_pattern
+    ) fields
+  | _ -> []

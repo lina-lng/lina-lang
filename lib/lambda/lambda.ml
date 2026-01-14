@@ -82,8 +82,10 @@ let primitive_of_operator = function
   | "-" -> Some PrimitiveSubInt
   | "*" -> Some PrimitiveMulInt
   | "/" -> Some PrimitiveDivInt
+  | "=" -> Some PrimitiveIntEqual
   | "==" -> Some PrimitiveIntEqual
   | "!=" -> Some PrimitiveIntNotEqual
+  | "<>" -> Some PrimitiveIntNotEqual
   | "<" -> Some PrimitiveIntLess
   | ">" -> Some PrimitiveIntGreater
   | "<=" -> Some PrimitiveIntLessEqual

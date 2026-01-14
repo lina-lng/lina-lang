@@ -1,0 +1,25 @@
+(* GADTs: classic evaluator example *)
+(* Expected: ACCEPT - full GADT evaluator with multiple operations *)
+
+type _ expr =
+  | Int : int -> int expr
+  | Bool : bool -> bool expr
+  | Add : int expr * int expr -> int expr
+  | Mul : int expr * int expr -> int expr
+  | Eq : int expr * int expr -> bool expr
+  | If : bool expr * int expr * int expr -> int expr
+
+let rec eval : type a. a expr -> a = fun e ->
+  match e with
+  | Int n -> n
+  | Bool b -> b
+  | Add (x, y) -> eval x + eval y
+  | Mul (x, y) -> eval x * eval y
+  | Eq (x, y) -> eval x = eval y
+  | If (c, t, e) -> if eval c then eval t else eval e
+
+let test1 = eval (Add (Int 10, Mul (Int 3, Int 4)))
+let test2 = eval (If (Eq (Int 5, Int 5), Int 100, Int 0))
+
+let () = print_int test1; print_newline ()
+let () = print_int test2

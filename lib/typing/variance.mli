@@ -119,6 +119,14 @@ val get_constructor_variances : Types.path -> int -> t list
     These functions check how a type variable occurs within a type expression.
     Used for relaxed value restriction. *)
 
+(** Type lookup function for finding type declarations *)
+type type_lookup = Types.path -> Types.type_declaration option
+
+(** [set_type_lookup lookup] sets the global type lookup function.
+    Should be called before variance checking to enable looking up
+    declared variances from type definitions. *)
+val set_type_lookup : type_lookup -> unit
+
 (** [check_in_type target_var ty] checks the variance of a type variable
     in a type expression. Entry point that starts in a covariant context.
 
@@ -126,6 +134,20 @@ val get_constructor_variances : Types.path -> int -> t list
     @param ty The type expression to search
     @return The variance of target_var in ty *)
 val check_in_type : Types.type_variable -> Types.type_expression -> t
+
+(** [check_in_type_with_lookup ~type_lookup target_var ty] checks variance
+    using a specific type lookup function. Restores the previous lookup
+    after completion.
+
+    @param type_lookup Function to look up type declarations
+    @param target_var The type variable to check
+    @param ty The type expression to search
+    @return The variance of target_var in ty *)
+val check_in_type_with_lookup :
+  type_lookup:type_lookup ->
+  Types.type_variable ->
+  Types.type_expression ->
+  t
 
 (** [check_in_context target_var context_variance ty] checks the variance
     of a type variable within a specific context variance.

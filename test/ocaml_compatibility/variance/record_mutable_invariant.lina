@@ -1,0 +1,17 @@
+(* Variance: mutable record fields are invariant *)
+(* Expected: REJECT - mutable fields make type invariant *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+type 'a cell = { mutable contents : 'a }
+
+let id x = x
+
+(* id { contents = Nil } is NOT a value *)
+(* Mutable field makes 'a cell invariant in 'a *)
+(* Relaxed VR doesn't help with invariant types *)
+let c = id { contents = Nil }
+
+(* Should fail - invariant *)
+let _ = (c : int list cell)
+let _ = (c : bool list cell)

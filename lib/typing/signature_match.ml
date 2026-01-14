@@ -37,20 +37,83 @@ let expand_module_type ctx mty =
   | None -> mty  (* Can't expand - leave as is *)
 
 (** Module strengthening: Makes abstract types concrete by binding them
-    to their path. This ensures that `module N = M` makes N.t = M.t. *)
+    to their path. This ensures that `module N = M` makes N.t = M.t.
+
+    This involves two operations:
+    1. Update abstract type declarations with manifests pointing to qualified paths
+    2. Substitute PathLocal references in value types with qualified paths
+
+    For example, strengthening `sig type t; val show : t -> string end` with path M:
+    - `type t` becomes `type t = M.t`
+    - `val show : t -> string` becomes `val show : M.t -> string` *)
+
+(** Collect all type names defined in a signature. *)
+let collect_type_names sig_ =
+  List.filter_map (function
+    | Module_types.SigType (name, _) -> Some name
+    | _ -> None
+  ) sig_
+
+(** Substitute PathLocal type references with qualified paths.
+    Only substitutes types that are defined in this signature. *)
+let rec qualify_type_in_signature path type_names ty =
+  match ty with
+  | Types.TypeConstructor (Types.PathLocal name, args) when List.mem name type_names ->
+    (* This is a reference to a type defined in this signature - qualify it *)
+    let qualified_path = Types.PathDot (path, name) in
+    let qualified_args = List.map (qualify_type_in_signature path type_names) args in
+    Types.TypeConstructor (qualified_path, qualified_args)
+  | Types.TypeConstructor (p, args) ->
+    let qualified_args = List.map (qualify_type_in_signature path type_names) args in
+    Types.TypeConstructor (p, qualified_args)
+  | Types.TypeArrow (arg, result) ->
+    Types.TypeArrow (
+      qualify_type_in_signature path type_names arg,
+      qualify_type_in_signature path type_names result)
+  | Types.TypeTuple elements ->
+    Types.TypeTuple (List.map (qualify_type_in_signature path type_names) elements)
+  | Types.TypeRecord row ->
+    Types.TypeRecord (qualify_row_in_signature path type_names row)
+  | Types.TypeVariable _ | Types.TypeRowEmpty | Types.TypePolyVariant _ -> ty
+
+and qualify_row_in_signature path type_names row =
+  let qualified_fields = List.map (fun (name, field) ->
+    match field with
+    | Types.RowFieldPresent ty ->
+      (name, Types.RowFieldPresent (qualify_type_in_signature path type_names ty))
+  ) row.Types.row_fields in
+  { Types.row_fields = qualified_fields;
+    row_more = qualify_type_in_signature path type_names row.Types.row_more }
+
+let qualify_scheme_in_signature path type_names scheme =
+  { scheme with Types.body = qualify_type_in_signature path type_names scheme.Types.body }
 
 let rec strengthen_signature path sig_ =
+  (* First, collect all type names defined in this signature *)
+  let type_names = collect_type_names sig_ in
+  (* Then process each item *)
   List.map (fun item ->
     match item with
     | Module_types.SigType (name, decl) ->
-      (* Make abstract type concrete: t becomes bound to path.t *)
-      let type_path = Types.PathDot (path, name) in
-      let manifest = Types.TypeConstructor (type_path,
-        List.map (fun tv -> Types.TypeVariable tv) decl.declaration_parameters) in
-      Module_types.SigType (name, { decl with declaration_manifest = Some manifest })
-    | Module_types.SigModule (name, mty) ->
+      begin match decl.Types.declaration_manifest with
+      | Some _ ->
+        (* Type already has a manifest (it's a type alias) - keep it as is.
+           Overwriting would create a cycle: type t = int -> type t = M.t *)
+        item
+      | None ->
+        (* Abstract type - make it concrete by binding to path.t *)
+        let type_path = Types.PathDot (path, name) in
+        let manifest = Types.TypeConstructor (type_path,
+          List.map (fun tv -> Types.TypeVariable tv) decl.Types.declaration_parameters) in
+        Module_types.SigType (name, { decl with declaration_manifest = Some manifest })
+      end
+    | Module_types.SigValue (name, desc) ->
+      (* Qualify PathLocal references to types defined in this signature *)
+      let qualified_type = qualify_scheme_in_signature path type_names desc.Module_types.value_type in
+      Module_types.SigValue (name, { desc with value_type = qualified_type })
+    | Module_types.SigModule (mod_name, mty) ->
       (* Recursively strengthen nested modules *)
-      Module_types.SigModule (name, strengthen_module_type (Types.PathDot (path, name)) mty)
+      Module_types.SigModule (mod_name, strengthen_module_type (Types.PathDot (path, mod_name)) mty)
     | other -> other
   ) sig_
 
@@ -184,15 +247,65 @@ let check_type_declaration_compatibility ctx name impl_decl spec_decl =
         end
       end
 
+(** Build a type substitution from impl signature to replace spec's PathLocal types.
+    For each type in spec, if impl has a manifest, map PathLocal(name) -> impl manifest. *)
+let build_type_substitution impl_sig =
+  List.filter_map (function
+    | Module_types.SigType (name, impl_decl) ->
+      begin match impl_decl.Types.declaration_manifest with
+      | Some manifest -> Some (name, impl_decl.Types.declaration_parameters, manifest)
+      | None -> None
+      end
+    | _ -> None
+  ) impl_sig
+
+(** Substitute PathLocal types in a type expression using the substitution. *)
+let rec substitute_local_types subst ty =
+  let ty = Types.representative ty in
+  match ty with
+  | Types.TypeConstructor (Types.PathLocal name, args) ->
+    begin match List.find_opt (fun (n, _, _) -> n = name) subst with
+    | Some (_, params, manifest) ->
+      (* Substitute type parameters *)
+      let substituted_args = List.map (substitute_local_types subst) args in
+      Type_utils.substitute_type_params params substituted_args manifest
+    | None -> ty
+    end
+  | Types.TypeConstructor (path, args) ->
+    Types.TypeConstructor (path, List.map (substitute_local_types subst) args)
+  | Types.TypeArrow (arg, res) ->
+    Types.TypeArrow (substitute_local_types subst arg, substitute_local_types subst res)
+  | Types.TypeTuple elems ->
+    Types.TypeTuple (List.map (substitute_local_types subst) elems)
+  | Types.TypeRecord row ->
+    Types.TypeRecord (substitute_local_types_in_row subst row)
+  | _ -> ty
+
+and substitute_local_types_in_row subst row =
+  let new_fields = List.map (fun (name, field) ->
+    match field with
+    | Types.RowFieldPresent ty ->
+      (name, Types.RowFieldPresent (substitute_local_types subst ty))
+  ) row.Types.row_fields in
+  { Types.row_fields = new_fields;
+    row_more = substitute_local_types subst row.Types.row_more }
+
 (** Check if an implementation signature satisfies a specification signature *)
 let rec match_signature ctx loc impl_sig spec_sig : match_result =
+  (* Build substitution from impl's type manifests *)
+  let type_subst = build_type_substitution impl_sig in
   (* For each item in the specification, check there's a matching item in implementation *)
   let check_item (spec_item : Module_types.signature_item) =
     match spec_item with
     | Module_types.SigValue (name, spec_val) ->
       begin match Module_types.find_value_in_sig name impl_sig with
       | Some impl_val ->
-        begin match check_type_compatibility ctx loc impl_val.value_type spec_val.value_type with
+        (* Substitute PathLocal types in spec with impl's manifest types *)
+        let spec_body_substituted = substitute_local_types type_subst spec_val.Module_types.value_type.Types.body in
+        let spec_val_substituted = { spec_val with
+          Module_types.value_type = { spec_val.Module_types.value_type with Types.body = spec_body_substituted }
+        } in
+        begin match check_type_compatibility ctx loc impl_val.value_type spec_val_substituted.value_type with
         | Ok () -> Ok ()
         | Error (TypeMismatch (_, impl_ty, spec_ty)) ->
           Error (TypeMismatch (name, impl_ty, spec_ty))

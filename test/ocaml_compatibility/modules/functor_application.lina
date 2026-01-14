@@ -1,0 +1,32 @@
+(* Modules: functor application *)
+(* Expected: ACCEPT - applying functor to module *)
+
+(* Define our own list type *)
+type 'a mylist = Nil | Cons of ('a * 'a mylist)
+
+module type ORDERED = sig
+  type t
+  val compare : t -> t -> int
+end
+
+module MakeSet (Ord : ORDERED) = struct
+  type elt = Ord.t
+  type t = elt mylist
+  let empty = Nil
+  let add x s = Cons (x, s)
+  let rec mem x s = match s with
+    | Nil -> false
+    | Cons (h, t) -> if Ord.compare x h = 0 then true else mem x t
+end
+
+module IntOrd = struct
+  type t = int
+  let compare a b = a - b
+end
+
+module IntSet = MakeSet (IntOrd)
+
+let s = IntSet.add 1 (IntSet.add 2 IntSet.empty)
+let found = IntSet.mem 1 s
+
+let _ = print 0
