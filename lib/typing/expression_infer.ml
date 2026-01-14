@@ -89,7 +89,10 @@ let extract_poly_rec_annotation (binding : binding) =
 (** Check a TypeForall annotation for polymorphic recursion.
     Creates rigid type variables for bound names and checks the body type. *)
 let check_forall_annotation ctx forall_vars body_ty_expr =
-  (* Create rigid type variables for each bound name *)
+  (* Create rigid type variables for each bound name.
+     Note: We accumulate in reverse order during fold_left for O(1) cons,
+     then reverse at the end. This is the standard OCaml idiom for mapping
+     with state threading, used throughout the inference code. *)
   let rigid_vars, ctx =
     List.fold_left (fun (vars, ctx) name ->
       let tv, ctx = Typing_context.new_rigid_type_variable ctx in
@@ -102,7 +105,7 @@ let check_forall_annotation ctx forall_vars body_ty_expr =
   (* Check the body type with rigid vars as parameters *)
   let param_names = List.map fst rigid_vars in
   let param_vars = List.map snd rigid_vars in
-  let body_type, ctx = Module_type_check.check_type_expression_with_params ctx param_names param_vars body_ty_expr in
+  let body_type, ctx = Type_expression_check.check_type_expression_with_params ctx param_names param_vars body_ty_expr in
   (* Build scheme: the rigid vars become quantified variables *)
   let scheme = { quantified_variables = param_vars; body = body_type } in
   (scheme, rigid_vars, ctx)
@@ -309,7 +312,7 @@ let rec infer_expression ctx (expr : expression) =
     (* Type annotation constrains the expression type.
        Use bidirectional type checking: pass the constraint type as the expected type
        to enable GADT type refinement in match expressions. *)
-    let constraint_ty, ctx = Module_type_check.check_type_expression ctx type_expr in
+    let constraint_ty, ctx = Type_expression_check.check_type_expression ctx type_expr in
     let typed_inner, ctx = infer_expression_with_expected ctx (Some constraint_ty) inner_expr in
     (* Unify the inferred type with the annotated type *)
     unify ctx loc typed_inner.expression_type constraint_ty;

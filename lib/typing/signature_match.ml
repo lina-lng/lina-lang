@@ -128,10 +128,6 @@ and strengthen_module_type path mty =
     (* Named module types - could expand and strengthen *)
     mty
 
-(** Re-export path substitution functions from Type_utils for public API *)
-let substitute_path_in_module_type old_path new_path mty =
-  Type_utils.substitute_path_in_module_type ~old_path ~new_path mty
-
 (** Result of signature matching *)
 type match_error =
   | MissingValue of string

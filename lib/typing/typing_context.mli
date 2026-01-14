@@ -75,6 +75,17 @@ val new_rigid_type_variable : t -> Types.type_expression * t
     abstract types. Rigid variables don't unify globally during GADT pattern
     matching - instead, equations are extracted and applied locally. *)
 
+val new_type_variables : t -> int -> Types.type_variable list * t
+(** [new_type_variables ctx count] creates [count] fresh type variables.
+
+    Returns the type_variable records (not type_expression wrappers) and the
+    updated context. This is a convenience function for creating multiple
+    type parameters at once.
+
+    @param ctx The typing context
+    @param count Number of type variables to create
+    @return A pair [(type_variables, updated_ctx)] *)
+
 (** {1 Type Lookup}
 
     These functions look up type and module type definitions by path,

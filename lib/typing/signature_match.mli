@@ -64,18 +64,6 @@ val strengthen_signature : Types.path -> Module_types.signature -> Module_types.
     @param mty The module type to strengthen *)
 val strengthen_module_type : Types.path -> Module_types.module_type -> Module_types.module_type
 
-(** {1 Path Substitution} *)
-
-(** [substitute_path_in_module_type old_path new_path mty] replaces paths.
-
-    Used during functor application to substitute parameter paths with
-    argument paths. For [F(A)], substitutes [X] (functor parameter) with [A].
-
-    @param old_path Path to replace (typically functor parameter)
-    @param new_path Replacement path (typically functor argument)
-    @param mty Module type to transform *)
-val substitute_path_in_module_type : Types.path -> Types.path -> Module_types.module_type -> Module_types.module_type
-
 (** {1 Match Results} *)
 
 (** Reasons why signature matching can fail. *)

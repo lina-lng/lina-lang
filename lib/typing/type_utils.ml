@@ -79,58 +79,20 @@ let rec substitute_path_prefix ~old_path ~new_path path =
     else PathApply (new_func, new_arg)
   | _ -> path
 
-let rec substitute_path_in_row_field ~old_path ~new_path (field : row_field) : row_field =
-  match field with
-  | RowFieldPresent ty ->
-    let new_ty = substitute_path_in_type ~old_path ~new_path ty in
-    if new_ty == ty then field
-    else RowFieldPresent new_ty
+(** [substitute_path_in_type ~old_path ~new_path ty] substitutes [old_path]
+    with [new_path] in all type constructor paths within [ty].
 
-and substitute_path_in_row ~old_path ~new_path (row : row) : row =
-  let new_fields = List.map (fun (name, field) ->
-    (name, substitute_path_in_row_field ~old_path ~new_path field)
-  ) row.row_fields in
-  let new_more = substitute_path_in_type ~old_path ~new_path row.row_more in
-  { row_fields = new_fields; row_more = new_more }
-
-and substitute_path_in_type ~old_path ~new_path ty =
-  (* Follow type variable links to get the actual type structure *)
-  let ty = representative ty in
-  match ty with
-  | TypeConstructor (path, args) ->
-    let new_type_path = substitute_path_prefix ~old_path ~new_path path in
-    let new_args = List.map (substitute_path_in_type ~old_path ~new_path) args in
-    if new_type_path == path && new_args == args then ty
-    else TypeConstructor (new_type_path, new_args)
-  | TypeArrow (arg, result) ->
-    let new_arg = substitute_path_in_type ~old_path ~new_path arg in
-    let new_result = substitute_path_in_type ~old_path ~new_path result in
-    if new_arg == arg && new_result == result then ty
-    else TypeArrow (new_arg, new_result)
-  | TypeTuple elements ->
-    let new_elements = List.map (substitute_path_in_type ~old_path ~new_path) elements in
-    if new_elements == elements then ty
-    else TypeTuple new_elements
-  | TypeRecord row ->
-    let new_row = substitute_path_in_row ~old_path ~new_path row in
-    TypeRecord new_row
-  | TypePolyVariant pv_row ->
-    let new_pv_row = substitute_path_in_poly_variant_row ~old_path ~new_path pv_row in
-    TypePolyVariant new_pv_row
-  | TypeVariable _ | TypeRowEmpty -> ty
-
-and substitute_path_in_poly_variant_row ~old_path ~new_path pv_row =
-  let new_fields = List.map (fun (name, field) ->
-    let new_field = match field with
-      | PVFieldPresent (Some ty) ->
-        PVFieldPresent (Some (substitute_path_in_type ~old_path ~new_path ty))
-      | PVFieldPresent None -> PVFieldPresent None
-      | PVFieldAbsent -> PVFieldAbsent
-    in
-    (name, new_field)
-  ) pv_row.pv_fields in
-  let new_more = substitute_path_in_type ~old_path ~new_path pv_row.pv_more in
-  { pv_fields = new_fields; pv_more = new_more; pv_closed = pv_row.pv_closed }
+    Uses {!Type_traversal.map} for recursive traversal through all type structures
+    including records, poly-variants, tuples, and arrows. *)
+let substitute_path_in_type ~old_path ~new_path ty =
+  Type_traversal.map (fun t ->
+    match t with
+    | TypeConstructor (path, args) ->
+      let new_path = substitute_path_prefix ~old_path ~new_path path in
+      if new_path == path then t
+      else TypeConstructor (new_path, args)
+    | _ -> t
+  ) ty
 
 let substitute_path_in_scheme ~old_path ~new_path scheme =
   let new_body = substitute_path_in_type ~old_path ~new_path scheme.body in

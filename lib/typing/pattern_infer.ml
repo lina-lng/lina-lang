@@ -94,18 +94,19 @@ let rec infer_pattern ctx (pattern : pattern) =
       let expected_arg_ty, result_ty =
         Inference_utils.instantiate_constructor_with_ctx ctx constructor_info
       in
+      Inference_utils.check_constructor_arity loc name
+        ~has_arg:(Option.is_some arg_pattern)
+        ~expects_arg:(Option.is_some expected_arg_ty);
       let typed_arg, ctx = match arg_pattern, expected_arg_ty with
         | None, None -> (None, ctx)
         | Some p, Some expected_ty ->
           let typed_p, actual_ty, ctx = infer_pattern ctx p in
           unify ctx loc expected_ty actual_ty;
           (Some typed_p, ctx)
-        | Some _, None ->
-          Compiler_error.type_error loc
-            (Printf.sprintf "Constructor %s does not take an argument" name)
-        | None, Some _ ->
-          Compiler_error.type_error loc
-            (Printf.sprintf "Constructor %s requires an argument" name)
+        | Some _, None | None, Some _ ->
+          (* Constructor arity was already checked by check_constructor_arity *)
+          Compiler_error.internal_error
+            "Constructor arity mismatch after arity check"
       in
       let typed_pattern = {
         pattern_desc = TypedPatternConstructor (constructor_info, typed_arg);
@@ -134,7 +135,7 @@ let rec infer_pattern ctx (pattern : pattern) =
     (* Infer type of inner pattern *)
     let typed_inner, inferred_ty, ctx = infer_pattern ctx inner_pattern in
     (* Convert the type annotation to a type *)
-    let annotated_ty, ctx = Module_type_check.check_type_expression ctx type_expr in
+    let annotated_ty, ctx = Type_expression_check.check_type_expression ctx type_expr in
     (* Unify the inferred type with the annotation *)
     unify ctx loc inferred_ty annotated_ty;
     (* Return the typed pattern with the annotated type *)

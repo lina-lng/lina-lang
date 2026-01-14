@@ -19,6 +19,32 @@ let mark_as_weak ~level ty =
 
 (** {1 Generalization} *)
 
+(** Internal generalization with configurable predicate.
+    Type variables with level > [level] and not marked weak are candidates.
+    Those passing [should_generalize] become quantified; others are marked weak.
+
+    Clears the rigid flag on generalized variables - it was only needed during
+    initial type-checking for GADT equation extraction. Once generalized, the
+    variable becomes a normal polymorphic variable that can be instantiated freely. *)
+let generalize_impl ~level ~should_generalize ty =
+  let seen = Hashtbl.create 16 in
+  let generalized_vars = ref [] in
+  Type_traversal.iter (fun t ->
+    match representative t with
+    | TypeVariable tv when tv.level > level && not tv.weak ->
+      if not (Hashtbl.mem seen tv.id) then begin
+        Hashtbl.add seen tv.id ();
+        if should_generalize tv then begin
+          tv.level <- generic_level;
+          tv.rigid <- false;
+          generalized_vars := tv :: !generalized_vars
+        end else
+          tv.weak <- true
+      end
+    | _ -> ()
+  ) ty;
+  { quantified_variables = !generalized_vars; body = ty }
+
 (** [generalize ~level ty] generalizes a type at the given level.
     Type variables with level > [level] and not marked weak become
     universally quantified.
@@ -27,23 +53,7 @@ let mark_as_weak ~level ty =
     @param ty The type to generalize
     @return A type scheme with quantified variables *)
 let generalize ~level ty =
-  let seen = Hashtbl.create 16 in
-  let generalized_vars = ref [] in
-  Type_traversal.iter (fun t ->
-    match representative t with
-    | TypeVariable tv when tv.level > level && not tv.weak ->
-      if not (Hashtbl.mem seen tv.id) then begin
-        Hashtbl.add seen tv.id ();
-        tv.level <- generic_level;
-        (* Clear rigid flag - it was only needed during initial type-checking
-           for GADT equation extraction. Once generalized, the variable becomes
-           a normal polymorphic variable that can be instantiated freely. *)
-        tv.rigid <- false;
-        generalized_vars := tv :: !generalized_vars
-      end
-    | _ -> ()
-  ) ty;
-  { quantified_variables = !generalized_vars; body = ty }
+  generalize_impl ~level ~should_generalize:(fun _ -> true) ty
 
 (** [generalize_with_filter ~level predicate ty] generalizes only variables
     that pass the [predicate] test. Variables that fail the predicate are
@@ -57,22 +67,7 @@ let generalize ~level ty =
     @param ty The type to generalize
     @return A type scheme with quantified variables *)
 let generalize_with_filter ~level predicate ty =
-  let seen = Hashtbl.create 16 in
-  let generalized_vars = ref [] in
-  Type_traversal.iter (fun t ->
-    match representative t with
-    | TypeVariable tv when tv.level > level && not tv.weak ->
-      if not (Hashtbl.mem seen tv.id) then begin
-        Hashtbl.add seen tv.id ();
-        if predicate tv ty then begin
-          tv.level <- generic_level;
-          generalized_vars := tv :: !generalized_vars
-        end else
-          tv.weak <- true
-      end
-    | _ -> ()
-  ) ty;
-  { quantified_variables = !generalized_vars; body = ty }
+  generalize_impl ~level ~should_generalize:(fun tv -> predicate tv ty) ty
 
 (** {1 Instantiation} *)
 

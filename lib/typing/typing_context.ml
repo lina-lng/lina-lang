@@ -51,6 +51,20 @@ let new_type_variable_at_level ctx level =
 let new_type_variable ctx =
   new_type_variable_at_level ctx ctx.level
 
+(** [new_type_variables ctx count] creates [count] fresh type variables.
+    Returns the type_variable records (not type_expression wrappers).
+    This is a convenience function for creating multiple type parameters. *)
+let new_type_variables ctx count =
+  let rec loop ctx acc remaining =
+    if remaining = 0 then (List.rev acc, ctx)
+    else
+      let ty, ctx = new_type_variable ctx in
+      match ty with
+      | Types.TypeVariable tv -> loop ctx (tv :: acc) (remaining - 1)
+      | _ -> Common.Compiler_error.internal_error "new_type_variable returned non-variable"
+  in
+  loop ctx [] count
+
 (** Create a rigid type variable for locally abstract types.
     Rigid variables don't unify globally - instead, GADT pattern matching
     extracts equations on them. *)

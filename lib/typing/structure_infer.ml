@@ -95,7 +95,7 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
                  `Pair : ('a expr * 'b expr) -> ('a * 'b) expr` are properly shared
                  between the argument and result types. *)
               let arg_ty, ret_ty, gadt_params, ctx =
-                Module_type_check.check_gadt_constructor ctx_with_type param_names type_params
+                Type_expression_check.check_gadt_constructor ctx_with_type param_names type_params
                   ctor.constructor_argument ret_ty_expr
               in
               (* Compute existential type variables (in argument but not in result).
@@ -118,7 +118,7 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
                  Result is the type applied to parameters. *)
               let arg_type, ctx = match ctor.constructor_argument with
                 | Some ty_expr ->
-                  let ty, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
+                  let ty, ctx = Type_expression_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
                   (Some ty, ctx)
                 | None -> (None, ctx)
               in
@@ -141,7 +141,7 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
       (DeclarationVariant constructor_infos, None, ctx)
     | TypeAlias ty_expr ->
       (* Convert syntax type expression to semantic type, preserving parameter sharing *)
-      let manifest_type, ctx = Module_type_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
+      let manifest_type, ctx = Type_expression_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
       (DeclarationAbstract, Some manifest_type, ctx)
   in
   (* Create the final type declaration with proper kind *)
@@ -190,7 +190,7 @@ let process_type_declaration ctx (type_decl : Parsing.Syntax_tree.type_declarati
       in
       (* Convert the constraint type expression *)
       let constraint_type, ctx =
-        Module_type_check.check_type_expression_with_params ctx param_names type_params
+        Type_expression_check.check_type_expression_with_params ctx param_names type_params
           syntax_constraint.constraint_type
       in
       let semantic_constraint = Types.{
@@ -383,7 +383,7 @@ let rec infer_structure_item ctx (item : structure_item) =
     let name = ext_decl.external_name.Location.value in
     let location = ext_decl.external_location in
     (* Check the type expression *)
-    let external_type, ctx = Module_type_check.check_type_expression ctx ext_decl.external_type in
+    let external_type, ctx = Type_expression_check.check_type_expression ctx ext_decl.external_type in
     let env = Typing_context.environment ctx in
     (* Compute arity from type (count function arrows) *)
     let rec compute_arity ty =
@@ -545,7 +545,7 @@ and infer_module_expression ctx (mexpr : module_expression) =
             | Some func_path, Some arg_path ->
               (* 1. Substitute parameter path with argument path in result *)
               let param_path = Types.PathIdent param.parameter_id in
-              let substituted_mty = Signature_match.substitute_path_in_module_type param_path arg_path result_mty in
+              let substituted_mty = Type_utils.substitute_path_in_module_type ~old_path:param_path ~new_path:arg_path result_mty in
               (* 2. Create PathApply for the result and strengthen *)
               let apply_path = Types.PathApply (func_path, arg_path) in
               Signature_match.strengthen_module_type apply_path substituted_mty

@@ -200,6 +200,19 @@ and type_declaration_kind =
   | DeclarationVariant of constructor_info list
   | DeclarationRecord of (string * type_expression) list  (* Record types *)
 
+(** Convert a path to its string representation. *)
+let rec path_to_string = function
+  | PathBuiltin BuiltinInt -> "int"
+  | PathBuiltin BuiltinFloat -> "float"
+  | PathBuiltin BuiltinString -> "string"
+  | PathBuiltin BuiltinBool -> "bool"
+  | PathBuiltin BuiltinUnit -> "unit"
+  | PathBuiltin BuiltinRef -> "ref"
+  | PathLocal name -> name
+  | PathIdent id -> Common.Identifier.name id
+  | PathDot (parent, name) -> path_to_string parent ^ "." ^ name
+  | PathApply (func, arg) -> path_to_string func ^ "(" ^ path_to_string arg ^ ")"
+
 let rec pp_type_expression fmt ty =
   match representative ty with
   | TypeVariable tv ->
@@ -262,19 +275,8 @@ and pp_row fmt row =
     else Format.fprintf fmt ".. }"
   end
 
-and pp_path fmt = function
-  | PathBuiltin BuiltinInt -> Format.fprintf fmt "int"
-  | PathBuiltin BuiltinFloat -> Format.fprintf fmt "float"
-  | PathBuiltin BuiltinString -> Format.fprintf fmt "string"
-  | PathBuiltin BuiltinBool -> Format.fprintf fmt "bool"
-  | PathBuiltin BuiltinUnit -> Format.fprintf fmt "unit"
-  | PathBuiltin BuiltinRef -> Format.fprintf fmt "ref"
-  | PathLocal name -> Format.fprintf fmt "%s" name
-  | PathIdent id -> Format.fprintf fmt "%s" (Common.Identifier.name id)
-  | PathDot (parent, name) ->
-    Format.fprintf fmt "%a.%s" pp_path parent name
-  | PathApply (func, arg) ->
-    Format.fprintf fmt "%a(%a)" pp_path func pp_path arg
+and pp_path fmt path =
+  Format.pp_print_string fmt (path_to_string path)
 
 (* Path equality *)
 let rec path_equal p1 p2 =
@@ -285,19 +287,6 @@ let rec path_equal p1 p2 =
   | PathDot (p1, n1), PathDot (p2, n2) -> String.equal n1 n2 && path_equal p1 p2
   | PathApply (f1, a1), PathApply (f2, a2) -> path_equal f1 f2 && path_equal a1 a2
   | _ -> false
-
-(* Path to string *)
-let rec path_to_string = function
-  | PathBuiltin BuiltinInt -> "int"
-  | PathBuiltin BuiltinFloat -> "float"
-  | PathBuiltin BuiltinString -> "string"
-  | PathBuiltin BuiltinBool -> "bool"
-  | PathBuiltin BuiltinUnit -> "unit"
-  | PathBuiltin BuiltinRef -> "ref"
-  | PathLocal name -> name
-  | PathIdent id -> Common.Identifier.name id
-  | PathDot (parent, name) -> path_to_string parent ^ "." ^ name
-  | PathApply (func, arg) -> path_to_string func ^ "(" ^ path_to_string arg ^ ")"
 
 (* For backward compatibility *)
 let pp_type_path = pp_path
