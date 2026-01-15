@@ -37,20 +37,25 @@ let kind_message = function
   | TypeError msg -> msg
   | InternalError msg -> msg
 
-let report fmt error =
-  let loc = error.location in
+(** Format a source location as "File "path", line N, characters M-P". *)
+let format_location fmt (loc : Location.t) =
+  Format.fprintf fmt "File \"%s\", line %d, characters %d-%d"
+    loc.start_pos.filename
+    loc.start_pos.line
+    loc.start_pos.column
+    loc.end_pos.column
+
+(** Format a message with optional location prefix. *)
+let format_with_location fmt loc prefix message =
   if Location.is_none loc then
-    Format.fprintf fmt "@[<v>%s: %s@]"
-      (kind_to_string error.kind)
-      (kind_message error.kind)
+    Format.fprintf fmt "@[<v>%s: %s@]" prefix message
   else
-    Format.fprintf fmt "@[<v>File \"%s\", line %d, characters %d-%d:@,%s: %s@]"
-      loc.start_pos.filename
-      loc.start_pos.line
-      loc.start_pos.column
-      loc.end_pos.column
-      (kind_to_string error.kind)
-      (kind_message error.kind);
+    Format.fprintf fmt "@[<v>%a:@,%s: %s@]" format_location loc prefix message
+
+let report fmt error =
+  format_with_location fmt error.location
+    (kind_to_string error.kind)
+    (kind_message error.kind);
   List.iter (fun hint ->
     Format.fprintf fmt "@,Hint: %s" hint
   ) error.hints
@@ -87,31 +92,15 @@ let warning_to_string = function
   | RedundantPattern ->
     "Redundant pattern: this case will never be matched"
 
-let report_warning fmt { warning; warning_location = loc } =
-  if Location.is_none loc then
-    Format.fprintf fmt "@[<v>Warning: %s@]" (warning_to_string warning)
-  else
-    Format.fprintf fmt "@[<v>File \"%s\", line %d, characters %d-%d:@,Warning: %s@]"
-      loc.start_pos.filename
-      loc.start_pos.line
-      loc.start_pos.column
-      loc.end_pos.column
-      (warning_to_string warning)
+let report_warning fmt { warning; warning_location } =
+  format_with_location fmt warning_location "Warning" (warning_to_string warning)
 
 let report_warning_to_string w =
   Format.asprintf "%a" report_warning w
 
 (** Report a warning as an error (for warnings promoted to errors). *)
-let report_warning_as_error fmt { warning; warning_location = loc } =
-  if Location.is_none loc then
-    Format.fprintf fmt "@[<v>Error: %s@]" (warning_to_string warning)
-  else
-    Format.fprintf fmt "@[<v>File \"%s\", line %d, characters %d-%d:@,Error: %s@]"
-      loc.start_pos.filename
-      loc.start_pos.line
-      loc.start_pos.column
-      loc.end_pos.column
-      (warning_to_string warning)
+let report_warning_as_error fmt { warning; warning_location } =
+  format_with_location fmt warning_location "Error" (warning_to_string warning)
 
 let report_warning_as_error_to_string w =
   Format.asprintf "%a" report_warning_as_error w

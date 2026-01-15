@@ -24,9 +24,7 @@ let infer_module_expression_ref :
     failwith "infer_module_expression not initialized - Structure_infer must set this")
 
 (** Unify types using context's environment for alias expansion. *)
-let unify ctx loc ty1 ty2 =
-  let env = Typing_context.environment ctx in
-  Inference_utils.unify_with_env env loc ty1 ty2
+let unify = Inference_utils.unify
 
 (** Type of constant literals *)
 let type_of_constant = Inference_utils.type_of_constant
@@ -92,10 +90,35 @@ let labels_match l1 l2 =
   | Types.Optional s1, Types.Labelled s2 -> s1 = s2  (* ?x can fill ~x *)
   | _ -> false
 
+(** {2 Optional Argument Wrapping}
+
+    These helpers handle wrapping arguments for optional parameters.
+    Used in both full and partial application. *)
+
+(** Wrap an argument expression in [Some] constructor.
+    Used when a labeled argument fills an optional parameter. *)
+let wrap_in_some arg =
+  let option_ty = Types.TypeConstructor (Types.PathLocal "option", [arg.Typed_tree.expression_type]) in
+  {
+    Typed_tree.expression_desc = TypedExpressionConstructor (Environment.some_constructor, Some arg);
+    expression_type = option_ty;
+    expression_location = arg.expression_location;
+  }
+
+(** Create a [None] expression for an optional parameter with no argument.
+    @param loc Location for the None expression
+    @param inner_ty The inner type of the option (the parameter's expected type) *)
+let make_none_arg loc inner_ty =
+  let option_ty = Types.TypeConstructor (Types.PathLocal "option", [inner_ty]) in
+  {
+    Typed_tree.expression_desc = TypedExpressionConstructor (Environment.none_constructor, None);
+    expression_type = option_ty;
+    expression_location = loc;
+  }
+
 (** Reorder arguments to match the expected parameter order.
-    Returns (matched_args, unmatched_params, unused_args) where:
-    - matched_args: arguments in parameter order (for params that have matching args)
-    - unmatched_params: parameters that have no matching argument (for partial application)
+    Returns (matched_args, unused_args) where:
+    - matched_args: slots in parameter order
     - unused_args: arguments that don't match any parameter (should be empty or error)
 
     Slot types:
@@ -110,17 +133,17 @@ let labels_match l1 l2 =
     - Unlabeled params match unlabeled args in order
     - Optional params without args get default None *)
 let reorder_arguments expected_params provided_args =
-  (* Find and remove an argument matching the given label *)
+  (* Find and remove an argument matching the given label from a list.
+     Returns (found_opt, remaining_args) where found_opt is the matching arg if any. *)
   let rec find_and_remove_arg label args =
     match args with
-    | [] -> None
+    | [] -> (None, [])
     | (arg_label, arg) :: rest ->
       if labels_match label arg_label then
-        Some ((arg_label, arg), rest)
+        (Some (arg_label, arg), rest)
       else
-        match find_and_remove_arg label rest with
-        | None -> None
-        | Some (found, remaining) -> Some (found, (arg_label, arg) :: remaining)
+        let found, remaining = find_and_remove_arg label rest in
+        (found, (arg_label, arg) :: remaining)
   in
 
   (* Split provided args into unlabeled and labeled *)
@@ -128,50 +151,46 @@ let reorder_arguments expected_params provided_args =
     match l with Types.Nolabel -> true | _ -> false
   ) provided_args in
 
-  (* Track remaining unlabeled and labeled args as we consume them *)
-  let unlabeled_ref = ref unlabeled_args in
-  let labeled_ref = ref labeled_args in
-
-  (* For each param, try to find a matching arg.
-     Returns a list of slots (filled with arg or needing a value) *)
-  let slots = List.map (fun (param_label, param_ty) ->
+  (* Match a single parameter to a slot, consuming from argument pools.
+     Returns (slot, remaining_unlabeled, remaining_labeled). *)
+  let match_param_to_slot (param_label, param_ty) unlabeled labeled =
     match param_label with
     | Types.Nolabel ->
-      (* Unlabeled param - match next unlabeled arg *)
-      begin match !unlabeled_ref with
-      | [] -> (param_label, `Needed param_ty)
-      | (_, arg) :: rest ->
-        unlabeled_ref := rest;
-        (param_label, `Filled arg)
+      begin match unlabeled with
+      | [] -> ((param_label, `Needed param_ty), unlabeled, labeled)
+      | (_, arg) :: rest -> ((param_label, `Filled arg), rest, labeled)
       end
+
     | Types.Labelled _ ->
-      (* Labeled param - find matching labeled arg *)
-      begin match find_and_remove_arg param_label !labeled_ref with
-      | Some ((_, arg), rest) ->
-        labeled_ref := rest;
-        (param_label, `Filled arg)
-      | None -> (param_label, `Needed param_ty)
+      let found, remaining_labeled = find_and_remove_arg param_label labeled in
+      begin match found with
+      | Some (_, arg) -> ((param_label, `Filled arg), unlabeled, remaining_labeled)
+      | None -> ((param_label, `Needed param_ty), unlabeled, remaining_labeled)
       end
+
     | Types.Optional _ ->
-      (* Optional param - find matching arg or use default None *)
-      begin match find_and_remove_arg param_label !labeled_ref with
-      | Some ((arg_label, arg), rest) ->
-        labeled_ref := rest;
-        (* If labeled arg fills optional param, it needs Some wrapping *)
-        begin match arg_label with
-        | Types.Labelled _ -> (param_label, `FilledWrapped arg)
-        | _ -> (param_label, `Filled arg)
-        end
+      let found, remaining_labeled = find_and_remove_arg param_label labeled in
+      begin match found with
+      | Some (arg_label, arg) ->
+        let slot = match arg_label with
+          | Types.Labelled _ -> (param_label, `FilledWrapped arg)
+          | _ -> (param_label, `Filled arg)
+        in
+        (slot, unlabeled, remaining_labeled)
       | None ->
-        (* No arg provided - optional param gets None default *)
-        (param_label, `OptionalDefault param_ty)
+        ((param_label, `OptionalDefault param_ty), unlabeled, remaining_labeled)
       end
-  ) expected_params in
+  in
 
-  (* Remaining args are unused *)
-  let unused_args = !unlabeled_ref @ !labeled_ref in
+  (* Process all parameters, threading the argument pools through *)
+  let slots_rev, remaining_unlabeled, remaining_labeled =
+    List.fold_left (fun (slots, unlabeled, labeled) param ->
+      let slot, unlabeled', labeled' = match_param_to_slot param unlabeled labeled in
+      (slot :: slots, unlabeled', labeled')
+    ) ([], unlabeled_args, labeled_args) expected_params
+  in
 
-  (slots, unused_args)
+  (List.rev slots_rev, remaining_unlabeled @ remaining_labeled)
 
 (** Check if a path starts with the given module identifier.
     Used to detect when abstract types from local modules escape their scope. *)
@@ -197,12 +216,177 @@ let check_module_type_escape module_id ty =
   ) ty;
   !found
 
+(** {2 Application Inference}
+
+    Function application with type-directed argument reordering.
+    Handles labeled/optional arguments and partial application. *)
+
+(** Infer type for function application.
+    Handles labeled arguments, optional argument defaulting, and partial application.
+
+    @param infer_expr Function to infer sub-expression types (for recursion)
+    @param unify_fn Function to unify types
+    @param ctx Typing context
+    @param loc Source location
+    @param func_expr The function being applied
+    @param labeled_arg_exprs The argument expressions with labels *)
+let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
+  let typed_func, ctx = infer_expr ctx func_expr in
+
+  (* Infer types for all provided arguments *)
+  let typed_labeled_args, ctx =
+    List.fold_left (fun (acc, ctx) (label, arg_expr) ->
+      let typed_arg, ctx = infer_expr ctx arg_expr in
+      let types_label = match label with
+        | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
+        | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
+        | Parsing.Syntax_tree.Optional s -> Types.Optional s
+      in
+      ((types_label, typed_arg) :: acc, ctx)
+    ) ([], ctx) labeled_arg_exprs
+  in
+  let typed_labeled_args = List.rev typed_labeled_args in
+  let num_provided_args = List.length typed_labeled_args in
+
+  (* Check if any argument has a label - affects param extraction strategy *)
+  let has_labeled_arg = List.exists (fun (label, _) ->
+    match label with Types.Nolabel -> false | _ -> true
+  ) typed_labeled_args in
+
+  (* Check if function type has optional parameters that might need defaulting *)
+  let rec has_optional_param ty =
+    match Types.representative ty with
+    | Types.TypeArrow (Types.Optional _, _, _) -> true
+    | Types.TypeArrow (_, _, result_ty) -> has_optional_param result_ty
+    | _ -> false
+  in
+  let func_has_optional = has_optional_param typed_func.expression_type in
+
+  (* Extract expected parameters from function type.
+     - With labeled args or optional params: extract ALL params (for matching)
+     - Otherwise: extract only as many as we have arguments *)
+  let expected_params, base_result_ty =
+    if has_labeled_arg || func_has_optional then
+      let rec extract_all_arrow_params ty =
+        match Types.representative ty with
+        | Types.TypeArrow (label, param_ty, result_ty) ->
+          let rest_params, final_result = extract_all_arrow_params result_ty in
+          ((label, param_ty) :: rest_params, final_result)
+        | _ -> ([], ty)
+      in
+      extract_all_arrow_params typed_func.expression_type
+    else
+      extract_arrow_params_limited num_provided_args typed_func.expression_type
+  in
+
+  if expected_params = [] then begin
+    (* Function type is not an arrow - create fresh arrow type and unify *)
+    let result_ty, ctx = Typing_context.new_type_variable ctx in
+    let expected_func_ty =
+      List.fold_right (fun (label, arg) acc ->
+        Types.TypeArrow (label, arg.Typed_tree.expression_type, acc)
+      ) typed_labeled_args result_ty
+    in
+    unify_fn ctx loc expected_func_ty typed_func.expression_type;
+    ({
+      Typed_tree.expression_desc = Typed_tree.TypedExpressionApply (typed_func, typed_labeled_args);
+      expression_type = result_ty;
+      expression_location = loc;
+    }, ctx)
+  end
+  else begin
+    (* Match arguments to parameters *)
+    let slots, unused_args = reorder_arguments expected_params typed_labeled_args in
+
+    (* Check for unused arguments *)
+    if unused_args <> [] then begin
+      let unused_unlabeled = List.filter (fun (l, _) ->
+        match l with Types.Nolabel -> true | _ -> false
+      ) unused_args in
+      let unused_labeled = List.filter (fun (l, _) ->
+        match l with Types.Nolabel -> false | _ -> true
+      ) unused_args in
+
+      if unused_unlabeled <> [] then
+        Compiler_error.type_error loc
+          (Printf.sprintf "This function is applied to too many arguments (%d extra)"
+            (List.length unused_unlabeled))
+      else begin
+        let unused_names = List.map (fun (label, _) ->
+          Inference_utils.format_arg_label label
+        ) unused_labeled in
+        Compiler_error.type_error loc
+          (Printf.sprintf "This function has no parameter with label %s"
+            (String.concat ", " unused_names))
+      end
+    end;
+
+    (* Unify filled slots with expected parameter types *)
+    List.iter2 (fun (_, param_ty) (_, slot) ->
+      match slot with
+      | `Filled arg -> unify_fn ctx loc param_ty arg.Typed_tree.expression_type
+      | `FilledWrapped arg -> unify_fn ctx loc param_ty arg.Typed_tree.expression_type
+      | `OptionalDefault _ | `Needed _ -> ()
+    ) expected_params slots;
+
+    (* Check if all slots are filled *)
+    let all_filled = List.for_all (fun (_, slot) ->
+      match slot with
+      | `Filled _ | `FilledWrapped _ | `OptionalDefault _ -> true
+      | `Needed _ -> false
+    ) slots in
+
+    if all_filled then begin
+      (* Full application *)
+      let ordered_args = List.map (fun (label, slot) ->
+        match slot with
+        | `Filled arg -> (label, arg)
+        | `FilledWrapped arg -> (label, wrap_in_some arg)
+        | `OptionalDefault inner_ty -> (label, make_none_arg loc inner_ty)
+        | `Needed _ -> failwith "impossible: all slots filled"
+      ) slots in
+
+      ({
+        Typed_tree.expression_desc = Typed_tree.TypedExpressionApply (typed_func, ordered_args);
+        expression_type = base_result_ty;
+        expression_location = loc;
+      }, ctx)
+    end
+    else begin
+      (* Partial application *)
+      let typed_slots = List.map (fun (label, slot) ->
+        match slot with
+        | `Filled arg -> (label, Typed_tree.SlotFilled arg)
+        | `FilledWrapped arg -> (label, Typed_tree.SlotFilled (wrap_in_some arg))
+        | `OptionalDefault inner_ty -> (label, Typed_tree.SlotFilled (make_none_arg loc inner_ty))
+        | `Needed ty -> (label, Typed_tree.SlotNeeded ty)
+      ) slots in
+
+      let result_ty =
+        List.fold_right (fun (label, slot) acc ->
+          match slot with
+          | `Needed param_ty -> Types.TypeArrow (label, param_ty, acc)
+          | `Filled _ | `FilledWrapped _ | `OptionalDefault _ -> acc
+        ) slots base_result_ty
+      in
+
+      ({
+        Typed_tree.expression_desc = Typed_tree.TypedExpressionPartialApply {
+          partial_func = typed_func;
+          partial_slots = typed_slots;
+        };
+        expression_type = result_ty;
+        expression_location = loc;
+      }, ctx)
+    end
+  end
+
 (** [infer_expression ctx expr] infers the type of an expression.
 
     @param ctx The typing context
     @param expr The expression to infer
     @return A pair [(typed_expr, updated_ctx)] *)
-let rec infer_expression ctx (expr : expression) =
+and infer_expression ctx (expr : expression) =
   let env = Typing_context.environment ctx in
   let loc = expr.Location.location in
   match expr.Location.value with
@@ -266,235 +450,7 @@ let rec infer_expression ctx (expr : expression) =
     }, ctx)
 
   | ExpressionApply (func_expr, labeled_arg_exprs) ->
-    (* Type-directed argument reordering:
-       1. Infer function type first
-       2. Extract expected parameter labels from function type
-       3. Infer and reorder arguments to match expected order
-       4. Unify and build result *)
-    let typed_func, ctx = infer_expression ctx func_expr in
-
-    (* Infer types for all provided arguments *)
-    let typed_labeled_args, ctx =
-      List.fold_left (fun (acc, ctx) (label, arg_expr) ->
-        let typed_arg, ctx = infer_expression ctx arg_expr in
-        let types_label = match label with
-          | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
-          | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
-          | Parsing.Syntax_tree.Optional s -> Types.Optional s
-        in
-        ((types_label, typed_arg) :: acc, ctx)
-      ) ([], ctx) labeled_arg_exprs
-    in
-    let typed_labeled_args = List.rev typed_labeled_args in
-    let num_provided_args = List.length typed_labeled_args in
-
-    (* Check if any argument has a label - this affects how many params we extract *)
-    let has_labeled_arg = List.exists (fun (label, _) ->
-      match label with Types.Nolabel -> false | _ -> true
-    ) typed_labeled_args in
-
-    (* Check if function type has any optional parameters that might need defaulting *)
-    let rec has_optional_param ty =
-      match Types.representative ty with
-      | Types.TypeArrow (Types.Optional _, _, _) -> true
-      | Types.TypeArrow (_, _, result_ty) -> has_optional_param result_ty
-      | _ -> false
-    in
-    let func_has_optional = has_optional_param typed_func.expression_type in
-
-    (* Extract expected parameters from function type.
-       - If any argument is labeled, or function has optional params, extract ALL params
-         (for label matching across positions and optional param defaulting)
-       - If all arguments are unlabeled and no optional params, extract only as many
-         as we have arguments (to avoid treating nested function returns as parameters) *)
-    let expected_params, base_result_ty =
-      if has_labeled_arg || func_has_optional then
-        (* Extract all params - we need to search for matching labels or default optionals *)
-        let rec extract_all_arrow_params ty =
-          match Types.representative ty with
-          | Types.TypeArrow (label, param_ty, result_ty) ->
-            let rest_params, final_result = extract_all_arrow_params result_ty in
-            ((label, param_ty) :: rest_params, final_result)
-          | _ -> ([], ty)
-        in
-        extract_all_arrow_params typed_func.expression_type
-      else
-        (* Only extract as many params as we have unlabeled args *)
-        extract_arrow_params_limited num_provided_args typed_func.expression_type
-    in
-
-    if expected_params = [] then begin
-      (* Function type is not an arrow - create fresh arrow type and unify *)
-      let result_ty, ctx = Typing_context.new_type_variable ctx in
-      let expected_func_ty =
-        List.fold_right (fun (label, arg) acc ->
-          TypeArrow (label, arg.expression_type, acc)
-        ) typed_labeled_args result_ty
-      in
-      unify ctx loc expected_func_ty typed_func.expression_type;
-      ({
-        expression_desc = TypedExpressionApply (typed_func, typed_labeled_args);
-        expression_type = result_ty;
-        expression_location = loc;
-      }, ctx)
-    end
-    else begin
-      (* Match arguments to parameters - returns slots and unused args *)
-      let slots, unused_args =
-        reorder_arguments expected_params typed_labeled_args
-      in
-
-      (* Check for unused arguments (don't match any parameter) *)
-      if unused_args <> [] then begin
-        let unused_unlabeled = List.filter (fun (l, _) ->
-          match l with Types.Nolabel -> true | _ -> false
-        ) unused_args in
-        let unused_labeled = List.filter (fun (l, _) ->
-          match l with Types.Nolabel -> false | _ -> true
-        ) unused_args in
-
-        if unused_unlabeled <> [] then
-          Compiler_error.type_error loc
-            (Printf.sprintf "This function is applied to too many arguments (%d extra)"
-              (List.length unused_unlabeled))
-        else begin
-          let unused_names = List.map (fun (l, _) ->
-            match l with
-            | Types.Labelled s -> "~" ^ s
-            | Types.Optional s -> "?" ^ s
-            | Types.Nolabel -> "_"
-          ) unused_labeled in
-          Compiler_error.type_error loc
-            (Printf.sprintf "This function has no parameter with label %s"
-              (String.concat ", " unused_names))
-        end
-      end;
-
-      (* Unify filled slots with their expected parameter types.
-         Slots are already in parameter order from reorder_arguments,
-         so we use positional correspondence.
-
-         For optional params, the expected type is T but we receive:
-         - FilledWrapped: arg of type T (will be wrapped in Some)
-         - OptionalDefault: will use None
-         - Filled: arg of type T option (already wrapped) *)
-      List.iter2 (fun (_, param_ty) (_, slot) ->
-        match slot with
-        | `Filled arg -> unify ctx loc param_ty arg.expression_type
-        | `FilledWrapped arg ->
-          (* Labeled arg filling optional param - arg has inner type,
-             param_ty is the inner type (not option), unify directly *)
-          unify ctx loc param_ty arg.expression_type
-        | `OptionalDefault _ ->
-          (* Optional with no arg - no unification needed, param gets None *)
-          ()
-        | `Needed _ -> ()
-      ) expected_params slots;
-
-      (* Check if all slots are filled (full application) or some are needed (partial) *)
-      let all_filled = List.for_all (fun (_, slot) ->
-        match slot with
-        | `Filled _ | `FilledWrapped _ | `OptionalDefault _ -> true
-        | `Needed _ -> false
-      ) slots in
-
-      if all_filled then begin
-        (* Full application - extract args in order, handling optional wrapping *)
-        let ordered_args = List.map (fun (label, slot) ->
-          match slot with
-          | `Filled arg -> (label, arg)
-          | `FilledWrapped arg ->
-            (* Wrap the argument in Some *)
-            let some_ctor = Environment.some_constructor in
-            let option_ty = Types.TypeConstructor (
-              Types.PathLocal "option",
-              [arg.expression_type]
-            ) in
-            let wrapped_arg = {
-              Typed_tree.expression_desc =
-                TypedExpressionConstructor (some_ctor, Some arg);
-              expression_type = option_ty;
-              expression_location = arg.expression_location;
-            } in
-            (label, wrapped_arg)
-          | `OptionalDefault inner_ty ->
-            (* Use None for missing optional argument *)
-            let none_ctor = Environment.none_constructor in
-            let option_ty = Types.TypeConstructor (
-              Types.PathLocal "option",
-              [inner_ty]
-            ) in
-            let none_arg = {
-              Typed_tree.expression_desc =
-                TypedExpressionConstructor (none_ctor, None);
-              expression_type = option_ty;
-              expression_location = loc;
-            } in
-            (label, none_arg)
-          | `Needed _ -> failwith "impossible: all slots filled"
-        ) slots in
-
-        ({
-          expression_desc = TypedExpressionApply (typed_func, ordered_args);
-          expression_type = base_result_ty;
-          expression_location = loc;
-        }, ctx)
-      end
-      else begin
-        (* Partial application - convert slots to typed tree format *)
-        let typed_slots = List.map (fun (label, slot) ->
-          match slot with
-          | `Filled arg -> (label, Typed_tree.SlotFilled arg)
-          | `FilledWrapped arg ->
-            (* Wrap the argument in Some for partial application *)
-            let some_ctor = Environment.some_constructor in
-            let option_ty = Types.TypeConstructor (
-              Types.PathLocal "option",
-              [arg.expression_type]
-            ) in
-            let wrapped_arg = {
-              Typed_tree.expression_desc =
-                TypedExpressionConstructor (some_ctor, Some arg);
-              expression_type = option_ty;
-              expression_location = arg.expression_location;
-            } in
-            (label, Typed_tree.SlotFilled wrapped_arg)
-          | `OptionalDefault inner_ty ->
-            (* Use None for missing optional argument *)
-            let none_ctor = Environment.none_constructor in
-            let option_ty = Types.TypeConstructor (
-              Types.PathLocal "option",
-              [inner_ty]
-            ) in
-            let none_arg = {
-              Typed_tree.expression_desc =
-                TypedExpressionConstructor (none_ctor, None);
-              expression_type = option_ty;
-              expression_location = loc;
-            } in
-            (label, Typed_tree.SlotFilled none_arg)
-          | `Needed ty -> (label, Typed_tree.SlotNeeded ty)
-        ) slots in
-
-        (* Compute result type from needed slots *)
-        let result_ty =
-          List.fold_right (fun (label, slot) acc ->
-            match slot with
-            | `Needed param_ty -> TypeArrow (label, param_ty, acc)
-            | `Filled _ | `FilledWrapped _ | `OptionalDefault _ -> acc
-          ) slots base_result_ty
-        in
-
-        ({
-          expression_desc = TypedExpressionPartialApply {
-            partial_func = typed_func;
-            partial_slots = typed_slots;
-          };
-          expression_type = result_ty;
-          expression_location = loc;
-        }, ctx)
-      end
-    end
+    infer_apply ~infer_expr:infer_expression ~unify_fn:unify ctx loc func_expr labeled_arg_exprs
 
   | ExpressionFunction (labeled_param_patterns, body_expr) ->
     let ctx = Typing_context.enter_level ctx in
@@ -797,10 +753,7 @@ let rec infer_expression ctx (expr : expression) =
 
 (** Helper to infer a list of expressions, threading context *)
 and infer_expression_list ctx exprs =
-  List.fold_left (fun (typed_exprs, ctx) expr ->
-    let typed_expr, ctx = infer_expression ctx expr in
-    (typed_exprs @ [typed_expr], ctx)
-  ) ([], ctx) exprs
+  Context_fold.fold_map infer_expression ctx exprs
 
 (** [infer_expression_with_expected ctx expected_type expr] infers the type of an
     expression with an optional expected type for bidirectional type checking.

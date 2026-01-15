@@ -5,13 +5,6 @@
 open Cst
 open Doc
 
-(** {1 Forward References}
-
-    This reference enables cross-module recursion with type formatters.
-    It is initialized by {!Format_cst}. *)
-
-val format_type_ref : (Red_tree.syntax_node -> doc) ref
-
 (** {1 Main Formatter} *)
 
 (** Format any pattern node.

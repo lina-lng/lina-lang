@@ -4,6 +4,28 @@
     to ensure consistency across translation phases. All generated temporary
     variable names and compilation thresholds are defined here. *)
 
+(** {1 Variant Runtime Representation} *)
+
+val variant_tag_field : string
+(** Field name for variant tag in Lua tables.
+    Used in: [{_tag = N}], [{_tag = N, _0 = x}] *)
+
+val variant_arg_field : string
+(** Field name for variant argument in Lua tables.
+    Used in: [{_tag = N, _0 = x}] *)
+
+(** {1 Reference Cell Representation} *)
+
+val ref_value_field : string
+(** Field name for ref cell value in Lua tables.
+    Used in: [{value = x}], [r.value] *)
+
+(** {1 FFI Internal Names} *)
+
+val ffi_result_name : string
+(** Temporary variable for FFI return value wrapping.
+    Used in nullable return handling. *)
+
 (** {1 Pattern Match Compilation} *)
 
 val dispatch_table_threshold : int

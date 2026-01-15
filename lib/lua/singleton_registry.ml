@@ -25,6 +25,6 @@ let register ctx type_name tag_index =
 let generate_preamble ctx =
   SingletonSet.fold (fun (type_name, tag_index) acc ->
     let name = var_name type_name tag_index in
-    let table = ExpressionTable [FieldNamed ("_tag", ExpressionNumber (float_of_int tag_index))] in
+    let table = ExpressionTable [FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber (float_of_int tag_index))] in
     StatementLocal ([name], [table]) :: acc
   ) ctx []

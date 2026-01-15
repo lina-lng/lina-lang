@@ -100,6 +100,28 @@ val module_type_lookup : t -> Types.path -> Module_types.module_type option
 (** [module_type_lookup ctx path] looks up a module type by path.
     Used for expanding [ModTypeIdent] references. *)
 
+(** {1 Environment Modification Helpers}
+
+    These convenience functions combine environment lookup and context update
+    in a single call, reducing the common 3-line pattern to 1 line. *)
+
+val add_value :
+  string -> Common.Identifier.t -> Types.type_scheme -> Common.Location.t -> t -> t
+(** [add_value name id scheme loc ctx] adds a value binding to the environment
+    and returns the updated context. *)
+
+val add_type : string -> Types.type_declaration -> t -> t
+(** [add_type name decl ctx] adds a type declaration to the environment
+    and returns the updated context. *)
+
+val add_module : string -> Module_types.module_binding -> t -> t
+(** [add_module name binding ctx] adds a module binding to the environment
+    and returns the updated context. *)
+
+val add_module_type : string -> Module_types.module_type option -> t -> t
+(** [add_module_type name mty_opt ctx] adds a module type definition to the
+    environment and returns the updated context. *)
+
 (** {1 Type Scheme Operations} *)
 
 val generalize : t -> Types.type_expression -> Types.type_scheme

@@ -117,42 +117,36 @@ let keyword_completions prefix =
   |> List.map (fun kw ->
          { label = kw; kind = Keyword; detail = None; documentation = None })
 
+(** Extract identifier prefix at offset. *)
+let extract_prefix content offset =
+  let rec find_start index =
+    if index < 0 then 0
+    else
+      let char = content.[index] in
+      if (char >= 'a' && char <= 'z')
+         || (char >= 'A' && char <= 'Z')
+         || (char >= '0' && char <= '9')
+         || char = '_'
+      then find_start (index - 1)
+      else index + 1
+  in
+  let start = find_start (offset - 1) in
+  if start < offset then String.sub content start (offset - start)
+  else ""
+
 (** Get completions at position. *)
-let get_completions store uri (pos : Lsp_types.position) =
-  match Document_store.get_document store uri with
-  | None -> []
-  | Some doc -> (
-      match Document_store.lsp_position_to_offset doc pos with
+let get_completions store uri pos =
+  Lsp_pipeline.with_document_at_position_or store uri pos ~default:[] (fun ctx ->
+    let prefix = extract_prefix ctx.doc.content ctx.offset in
+
+    (* Trigger type checking to populate cache *)
+    let _, _, _ = Diagnostics.type_check_document ctx.store ctx.uri in
+
+    (* Get environment from typing cache *)
+    let env_completions =
+      match Document_store.get_typing_cache ctx.store ctx.uri with
       | None -> []
-      | Some offset ->
-          (* Extract prefix being typed *)
-          let prefix =
-            let rec find_start i =
-              if i < 0 then 0
-              else
-                let c = doc.content.[i] in
-                if
-                  (c >= 'a' && c <= 'z')
-                  || (c >= 'A' && c <= 'Z')
-                  || (c >= '0' && c <= '9')
-                  || c = '_'
-                then find_start (i - 1)
-                else i + 1
-            in
-            let start = find_start (offset - 1) in
-            if start < offset then String.sub doc.content start (offset - start)
-            else ""
-          in
+      | Some cache -> completions_from_env prefix cache.environment
+    in
 
-          (* Trigger type checking to populate cache *)
-          let _, _, _ = Diagnostics.type_check_document store uri in
-
-          (* Get environment from typing cache *)
-          let env_completions =
-            match Document_store.get_typing_cache store uri with
-            | None -> []
-            | Some cache -> completions_from_env prefix cache.environment
-          in
-
-          (* Combine with keywords *)
-          env_completions @ keyword_completions prefix)
+    env_completions @ keyword_completions prefix)

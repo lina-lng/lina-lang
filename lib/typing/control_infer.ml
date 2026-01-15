@@ -22,15 +22,12 @@ open Typed_tree
 (** {1 Callback Types} *)
 
 (** Expression inference function type for callback. *)
-type expression_infer_fn =
-  Typing_context.t -> expression -> typed_expression * Typing_context.t
+type expression_infer_fn = Inference_utils.expression_infer_fn
 
 (** {1 Helper Functions} *)
 
 (** Unify types using context's environment for alias expansion. *)
-let unify ctx loc ty1 ty2 =
-  let env = Typing_context.environment ctx in
-  Inference_utils.unify_with_env env loc ty1 ty2
+let unify = Inference_utils.unify
 
 (** {1 If Expression Inference} *)
 
@@ -69,6 +66,133 @@ let infer_if ~(infer_expr : expression_infer_fn) ctx loc cond_expr then_expr els
 
 (** {1 Match Expression Inference} *)
 
+(** Mode for match result type handling. *)
+type match_mode =
+  | InferResultType
+      (** Create a fresh type variable for the result. *)
+  | UseExpectedType of type_expression
+      (** Use the given expected type (for GADT return type refinement). *)
+
+(** Context for processing a single match arm. *)
+type arm_context = {
+  infer_expr : expression_infer_fn;
+  scrutinee_type : type_expression;
+  match_result_type : type_expression;
+  should_extract_equations : bool;
+}
+
+(** Extract GADT equations from pattern matching. *)
+let extract_gadt_equations arm_ctx pattern_type =
+  if arm_ctx.should_extract_equations || Gadt.has_rigid_variables arm_ctx.scrutinee_type then
+    let extraction = Gadt.extract_equations arm_ctx.scrutinee_type pattern_type in
+    if extraction.success then extraction.equations else []
+  else
+    []
+
+(** Link/unlink GADT equations - delegated to Gadt module. *)
+let link_gadt_equations = Gadt.link_equations
+let unlink_gadt_equations = Gadt.unlink_equations
+
+(** Infer guard expression if present. *)
+let infer_guard arm_ctx ctx guard_opt =
+  match guard_opt with
+  | None -> (None, ctx)
+  | Some guard_expression ->
+      let typed_guard, ctx = arm_ctx.infer_expr ctx guard_expression in
+      unify ctx guard_expression.Location.location type_bool typed_guard.expression_type;
+      (Some typed_guard, ctx)
+
+(** Check that existential types don't escape their scope. *)
+let check_existential_escape loc typed_pattern result_type =
+  let existential_ids = Gadt.collect_existentials_from_pattern typed_pattern in
+  match Gadt.check_existential_escape existential_ids result_type with
+  | Some _escaped_id ->
+      Compiler_error.type_error loc
+        "This expression has a type containing an existential type variable \
+         that would escape its scope"
+  | None -> ()
+
+(** Infer a single match arm.
+
+    @param arm_ctx The arm inference context
+    @param ctx The typing context
+    @param match_arm The match arm to infer
+    @return Typed arm and updated context *)
+let infer_single_arm arm_ctx ctx match_arm =
+  let typed_pattern, pattern_type, arm_ctx_inner =
+    Pattern_infer.infer_pattern ctx match_arm.arm_pattern
+  in
+
+  let gadt_equations = extract_gadt_equations arm_ctx pattern_type in
+
+  (* For GADT patterns, link rigid type variables to their equation types.
+     For non-GADT patterns, unify normally. *)
+  if gadt_equations <> [] then
+    link_gadt_equations gadt_equations
+  else
+    unify ctx match_arm.arm_location arm_ctx.scrutinee_type pattern_type;
+
+  let typed_guard, arm_ctx_inner = infer_guard arm_ctx arm_ctx_inner match_arm.arm_guard in
+  let typed_arm_expression, _arm_ctx = arm_ctx.infer_expr arm_ctx_inner match_arm.arm_expression in
+
+  check_existential_escape match_arm.arm_location typed_pattern typed_arm_expression.expression_type;
+
+  let expected_branch_type =
+    if gadt_equations <> [] then Gadt.apply_equations gadt_equations arm_ctx.match_result_type
+    else arm_ctx.match_result_type
+  in
+  unify ctx match_arm.arm_location expected_branch_type typed_arm_expression.expression_type;
+
+  unlink_gadt_equations gadt_equations;
+
+  {
+    Typed_tree.typed_arm_pattern = typed_pattern;
+    typed_arm_guard = typed_guard;
+    typed_arm_expression;
+    typed_arm_location = match_arm.arm_location;
+  }
+
+(** Core match inference implementation parameterized by mode.
+
+    @param mode How to handle the result type
+    @param infer_expr The expression inference callback
+    @param ctx The typing context
+    @param loc The source location
+    @param scrutinee_expr The expression being matched
+    @param match_arms The list of match arms
+    @return A pair [(typed_expr, updated_ctx)] *)
+let infer_match_core ~mode ~(infer_expr : expression_infer_fn) ctx loc scrutinee_expr match_arms =
+  let env = Typing_context.environment ctx in
+
+  let typed_scrutinee, ctx = infer_expr ctx scrutinee_expr in
+  let scrutinee_type = typed_scrutinee.expression_type in
+
+  let result_type, ctx = match mode with
+    | InferResultType -> Typing_context.new_type_variable ctx
+    | UseExpectedType expected_ty -> (expected_ty, ctx)
+  in
+
+  let should_extract_equations = match mode with
+    | InferResultType -> false
+    | UseExpectedType _ -> true
+  in
+
+  let arm_ctx = {
+    infer_expr;
+    scrutinee_type;
+    match_result_type = result_type;
+    should_extract_equations;
+  } in
+
+  let typed_match_arms = List.map (infer_single_arm arm_ctx ctx) match_arms in
+
+  Pattern_check.check_match env loc scrutinee_type typed_match_arms;
+  ({
+    expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
+    expression_type = result_type;
+    expression_location = loc;
+  }, ctx)
+
 (** [infer_match ~infer_expr ctx loc scrutinee_expr match_arms] infers the type
     of a pattern match expression.
 
@@ -81,84 +205,8 @@ let infer_if ~(infer_expr : expression_infer_fn) ctx loc cond_expr then_expr els
     @param scrutinee_expr The expression being matched
     @param match_arms The list of match arms
     @return A pair [(typed_expr, updated_ctx)] *)
-let infer_match ~(infer_expr : expression_infer_fn) ctx loc scrutinee_expr match_arms =
-  let env = Typing_context.environment ctx in
-
-  let typed_scrutinee, ctx = infer_expr ctx scrutinee_expr in
-  let scrutinee_type = typed_scrutinee.expression_type in
-  let result_type, ctx = Typing_context.new_type_variable ctx in
-  let scrutinee_has_rigid = Gadt.has_rigid_variables scrutinee_type in
-
-  let typed_match_arms, ctx = List.fold_left (fun (arms, ctx) match_arm ->
-    let typed_pattern, pattern_type, arm_ctx =
-      Pattern_infer.infer_pattern ctx match_arm.arm_pattern in
-
-    let gadt_equations =
-      if scrutinee_has_rigid then
-        let extraction = Gadt.extract_equations scrutinee_type pattern_type in
-        if extraction.success then extraction.equations else []
-      else
-        []
-    in
-
-    (* For GADT patterns, link rigid type variables to their equation types.
-       This allows the branch body to use variables at their refined types.
-       For non-GADT patterns, unify normally. *)
-    if gadt_equations <> [] then begin
-      List.iter (fun (eq : Gadt.equation) ->
-        eq.eq_variable.link <- Some eq.eq_type
-      ) gadt_equations
-    end else
-      unify ctx match_arm.arm_location scrutinee_type pattern_type;
-
-    let typed_guard, arm_ctx = match match_arm.arm_guard with
-      | None -> (None, arm_ctx)
-      | Some guard_expression ->
-          let typed_guard_expression, arm_ctx = infer_expr arm_ctx guard_expression in
-          unify arm_ctx guard_expression.Location.location type_bool
-            typed_guard_expression.expression_type;
-          (Some typed_guard_expression, arm_ctx)
-    in
-
-    let typed_arm_expression, _arm_ctx = infer_expr arm_ctx match_arm.arm_expression in
-
-    let existential_ids = Gadt.collect_existentials_from_pattern typed_pattern in
-    begin match Gadt.check_existential_escape existential_ids typed_arm_expression.expression_type with
-    | Some _escaped_id ->
-        Compiler_error.type_error match_arm.arm_location
-          "This expression has a type containing an existential type variable \
-           that would escape its scope"
-    | None -> ()
-    end;
-
-    let expected_result_type =
-      if gadt_equations <> [] then Gadt.apply_equations gadt_equations result_type
-      else result_type
-    in
-    unify ctx match_arm.arm_location expected_result_type typed_arm_expression.expression_type;
-
-    (* Unlink GADT equations after processing the branch.
-       Each branch has its own equations that shouldn't pollute other branches. *)
-    List.iter (fun (eq : Gadt.equation) ->
-      eq.eq_variable.link <- None
-    ) gadt_equations;
-
-    let typed_arm = {
-      Typed_tree.typed_arm_pattern = typed_pattern;
-      typed_arm_guard = typed_guard;
-      typed_arm_expression;
-      typed_arm_location = match_arm.arm_location;
-    } in
-    (typed_arm :: arms, ctx)
-  ) ([], ctx) match_arms in
-
-  let typed_match_arms = List.rev typed_match_arms in
-  Pattern_check.check_match env loc scrutinee_type typed_match_arms;
-  ({
-    expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
-    expression_type = result_type;
-    expression_location = loc;
-  }, ctx)
+let infer_match ~infer_expr ctx loc scrutinee_expr match_arms =
+  infer_match_core ~mode:InferResultType ~infer_expr ctx loc scrutinee_expr match_arms
 
 (** [infer_match_with_expected ~infer_expr ctx loc expected_ty scrutinee_expr match_arms]
     infers the type of a pattern match expression with an expected result type
@@ -174,71 +222,5 @@ let infer_match ~(infer_expr : expression_infer_fn) ctx loc scrutinee_expr match
     @param scrutinee_expr The expression being matched
     @param match_arms The list of match arms
     @return A pair [(typed_expr, updated_ctx)] *)
-let infer_match_with_expected ~(infer_expr : expression_infer_fn) ctx loc expected_ty scrutinee_expr match_arms =
-  let env = Typing_context.environment ctx in
-
-  let typed_scrutinee, ctx = infer_expr ctx scrutinee_expr in
-  let scrutinee_type = typed_scrutinee.expression_type in
-
-  let typed_match_arms, ctx = List.fold_left (fun (arms, ctx) match_arm ->
-    let typed_pattern, pattern_type, arm_ctx =
-      Pattern_infer.infer_pattern ctx match_arm.arm_pattern in
-
-    let gadt_equations =
-      let extraction = Gadt.extract_equations scrutinee_type pattern_type in
-      if extraction.success then extraction.equations else []
-    in
-
-    (* For GADT patterns, link rigid type variables to their equation types.
-       This allows the branch body to use variables at their refined types. *)
-    if gadt_equations <> [] then begin
-      List.iter (fun (eq : Gadt.equation) ->
-        eq.eq_variable.link <- Some eq.eq_type
-      ) gadt_equations
-    end else
-      unify ctx match_arm.arm_location scrutinee_type pattern_type;
-
-    let typed_guard, arm_ctx = match match_arm.arm_guard with
-      | None -> (None, arm_ctx)
-      | Some guard_expression ->
-          let typed_guard_expression, arm_ctx = infer_expr arm_ctx guard_expression in
-          unify arm_ctx guard_expression.Location.location type_bool
-            typed_guard_expression.expression_type;
-          (Some typed_guard_expression, arm_ctx)
-    in
-
-    let typed_arm_expression, _arm_ctx = infer_expr arm_ctx match_arm.arm_expression in
-
-    let existential_ids = Gadt.collect_existentials_from_pattern typed_pattern in
-    begin match Gadt.check_existential_escape existential_ids typed_arm_expression.expression_type with
-    | Some _escaped_id ->
-        Compiler_error.type_error match_arm.arm_location
-          "This expression has a type containing an existential type variable \
-           that would escape its scope"
-    | None -> ()
-    end;
-
-    let expected_branch_type = Gadt.apply_equations gadt_equations expected_ty in
-    unify ctx match_arm.arm_location expected_branch_type typed_arm_expression.expression_type;
-
-    (* Unlink GADT equations after processing the branch. *)
-    List.iter (fun (eq : Gadt.equation) ->
-      eq.eq_variable.link <- None
-    ) gadt_equations;
-
-    let typed_arm = {
-      Typed_tree.typed_arm_pattern = typed_pattern;
-      typed_arm_guard = typed_guard;
-      typed_arm_expression;
-      typed_arm_location = match_arm.arm_location;
-    } in
-    (typed_arm :: arms, ctx)
-  ) ([], ctx) match_arms in
-
-  let typed_match_arms = List.rev typed_match_arms in
-  Pattern_check.check_match env loc scrutinee_type typed_match_arms;
-  ({
-    expression_desc = TypedExpressionMatch (typed_scrutinee, typed_match_arms);
-    expression_type = expected_ty;
-    expression_location = loc;
-  }, ctx)
+let infer_match_with_expected ~infer_expr ctx loc expected_ty scrutinee_expr match_arms =
+  infer_match_core ~mode:(UseExpectedType expected_ty) ~infer_expr ctx loc scrutinee_expr match_arms

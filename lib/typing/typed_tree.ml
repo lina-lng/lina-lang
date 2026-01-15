@@ -30,6 +30,13 @@ and typed_record_pattern_field = {
   typed_pattern_field_pattern : typed_pattern;
 }
 
+(** A variable binding extracted from a pattern. *)
+and pattern_binding = {
+  binding_name : string;
+  binding_id : Identifier.t;
+  binding_type : Types.type_expression;
+}
+
 (** Slot in a partial application: either filled with a value or still needed *)
 and partial_slot =
   | SlotFilled of typed_expression  (** Argument provided *)

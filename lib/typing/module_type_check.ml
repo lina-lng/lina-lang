@@ -47,42 +47,54 @@ let split_last list =
   in
   aux [] list
 
-(** {2 Signature Refinement Helpers} *)
+(** {2 Signature Refinement Helpers}
+
+    These helpers search for and transform items in signatures.
+    The generic [search_and_refine_sig] captures the common pattern. *)
+
+(** Generic signature item search and transform.
+
+    Searches through [sig_] for an item matching [match_and_transform].
+    Returns [(new_signature, result)] where the matching item is replaced.
+
+    @param match_and_transform Returns [Some (new_item, result)] for matching items
+    @param not_found_msg Error message if no item matches
+    @param sig_ The signature to search
+    @param loc Location for error reporting *)
+let search_and_refine_sig ~match_and_transform ~not_found_msg sig_ loc =
+  let rec loop acc = function
+    | [] -> Compiler_error.type_error loc not_found_msg
+    | item :: rest ->
+        match match_and_transform item with
+        | Some (new_item, result) -> (List.rev_append acc (new_item :: rest), result)
+        | None -> loop (item :: acc) rest
+  in
+  loop [] sig_
 
 let refine_sig_module name sig_ loc ~transform ~not_found_msg =
-  let rec search_and_refine acc = function
-    | [] ->
-        Compiler_error.type_error loc not_found_msg
-    | Module_types.SigModule (n, mty) :: rest when n = name ->
-        List.rev_append acc (Module_types.SigModule (n, transform mty) :: rest)
-    | item :: rest ->
-        search_and_refine (item :: acc) rest
+  let match_and_transform = function
+    | Module_types.SigModule (n, mty) when n = name ->
+        Some (Module_types.SigModule (n, transform mty), ())
+    | _ -> None
   in
-  search_and_refine [] sig_
+  let result, () = search_and_refine_sig ~match_and_transform ~not_found_msg sig_ loc in
+  result
 
 let refine_sig_module_with_ctx name sig_ loc ctx ~transform ~not_found_msg =
-  let rec search_and_refine acc ctx = function
-    | [] ->
-        Compiler_error.type_error loc not_found_msg
-    | Module_types.SigModule (n, mty) :: rest when n = name ->
+  let match_and_transform = function
+    | Module_types.SigModule (n, mty) when n = name ->
         let new_mty, new_ctx = transform ctx mty in
-        (List.rev_append acc (Module_types.SigModule (n, new_mty) :: rest), new_ctx)
-    | item :: rest ->
-        search_and_refine (item :: acc) ctx rest
+        Some (Module_types.SigModule (n, new_mty), new_ctx)
+    | _ -> None
   in
-  search_and_refine [] ctx sig_
+  search_and_refine_sig ~match_and_transform ~not_found_msg sig_ loc
 
 let refine_sig_type name sig_ loc ~transform ~not_found_msg =
-  let rec search_and_refine acc = function
-    | [] ->
-        Compiler_error.type_error loc not_found_msg
-    | Module_types.SigType (n, decl) :: rest when n = name ->
-        let new_item, updated_ctx = transform decl in
-        (List.rev_append acc (new_item :: rest), updated_ctx)
-    | item :: rest ->
-        search_and_refine (item :: acc) rest
+  let match_and_transform = function
+    | Module_types.SigType (n, decl) when n = name -> Some (transform decl)
+    | _ -> None
   in
-  search_and_refine [] sig_
+  search_and_refine_sig ~match_and_transform ~not_found_msg sig_ loc
 
 (** Dispatch on a nested path (M.N.x) by matching the outermost module.
     Creates the inner path and delegates to [refine]. *)

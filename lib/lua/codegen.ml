@@ -25,6 +25,23 @@ let register_singleton ctx type_name tag_index =
 let generate_singleton_preamble ctx =
   Singleton_registry.generate_preamble ctx.singletons
 
+(** {1 IIFE Helpers}
+
+    Immediately Invoked Function Expressions wrap statements in a function
+    that's called immediately. Used when statements need to be in expression
+    position. *)
+
+(** Create an IIFE that executes statements and returns their final value. *)
+let make_iife statements =
+  ExpressionCall (ExpressionFunction ([], statements), [])
+
+(** Create an IIFE that performs an assignment and returns nil.
+    Used for setter operations that need to return unit. *)
+let make_assignment_iife lvalues values =
+  let assign = StatementAssign (lvalues, values) in
+  let return_nil = StatementReturn [ExpressionNil] in
+  make_iife [assign; return_nil]
+
 let translate_constant = function
   | Lambda.ConstantInt n -> ExpressionNumber (float_of_int n)
   | Lambda.ConstantFloat f -> ExpressionNumber f
@@ -90,6 +107,21 @@ let wrap_variadic_args (args : expression list) (is_variadic : bool) : expressio
       ) in
       List.rev (unpack_call :: preceding)
 
+(** Generate a Lua error call expression. *)
+let make_error_call message =
+  ExpressionCall (ExpressionVariable "error", [ExpressionString message])
+
+(** Build a variant table with tag and optional argument. *)
+let make_variant_table tag_expr arg_expr_opt =
+  let tag_field = FieldNamed (Codegen_constants.variant_tag_field, tag_expr) in
+  match arg_expr_opt with
+  | None -> ExpressionTable [tag_field]
+  | Some arg_expr ->
+    ExpressionTable [
+      tag_field;
+      FieldNamed (Codegen_constants.variant_arg_field, arg_expr)
+    ]
+
 (** Generate FFI call expression based on the spec and translated arguments.
 
     @param spec The FFI specification with kind, lua name, etc.
@@ -126,42 +158,37 @@ let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list
       ExpressionMethodCall (receiver, lua_name, wrapped_rest)
     | [] ->
       (* Should not happen - validation ensures arity >= 1 *)
-      ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI method call with no receiver"])
+      make_error_call "FFI method call with no receiver"
     end
 
   | FFIKindGetter ->
     (* Property getter: obj.field - fixed arity, no variadic *)
     begin match args with
     | [obj] -> ExpressionField (obj, lua_name)
-    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI getter with wrong arity"])
+    | _ -> make_error_call "FFI getter with wrong arity"
     end
 
   | FFIKindSetter ->
     (* Property setter: obj.field = value (returns nil) - fixed arity, no variadic *)
-    (* We need to generate an IIFE: (function() obj.field = value; return nil end)() *)
     begin match args with
     | [obj; value] ->
-      let assign = StatementAssign ([LvalueField (obj, lua_name)], [value]) in
-      let return_nil = StatementReturn [ExpressionNil] in
-      ExpressionCall (ExpressionFunction ([], [assign; return_nil]), [])
-    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI setter with wrong arity"])
+      make_assignment_iife [LvalueField (obj, lua_name)] [value]
+    | _ -> make_error_call "FFI setter with wrong arity"
     end
 
   | FFIKindIndexGetter ->
     (* Index getter: obj[key] - fixed arity, no variadic *)
     begin match args with
     | [obj; key] -> ExpressionIndex (obj, key)
-    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI index getter with wrong arity"])
+    | _ -> make_error_call "FFI index getter with wrong arity"
     end
 
   | FFIKindIndexSetter ->
     (* Index setter: obj[key] = value (returns nil) - fixed arity, no variadic *)
     begin match args with
     | [obj; key; value] ->
-      let assign = StatementAssign ([LvalueIndex (obj, key)], [value]) in
-      let return_nil = StatementReturn [ExpressionNil] in
-      ExpressionCall (ExpressionFunction ([], [assign; return_nil]), [])
-    | _ -> ExpressionCall (ExpressionVariable "error", [ExpressionString "FFI index setter with wrong arity"])
+      make_assignment_iife [LvalueIndex (obj, key)] [value]
+    | _ -> make_error_call "FFI index setter with wrong arity"
     end
 
   | FFIKindConstructor ->
@@ -170,9 +197,21 @@ let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list
     let constructor = ExpressionField (ExpressionVariable lua_name, "new") in
     ExpressionCall (constructor, wrapped_args)
 
+(** Wrap a lambda in an IIFE (Immediately Invoked Function Expression).
+
+    Used when a statement-form construct appears in expression position.
+    Translates the lambda to statements and wraps in (function() ... end)().
+
+    @param ctx The code generation context
+    @param lambda The lambda to wrap
+    @return Tuple of (IIFE expression, updated_context) *)
+let rec wrap_in_iife ctx lambda =
+  let func_body, ctx = translate_to_statements ctx lambda in
+  (make_iife func_body, ctx)
+
 (** Translate a lambda expression to a Lua expression, threading context.
     Returns (expression, updated_context). *)
-let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context =
+and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
   match lambda with
   | Lambda.LambdaVariable id ->
     (ExpressionVariable (mangle_identifier id), ctx)
@@ -190,25 +229,16 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let body_stmts, ctx = translate_to_statements ctx body in
     (ExpressionFunction (param_names, body_stmts), ctx)
 
-  | Lambda.LambdaLet (id, value, body) ->
-    let func_body, ctx = translate_to_statements ctx (Lambda.LambdaLet (id, value, body)) in
-    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
-
-  | Lambda.LambdaLetRecursive (bindings, body) ->
-    let func_body, ctx = translate_to_statements ctx (Lambda.LambdaLetRecursive (bindings, body)) in
-    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
+  (* Statement-form constructs: wrap in IIFE when in expression position *)
+  | Lambda.LambdaLet _ | Lambda.LambdaLetRecursive _ ->
+    wrap_in_iife ctx lambda
 
   | Lambda.LambdaPrimitive (prim, args) ->
     let arg_exprs, ctx = translate_expression_list ctx args in
     (translate_primitive prim arg_exprs, ctx)
 
-  | Lambda.LambdaIfThenElse (_cond, _then_branch, _else_branch) ->
-    let func_body, ctx = translate_to_statements ctx lambda in
-    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
-
-  | Lambda.LambdaSequence (_first, _second) ->
-    let func_body, ctx = translate_to_statements ctx lambda in
-    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
+  | Lambda.LambdaIfThenElse _ | Lambda.LambdaSequence _ ->
+    wrap_in_iife ctx lambda
 
   | Lambda.LambdaMakeBlock (_, fields) ->
     let field_exprs, ctx = translate_expression_list ctx fields in
@@ -218,9 +248,8 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let obj_expr, ctx = translate_expression ctx obj in
     (ExpressionIndex (obj_expr, ExpressionNumber (float_of_int (n + 1))), ctx)
 
-  | Lambda.LambdaSwitch (_scrutinee, _cases, _default) ->
-    let func_body, ctx = translate_to_statements ctx lambda in
-    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
+  | Lambda.LambdaSwitch _ ->
+    wrap_in_iife ctx lambda
 
   | Lambda.LambdaConstructor (tag, None) when tag.Lambda.tag_is_nullary && not tag.Lambda.tag_is_extension ->
     (* Nullary constructor (non-extension): use singleton *)
@@ -228,21 +257,19 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     (ExpressionVariable (Singleton_registry.var_name tag.Lambda.tag_type_name tag.Lambda.tag_index), ctx)
 
   | Lambda.LambdaConstructor (tag, arg) ->
-    (* Extension constructors use string tags for uniqueness *)
     let tag_expr =
       if tag.Lambda.tag_is_extension then
         ExpressionString tag.Lambda.tag_name
       else
         ExpressionNumber (float_of_int tag.Lambda.tag_index)
     in
-    let fields = [FieldNamed ("_tag", tag_expr)] in
-    let fields, ctx = match arg with
-      | None -> (fields, ctx)
-      | Some arg_expr ->
-        let translated, ctx = translate_expression ctx arg_expr in
-        (fields @ [FieldNamed ("_0", translated)], ctx)
+    let arg_expr_opt, ctx = match arg with
+      | None -> (None, ctx)
+      | Some arg_lambda ->
+        let translated, ctx = translate_expression ctx arg_lambda in
+        (Some translated, ctx)
     in
-    (ExpressionTable fields, ctx)
+    (make_variant_table tag_expr arg_expr_opt, ctx)
 
   | Lambda.LambdaMakeRecord field_bindings ->
     let translated_fields, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
@@ -255,9 +282,8 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let translated_record, ctx = translate_expression ctx record_expression in
     (ExpressionField (translated_record, field_name), ctx)
 
-  | Lambda.LambdaRecordUpdate (base_expression, update_fields) ->
-    let func_body, ctx = translate_to_statements ctx (Lambda.LambdaRecordUpdate (base_expression, update_fields)) in
-    (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
+  | Lambda.LambdaRecordUpdate _ ->
+    wrap_in_iife ctx lambda
 
   | Lambda.LambdaModule bindings ->
     (* Module as a Lua table with named fields *)
@@ -300,12 +326,12 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
              return {_tag = 1, _0 = _result}  -- Some
            end
          end)() *)
-      let result_name = "_ffi_result" in
+      let result_name = Codegen_constants.ffi_result_name in
       let result_var = ExpressionVariable result_name in
-      let none_expr = ExpressionTable [FieldNamed ("_tag", ExpressionNumber 0.0)] in
+      let none_expr = ExpressionTable [FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 0.0)] in
       let some_expr = ExpressionTable [
-        FieldNamed ("_tag", ExpressionNumber 1.0);
-        FieldNamed ("_0", result_var)
+        FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 1.0);
+        FieldNamed (Codegen_constants.variant_arg_field, result_var)
       ] in
       let result_decl = StatementLocal ([result_name], [call_expr]) in
       let nil_check = ExpressionBinaryOp (OpEqual, result_var, ExpressionNil) in
@@ -313,8 +339,7 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
         [(nil_check, [StatementReturn [none_expr]])],
         Some [StatementReturn [some_expr]]
       ) in
-      let iife = ExpressionCall (ExpressionFunction ([], [result_decl; if_stmt]), []) in
-      (iife, ctx)
+      (make_iife [result_decl; if_stmt], ctx)
     else
       (call_expr, ctx)
 
@@ -322,43 +347,29 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
   | Lambda.LambdaRef inner ->
     (* ref e -> {value = e} *)
     let inner_expr, ctx = translate_expression ctx inner in
-    (ExpressionTable [FieldNamed ("value", inner_expr)], ctx)
+    (ExpressionTable [FieldNamed (Codegen_constants.ref_value_field, inner_expr)], ctx)
 
   | Lambda.LambdaDeref ref_expr ->
     (* !e -> e.value *)
     let ref_lua, ctx = translate_expression ctx ref_expr in
-    (ExpressionField (ref_lua, "value"), ctx)
+    (ExpressionField (ref_lua, Codegen_constants.ref_value_field), ctx)
 
   | Lambda.LambdaAssign (ref_expr, value_expr) ->
     (* e1 := e2 -> (function() e1.value = e2; return nil end)() *)
-    (* We need to use an IIFE since assignment is a statement in Lua *)
     let ref_lua, ctx = translate_expression ctx ref_expr in
     let value_lua, ctx = translate_expression ctx value_expr in
-    let lvalue = LvalueField (ref_lua, "value") in
-    let assign_stmt = StatementAssign ([lvalue], [value_lua]) in
-    let return_nil = StatementReturn [ExpressionNil] in
-    let iife = ExpressionCall (ExpressionFunction ([], [assign_stmt; return_nil]), []) in
-    (iife, ctx)
+    let lvalue = LvalueField (ref_lua, Codegen_constants.ref_value_field) in
+    (make_assignment_iife [lvalue] [value_lua], ctx)
 
   | Lambda.LambdaPolyVariant (tag, arg) ->
-    (* `Tag -> {_tag = "Tag"}
-       `Tag x -> {_tag = "Tag", _0 = x} *)
-    begin match arg with
-    | None ->
-      (* Nullary poly variant - just the tag *)
-      let table = ExpressionTable [
-        FieldNamed ("_tag", ExpressionString tag);
-      ] in
-      (table, ctx)
-    | Some arg_expr ->
-      (* Poly variant with argument *)
-      let arg_lua, ctx = translate_expression ctx arg_expr in
-      let table = ExpressionTable [
-        FieldNamed ("_tag", ExpressionString tag);
-        FieldNamed ("_0", arg_lua);
-      ] in
-      (table, ctx)
-    end
+    let tag_expr = ExpressionString tag in
+    let arg_expr_opt, ctx = match arg with
+      | None -> (None, ctx)
+      | Some arg_lambda ->
+        let translated, ctx = translate_expression ctx arg_lambda in
+        (Some translated, ctx)
+    in
+    (make_variant_table tag_expr arg_expr_opt, ctx)
 
 (** Helper to translate a list of expressions.
     Uses cons + reverse for O(n) instead of O(n²) list append. *)
@@ -395,6 +406,28 @@ and translate_value_to_assignment ctx name lambda : block * context =
   | _ ->
     let expr, ctx = translate_expression ctx lambda in
     ([StatementAssign ([LvalueVariable name], [expr])], ctx)
+
+(** Translate recursive let bindings to forward declaration and assignments.
+
+    Creates the forward declaration for all binding names and translates each
+    binding value to an assignment statement.
+
+    @param ctx The code generation context
+    @param bindings List of (identifier, lambda) pairs
+    @return Tuple of (forward_decl, assignments, updated_context) *)
+and translate_recursive_bindings ctx bindings =
+  let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
+  let forward_decl = StatementLocal (names, []) in
+
+  let rev_assignments, ctx =
+    List.fold_left (fun (acc, ctx) (id, value) ->
+      let name = mangle_identifier id in
+      let value_expr, ctx = translate_expression ctx value in
+      (StatementAssign ([LvalueVariable name], [value_expr]) :: acc, ctx)
+    ) ([], ctx) bindings
+  in
+
+  (forward_decl, List.rev rev_assignments, ctx)
 
 (** Dispatch table switch translation for many cases, threading context *)
 and translate_switch_as_dispatch ctx _scrutinee_name tag_access cases default =
@@ -477,17 +510,9 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
     end
 
   | Lambda.LambdaLetRecursive (bindings, body) ->
-    let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
-    let forward_decl = StatementLocal (names, []) in
-    let rev_assignments, ctx =
-      List.fold_left (fun (acc, ctx) (id, value) ->
-        let name = mangle_identifier id in
-        let value_expr, ctx = translate_expression ctx value in
-        (StatementAssign ([LvalueVariable name], [value_expr]) :: acc, ctx)
-      ) ([], ctx) bindings
-    in
+    let forward_decl, assignments, ctx = translate_recursive_bindings ctx bindings in
     let rest, ctx = translate_to_statements ctx body in
-    (forward_decl :: List.rev_append rev_assignments rest, ctx)
+    (forward_decl :: assignments @ rest, ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
     let cond_expr, ctx = translate_expression ctx cond in
@@ -504,7 +529,7 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
     let scrutinee_expr, ctx = translate_expression ctx scrutinee in
     let temp_name = Codegen_constants.switch_scrutinee_name in
     let local_stmt = StatementLocal ([temp_name], [scrutinee_expr]) in
-    let tag_access = ExpressionField (ExpressionVariable temp_name, "_tag") in
+    let tag_access = ExpressionField (ExpressionVariable temp_name, Codegen_constants.variant_tag_field) in
     let num_cases = List.length cases in
     (* Use dispatch table for many cases, otherwise use if-chain *)
     if num_cases >= Codegen_constants.dispatch_table_threshold then
@@ -574,17 +599,9 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
     (StatementLocal ([name], [value_expr]) :: rest, ctx)
 
   | Lambda.LambdaLetRecursive (bindings, body) ->
-    let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
-    let forward_decl = StatementLocal (names, []) in
-    let rev_assignments, ctx =
-      List.fold_left (fun (acc, ctx) (id, value) ->
-        let name = mangle_identifier id in
-        let value_expr, ctx = translate_expression ctx value in
-        (StatementAssign ([LvalueVariable name], [value_expr]) :: acc, ctx)
-      ) ([], ctx) bindings
-    in
+    let forward_decl, assignments, ctx = translate_recursive_bindings ctx bindings in
     let rest, ctx = translate_to_effect ctx body in
-    (forward_decl :: List.rev_append rev_assignments rest, ctx)
+    (forward_decl :: assignments @ rest, ctx)
 
   | _ ->
     let expr, ctx = translate_expression ctx lambda in

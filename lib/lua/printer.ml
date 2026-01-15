@@ -55,6 +55,17 @@ let operator_precedence = function
   | OpMul | OpDiv | OpMod -> 60
   | OpPow -> 70
 
+(** Print items with a separator between them. *)
+let print_separated buf ~sep ~print items =
+  match items with
+  | [] -> ()
+  | first :: rest ->
+      print buf first;
+      List.iter (fun item ->
+        Buffer.add_string buf sep;
+        print buf item
+      ) rest
+
 (** {1 Buffer-Based Printing Functions} *)
 
 let rec print_expression_prec_to_buf buf prec expr =
@@ -132,37 +143,13 @@ and print_expression_to_buf buf expr =
   print_expression_prec_to_buf buf 0 expr
 
 and print_expressions_to_buf buf exprs =
-  match exprs with
-  | [] -> ()
-  | [expr] -> print_expression_to_buf buf expr
-  | expr :: rest ->
-    print_expression_to_buf buf expr;
-    List.iter (fun expr ->
-      Buffer.add_string buf ", ";
-      print_expression_to_buf buf expr
-    ) rest
+  print_separated buf ~sep:", " ~print:print_expression_to_buf exprs
 
 and print_string_list_to_buf buf strings =
-  match strings with
-  | [] -> ()
-  | [s] -> Buffer.add_string buf s
-  | s :: rest ->
-    Buffer.add_string buf s;
-    List.iter (fun s ->
-      Buffer.add_string buf ", ";
-      Buffer.add_string buf s
-    ) rest
+  print_separated buf ~sep:", " ~print:Buffer.add_string strings
 
 and print_table_fields_to_buf buf fields =
-  match fields with
-  | [] -> ()
-  | [field] -> print_table_field_to_buf buf field
-  | field :: rest ->
-    print_table_field_to_buf buf field;
-    List.iter (fun field ->
-      Buffer.add_string buf ", ";
-      print_table_field_to_buf buf field
-    ) rest
+  print_separated buf ~sep:", " ~print:print_table_field_to_buf fields
 
 and print_table_field_to_buf buf field =
   match field with
@@ -193,15 +180,7 @@ and print_lvalue_to_buf buf lvalue =
     Buffer.add_string buf field
 
 and print_lvalues_to_buf buf lvalues =
-  match lvalues with
-  | [] -> ()
-  | [lvalue] -> print_lvalue_to_buf buf lvalue
-  | lvalue :: rest ->
-    print_lvalue_to_buf buf lvalue;
-    List.iter (fun lvalue ->
-      Buffer.add_string buf ", ";
-      print_lvalue_to_buf buf lvalue
-    ) rest
+  print_separated buf ~sep:", " ~print:print_lvalue_to_buf lvalues
 
 and print_statement_to_buf buf level stmt =
   add_indent buf level;
@@ -306,15 +285,8 @@ and print_if_branches_to_buf buf level branches =
     ) rest
 
 and print_block_to_buf buf level stmts =
-  match stmts with
-  | [] -> ()
-  | [stmt] -> print_statement_to_buf buf level stmt
-  | stmt :: rest ->
-    print_statement_to_buf buf level stmt;
-    List.iter (fun stmt ->
-      Buffer.add_char buf '\n';
-      print_statement_to_buf buf level stmt
-    ) rest
+  let print_stmt buf stmt = print_statement_to_buf buf level stmt in
+  print_separated buf ~sep:"\n" ~print:print_stmt stmts
 
 (** {1 Public API} *)
 

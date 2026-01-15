@@ -35,7 +35,6 @@ let find_hover_at_offset store uri offset =
   let* cache = Document_store.get_typing_cache store uri in
   find_hover_in_cache cache offset
 
-let get_hover store uri (pos : Lsp_types.position) =
-  let* doc = Document_store.get_document store uri in
-  let* offset = Document_store.lsp_position_to_offset doc pos in
-  find_hover_at_offset store uri offset
+let get_hover store uri pos =
+  Lsp_pipeline.with_document_at_position store uri pos (fun ctx ->
+    find_hover_at_offset ctx.store ctx.uri ctx.offset)

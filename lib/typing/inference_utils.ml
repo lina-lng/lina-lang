@@ -17,6 +17,10 @@ let unify_with_env env loc ty1 ty2 =
   let type_lookup path = Environment.find_type_by_path path env in
   Unification.unify ~type_lookup loc ty1 ty2
 
+let unify ctx loc ty1 ty2 =
+  let env = Typing_context.environment ctx in
+  unify_with_env env loc ty1 ty2
+
 (** {1 Constructor Arity Checking} *)
 
 let check_constructor_arity loc name ~has_arg ~expects_arg =
@@ -116,6 +120,13 @@ let error_unbound_constructor loc name = error_unbound UnboundConstructor loc na
 let error_unbound_module loc name = error_unbound UnboundModule loc name
 let error_unbound_type loc name = error_unbound UnboundType loc name
 let error_unbound_module_type loc name = error_unbound UnboundModuleType loc name
+
+(** {1 Label Formatting} *)
+
+let format_arg_label = function
+  | Types.Labelled name -> "~" ^ name
+  | Types.Optional name -> "?" ^ name
+  | Types.Nolabel -> "_"
 
 (** {1 Constructor Instantiation} *)
 
@@ -226,6 +237,19 @@ let make_match_context ctx =
   Signature_match.create_context
     ~type_lookup:(fun path -> Environment.find_type_by_path path env)
     ~module_type_lookup:(make_module_type_lookup ctx)
+
+(** {1 Callback Type Aliases} *)
+
+type expression_infer_fn =
+  Typing_context.t ->
+  Parsing.Syntax_tree.expression ->
+  Typed_tree.typed_expression * Typing_context.t
+
+type expression_infer_expected_fn =
+  Typing_context.t ->
+  Types.type_expression option ->
+  Parsing.Syntax_tree.expression ->
+  Typed_tree.typed_expression * Typing_context.t
 
 (** {1 Tolerant Inference Error Types} *)
 

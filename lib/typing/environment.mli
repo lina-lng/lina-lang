@@ -47,14 +47,12 @@ val initial : t
     [int option]. When called with [~x:5], the argument is wrapped as [Some 5].
     When the argument is omitted, it defaults to [None]. *)
 
-(** Type declaration for ['a option = None | Some of 'a].
-    Available in the initial environment. *)
-val option_type_declaration : Types.type_declaration
-
-(** Constructor info for [None : 'a option]. *)
+(** Constructor info for [None : 'a option].
+    Re-exported from {!Builtins} for convenience. *)
 val none_constructor : Types.constructor_info
 
-(** Constructor info for [Some : 'a -> 'a option]. *)
+(** Constructor info for [Some : 'a -> 'a option].
+    Re-exported from {!Builtins} for convenience. *)
 val some_constructor : Types.constructor_info
 
 (** {1 Value Bindings} *)

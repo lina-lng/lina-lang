@@ -115,18 +115,12 @@ let () =
     items_doc ^^ eof_doc
   in
 
-  (* Initialize the forward reference in Format_common *)
+  (* Initialize the centralized forward references in Format_common.
+     All format modules use these refs via Format_common's wrappers. *)
   format_node_ref := format_node;
-
-  (* Initialize cross-module references for patterns and types *)
-  Format_expr.format_pattern_ref := Format_pattern.format_pattern;
-  Format_expr.format_type_ref := Format_type.format_type;
-  Format_pattern.format_type_ref := Format_type.format_type;
-
-  (* Initialize references in Format_module for expressions/patterns/types *)
-  Format_module.format_expression_ref := Format_expr.format_expression;
-  Format_module.format_pattern_ref := Format_pattern.format_pattern;
-  Format_module.format_type_ref := Format_type.format_type
+  format_expression_ref := Format_expr.format_expression;
+  format_pattern_ref := Format_pattern.format_pattern;
+  format_type_ref := Format_type.format_type
 
 (** {1 Exported Formatters} *)
 

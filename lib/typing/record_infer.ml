@@ -15,15 +15,12 @@ open Typed_tree
 (** {1 Callback Types} *)
 
 (** Expression inference function type for callback. *)
-type expression_infer_fn =
-  Typing_context.t -> expression -> typed_expression * Typing_context.t
+type expression_infer_fn = Inference_utils.expression_infer_fn
 
 (** {1 Helper Functions} *)
 
 (** Unify types using context's environment for alias expansion. *)
-let unify ctx loc ty1 ty2 =
-  let env = Typing_context.environment ctx in
-  Inference_utils.unify_with_env env loc ty1 ty2
+let unify = Inference_utils.unify
 
 (** Extract a module path from nested record access expressions.
 

@@ -65,6 +65,24 @@ type module_binding = {
   binding_alias : path option;  (** If this is an alias, the original path *)
 }
 
+(** {1 Module Binding Smart Constructors} *)
+
+(** Create a module binding with explicit name.
+
+    @param name The module name
+    @param id The runtime identifier
+    @param mty The module type
+    @param alias Optional path for module alias *)
+let make_binding ~name ~id ~mty ?alias () =
+  { binding_name = name; binding_id = id; binding_type = mty; binding_alias = alias }
+
+(** Create a module binding using the identifier's name.
+
+    @param id The runtime identifier (name is extracted from it)
+    @param mty The module type *)
+let make_binding_from_id id mty =
+  make_binding ~name:(Identifier.name id) ~id ~mty ()
+
 (** Pretty printing *)
 
 let rec pp_module_type fmt = function

@@ -8,53 +8,31 @@ open Doc
 open Format_accessors
 open Format_common
 
-(** Forward declarations for cross-module references *)
-let format_expression_ref : (Red_tree.syntax_node -> doc) ref =
-  ref (fun _ -> empty)
-
-let format_pattern_ref : (Red_tree.syntax_node -> doc) ref =
-  ref (fun _ -> empty)
-
-let format_type_ref : (Red_tree.syntax_node -> doc) ref = ref (fun _ -> empty)
-
-let format_expression node = !format_expression_ref node
-let format_pattern node = !format_pattern_ref node
-let format_type node = !format_type_ref node
-
-(** {1 Internal Helpers} *)
-
-(** Get the first token of a node for blank line detection. *)
-let first_token node = Red_tree.first_token node
-
-(** Check if there's a blank line before a node. *)
-let has_blank_before node =
-  match first_token node with
-  | Some tok -> has_blank_line_before tok
-  | None -> false
+(** Use centralized forward refs from Format_common *)
+let format_expression = format_expression
+let format_pattern = format_pattern
+let format_type = format_type
 
 (** {1 Binding Formatters} *)
 
 let format_binding node =
-  match Binding.name node, Binding.equals node with
-  | Some name, Some eq ->
+  with_required2
+    (Binding.name node)
+    (Binding.equals node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun name eq ->
       let name_doc = format_pattern name in
-      let params = Binding.parameters node in
-      (* Patterns already have trailing whitespace in trivia, no need to add spaces *)
-      let params_doc = concat_list (List.map format_pattern params) in
+      let params_doc = format_node_list format_pattern (Binding.parameters node) in
       let ty_doc =
         match Binding.type_annotation node with
         | Some ty -> colon ^^ space ^^ format_type ty
         | None -> empty
       in
       let eq_doc = format_token eq in
-      (* Format ALL body expressions, not just the first one.
-         The CST may not wrap the entire body expression in a single node. *)
-      let body_exprs = Binding.body_expressions node in
-      let body_doc = concat_list (List.map format_expression body_exprs) in
+      let body_doc = format_node_list format_expression (Binding.body_expressions node) in
       group
         (name_doc ^^ params_doc ^^ ty_doc ^^ eq_doc
-        ^^ nest (indent_width ()) body_doc)
-  | _ -> format_children node
+        ^^ nest (indent_width ()) body_doc))
 
 (** {1 Structure Item Formatters} *)
 
@@ -162,22 +140,20 @@ and format_constructor_declaration node =
   | None -> format_children node
 
 and format_module_definition node =
-  match
-    Module_definition.module_keyword node,
-    Module_definition.name node,
-    Module_definition.equals node,
-    Module_definition.body node
-  with
-  | Some mod_kw, Some name, Some eq, Some body ->
+  with_required4
+    (Module_definition.module_keyword node)
+    (Module_definition.name node)
+    (Module_definition.equals node)
+    (Module_definition.body node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun mod_kw name eq body ->
       let mod_doc = format_token mod_kw in
       let name_doc = format_token name in
       let params = Module_definition.params node in
       let params_doc =
         match params with
         | [] -> empty
-        | _ ->
-            let formatted = List.map format_functor_parameter params in
-            space ^^ concat_list formatted
+        | _ -> space ^^ format_node_list format_functor_parameter params
       in
       let type_doc =
         match Module_definition.type_annotation node with
@@ -188,73 +164,63 @@ and format_module_definition node =
       let body_doc = format_module_expr body in
       group
         (mod_doc ^/^ name_doc ^^ params_doc ^^ type_doc ^/^ eq_doc
-        ^^ nest (indent_width ()) (softline ^^ body_doc))
-  | _ -> format_children node
+        ^^ nest (indent_width ()) (softline ^^ body_doc)))
 
 and format_open_declaration node =
-  match Open_declaration.open_keyword node, Open_declaration.path node with
-  | Some open_kw, Some path ->
+  with_required2
+    (Open_declaration.open_keyword node)
+    (Open_declaration.path node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun open_kw path ->
       let open_doc = format_token open_kw in
       let path_doc = format_children path in
-      open_doc ^/^ path_doc
-  | _ -> format_children node
+      open_doc ^/^ path_doc)
 
 and format_include_declaration node =
-  match
-    Include_declaration.include_keyword node, Include_declaration.module_expr node
-  with
-  | Some incl_kw, Some mod_expr ->
+  with_required2
+    (Include_declaration.include_keyword node)
+    (Include_declaration.module_expr node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun incl_kw mod_expr ->
       let incl_doc = format_token incl_kw in
       let mod_doc = format_module_expr mod_expr in
-      incl_doc ^/^ mod_doc
-  | _ -> format_children node
+      incl_doc ^/^ mod_doc)
 
 and format_external_declaration node =
-  match
-    External_declaration.external_keyword node, External_declaration.name node
-  with
-  | Some ext_kw, Some name_tok ->
+  with_required2
+    (External_declaration.external_keyword node)
+    (External_declaration.name node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun ext_kw name_tok ->
       let ext_doc = format_token ext_kw in
       let name_doc = format_token name_tok in
-      let colon_doc =
-        match External_declaration.colon node with
-        | Some c -> format_token c
-        | None -> colon
-      in
+      let colon_doc = format_token_or colon (External_declaration.colon node) in
       let ty_doc =
         match External_declaration.type_expr node with
         | Some ty -> format_type ty
         | None -> empty
       in
-      let equals_doc =
-        match External_declaration.equals node with
-        | Some eq -> format_token eq
-        | None -> empty
-      in
-      let lua_name_doc =
-        match External_declaration.lua_name node with
-        | Some s -> format_token s
-        | None -> empty
-      in
+      let equals_doc = format_optional_token (External_declaration.equals node) in
+      let lua_name_doc = format_optional_token (External_declaration.lua_name node) in
       group
         (ext_doc ^/^ name_doc ^/^ colon_doc ^/^ ty_doc ^/^ equals_doc ^/^
-         lua_name_doc)
-  | _ -> format_children node
+         lua_name_doc))
 
 (** {1 Module Expression Formatters} *)
 
 and format_structure node =
-  match Structure.struct_keyword node, Structure.end_keyword node with
-  | Some struct_kw, Some end_kw ->
+  with_required2
+    (Structure.struct_keyword node)
+    (Structure.end_keyword node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun struct_kw end_kw ->
       let struct_doc = format_token struct_kw in
       let end_doc = format_token end_kw in
-      let items = Structure.items node in
-      (match items with
-       | [] -> struct_doc ^^ end_doc
-       | _ ->
-           let items_doc = format_structure_items items in
-           group (struct_doc ^^ nest (indent_width ()) items_doc ^^ end_doc))
-  | _ -> format_children node
+      match Structure.items node with
+      | [] -> struct_doc ^^ end_doc
+      | items ->
+          let items_doc = format_structure_items items in
+          group (struct_doc ^^ nest (indent_width ()) items_doc ^^ end_doc))
 
 and format_structure_items items =
   (* Don't add separators - the leading trivia of each item already contains
@@ -262,161 +228,122 @@ and format_structure_items items =
   concat_list (List.map format_structure_item items)
 
 and format_structure_item node =
-  let kind = Red_tree.kind node in
-  if Red_tree.is_error node then text (Red_tree.text node)
-  else if Red_tree.has_errors node then format_children node
-  else
+  with_error_recovery node ~formatter:(fun kind _node ->
     match kind with
     | Syntax_kind.NK_VALUE_DEFINITION -> format_value_definition node
     | Syntax_kind.NK_TYPE_DEFINITION -> format_type_definition node
-    (* Module-related items use format_children to preserve source structure
-       since their formatting has trivia-spacing conflicts *)
-    | _ -> format_children node
+    | _ -> format_children node)
 
 and format_functor_expr node =
-  match
-    Functor_expr.functor_keyword node,
-    Functor_expr.arrow node,
-    Functor_expr.body node
-  with
-  | Some func_kw, Some arrow_tok, Some body ->
+  with_required3
+    (Functor_expr.functor_keyword node)
+    (Functor_expr.arrow node)
+    (Functor_expr.body node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun func_kw arrow_tok body ->
       let func_doc = format_token func_kw in
       let params = Functor_expr.params node in
       let params_doc =
         match params with
         | [] -> empty
-        | _ ->
-            let formatted = List.map format_functor_parameter params in
-            space ^^ concat_list formatted
+        | _ -> space ^^ format_node_list format_functor_parameter params
       in
       let arrow_doc = format_token arrow_tok in
       let body_doc = format_module_expr body in
       group
         (func_doc ^^ params_doc ^/^ arrow_doc
-        ^^ nest (indent_width ()) (softline ^^ body_doc))
-  | _ -> format_children node
+        ^^ nest (indent_width ()) (softline ^^ body_doc)))
 
 and format_functor_parameter node =
-  match
-    Functor_parameter.lparen node,
-    Functor_parameter.name node,
-    Functor_parameter.colon node,
-    Functor_parameter.module_type node,
-    Functor_parameter.rparen node
-  with
-  | Some lp, Some name, Some col, Some mty, Some rp ->
+  with_required5
+    (Functor_parameter.lparen node)
+    (Functor_parameter.name node)
+    (Functor_parameter.colon node)
+    (Functor_parameter.module_type node)
+    (Functor_parameter.rparen node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun lp name col mty rp ->
       let lp_doc = format_token lp in
       let name_doc = format_token name in
       let col_doc = format_token col in
       let mty_doc = format_module_type mty in
       let rp_doc = format_token rp in
-      group (lp_doc ^^ name_doc ^/^ col_doc ^/^ mty_doc ^^ rp_doc)
-  | _ -> format_children node
+      group (lp_doc ^^ name_doc ^/^ col_doc ^/^ mty_doc ^^ rp_doc))
 
 and format_module_apply node =
-  match Module_apply.functor_expr node, Module_apply.argument node with
-  | Some func, Some arg ->
+  with_required2
+    (Module_apply.functor_expr node)
+    (Module_apply.argument node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun func arg ->
       let func_doc = format_module_expr func in
-      let lp_doc =
-        match Module_apply.lparen node with
-        | Some lp -> format_token lp
-        | None -> lparen
-      in
+      let lp_doc = format_token_or lparen (Module_apply.lparen node) in
       let arg_doc = format_module_expr arg in
-      let rp_doc =
-        match Module_apply.rparen node with
-        | Some rp -> format_token rp
-        | None -> rparen
-      in
-      group (func_doc ^^ lp_doc ^^ arg_doc ^^ rp_doc)
-  | _ -> format_children node
+      let rp_doc = format_token_or rparen (Module_apply.rparen node) in
+      group (func_doc ^^ lp_doc ^^ arg_doc ^^ rp_doc))
 
 and format_module_constraint node =
-  match
-    Module_constraint.module_expr node, Module_constraint.module_type node
-  with
-  | Some mod_expr, Some mod_ty ->
+  with_required2
+    (Module_constraint.module_expr node)
+    (Module_constraint.module_type node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun mod_expr mod_ty ->
       let mod_doc = format_module_expr mod_expr in
-      let colon_doc =
-        match Module_constraint.colon node with
-        | Some c -> format_token c
-        | None -> colon
-      in
+      let colon_doc = format_token_or colon (Module_constraint.colon node) in
       let ty_doc = format_module_type mod_ty in
-      group (mod_doc ^/^ colon_doc ^/^ ty_doc)
-  | _ -> format_children node
+      group (mod_doc ^/^ colon_doc ^/^ ty_doc))
 
 and format_module_expr node =
-  let kind = Red_tree.kind node in
-  if Red_tree.is_error node then text (Red_tree.text node)
-  else if Red_tree.has_errors node then format_children node
-  else
+  with_error_recovery node ~formatter:(fun kind _node ->
     match kind with
     | Syntax_kind.NK_STRUCTURE -> format_structure node
     | Syntax_kind.NK_FUNCTOR_EXPR -> format_functor_expr node
     | Syntax_kind.NK_MODULE_APPLY -> format_module_apply node
     | Syntax_kind.NK_MODULE_CONSTRAINT -> format_module_constraint node
     | Syntax_kind.NK_MODULE_PATH -> format_children node
-    | _ -> format_children node
+    | _ -> format_children node)
 
 (** {1 Signature Formatters} *)
 
 and format_signature node =
-  match Signature.sig_keyword node, Signature.end_keyword node with
-  | Some sig_kw, Some end_kw ->
+  with_required2
+    (Signature.sig_keyword node)
+    (Signature.end_keyword node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun sig_kw end_kw ->
       let sig_doc = format_token sig_kw in
       let end_doc = format_token end_kw in
-      let items = Signature.items node in
-      (match items with
-       | [] -> sig_doc ^^ end_doc
-       | _ ->
-           let items_doc = format_signature_items items in
-           group (sig_doc ^^ nest (indent_width ()) items_doc ^^ end_doc))
-  | _ -> format_children node
+      match Signature.items node with
+      | [] -> sig_doc ^^ end_doc
+      | items ->
+          let items_doc = format_signature_items items in
+          group (sig_doc ^^ nest (indent_width ()) items_doc ^^ end_doc))
 
 and format_signature_items items =
-  let rec format_with_blanks = function
-    | [] -> empty
-    | [ item ] -> format_signature_item item
-    | item :: next :: rest ->
-        let formatted = format_signature_item item in
-        let sep =
-          if has_blank_before next then hardline ^^ hardline else hardline
-        in
-        formatted ^^ sep ^^ format_with_blanks (next :: rest)
-  in
-  format_with_blanks items
+  format_items_with_blank_sep ~formatter:format_signature_item items
 
 and format_signature_item node =
-  let kind = Red_tree.kind node in
-  if Red_tree.is_error node then text (Red_tree.text node)
-  else if Red_tree.has_errors node then format_children node
-  else
+  with_error_recovery node ~formatter:(fun kind _node ->
     match kind with
     | Syntax_kind.NK_VALUE_SPECIFICATION -> format_value_specification node
     | Syntax_kind.NK_TYPE_SPECIFICATION -> format_children node
     | Syntax_kind.NK_MODULE_SPECIFICATION -> format_children node
     | Syntax_kind.NK_MODULE_TYPE_SPECIFICATION -> format_children node
     | Syntax_kind.NK_INCLUDE_SPECIFICATION -> format_children node
-    | _ -> format_children node
+    | _ -> format_children node)
 
 and format_value_specification node =
-  match
-    Value_specification.val_keyword node,
-    Value_specification.name node,
-    Value_specification.type_expr node
-  with
-  | Some val_kw, Some name_tok, Some ty ->
+  with_required3
+    (Value_specification.val_keyword node)
+    (Value_specification.name node)
+    (Value_specification.type_expr node)
+    ~fallback:(fun () -> format_children node)
+    ~success:(fun val_kw name_tok ty ->
       let val_doc = format_token val_kw in
       let name_doc = format_token name_tok in
-      let colon_doc =
-        match Value_specification.colon node with
-        | Some c -> format_token c
-        | None -> colon
-      in
+      let colon_doc = format_token_or colon (Value_specification.colon node) in
       let ty_doc = format_type ty in
-      group (val_doc ^/^ name_doc ^/^ colon_doc ^/^ ty_doc)
-  | _ -> format_children node
+      group (val_doc ^/^ name_doc ^/^ colon_doc ^/^ ty_doc))
 
 and format_module_type node =
   let kind = Red_tree.kind node in

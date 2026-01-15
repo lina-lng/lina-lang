@@ -189,6 +189,80 @@ type fresh_type_var = unit -> type_expression
 let default_fresh_type_var () =
   new_type_variable_at_level generic_level
 
+(** Format a type mismatch error message. *)
+let type_mismatch_message ty1 ty2 =
+  Printf.sprintf "Type mismatch: expected %s, got %s"
+    (type_expression_to_string ty1)
+    (type_expression_to_string ty2)
+
+(** {2 Type Variable Unification Helpers} *)
+
+(** Unify two type variables, handling rigidity and levels.
+
+    Rigid variables (from locally abstract types) have special rules:
+    - Two rigid variables unify only if they are the same variable
+    - Rigid variables can absorb non-rigid variables but not vice versa
+
+    @param location Source location for errors
+    @param ty1 First type (for error messages)
+    @param ty2 Second type (for error messages)
+    @param tv1 First type variable
+    @param tv2 Second type variable *)
+let unify_type_variables location ty1 ty2 tv1 tv2 =
+  if tv1.rigid && tv2.rigid then begin
+    (* Both rigid - must be the same variable *)
+    if tv1.id <> tv2.id then
+      unification_error location ty1 ty2
+        "Cannot unify different rigid type variables"
+  end else if tv1.rigid then begin
+    (* tv1 is rigid - link tv2 to tv1 *)
+    if not tv2.rigid then tv2.link <- Some ty1
+  end else if tv2.rigid then begin
+    (* tv2 is rigid - link tv1 to tv2 *)
+    tv1.link <- Some ty2
+  end else begin
+    (* Neither is rigid - link higher level to lower *)
+    if tv1.level < tv2.level then
+      tv2.link <- Some ty1
+    else
+      tv1.link <- Some ty2
+  end
+
+(** Unify a type variable with a concrete (non-variable) type.
+
+    Rigid variables cannot unify with concrete types.
+    Non-rigid variables are linked after occurs check.
+
+    @param location Source location for errors
+    @param tv The type variable
+    @param ty The concrete type *)
+let unify_variable_with_concrete location tv ty =
+  if tv.rigid then begin
+    (* Rigid variable vs concrete type - error.
+       This ensures (type a) in function parameters stays abstract. *)
+    match ty with
+    | TypeVariable tv2 when not tv2.rigid ->
+      (* Non-rigid variable can be linked to rigid variable *)
+      tv2.link <- Some (TypeVariable tv)
+    | TypeVariable tv2 when tv2.rigid && tv.id = tv2.id ->
+      (* Same rigid variable - OK *)
+      ()
+    | TypeVariable tv2 when tv2.rigid ->
+      (* Different rigid variables - error *)
+      unification_error location (TypeVariable tv) ty
+        "Cannot unify different rigid type variables"
+    | _ ->
+      unification_error location (TypeVariable tv) ty
+        (Printf.sprintf "The type %s is abstract and cannot be unified with %s"
+          (type_expression_to_string (TypeVariable tv))
+          (type_expression_to_string ty))
+  end else begin
+    occurs_check location tv ty;
+    tv.link <- Some ty
+  end
+
+(** {2 Main Unification} *)
+
 (** Unify two types with explicit type lookup and type variable factory.
     This is the primary unification function - all unification should go through here.
 
@@ -200,58 +274,28 @@ let default_fresh_type_var () =
 let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
   let ty1 = representative ty1 in
   let ty2 = representative ty2 in
+
+  (* Helper to expand a type constructor and retry unification. *)
+  let try_expand_and_unify ty_ctor other_ty unify_order =
+    try
+      let (expanded, did_expand) = expand_type_aux ~type_lookup PathSet.empty ty_ctor in
+      if did_expand then begin
+        unify_order expanded other_ty;
+        true
+      end else
+        false
+    with Cyclic_type_alias path ->
+      unification_error location ty1 ty2
+        (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
+  in
+
   if ty1 == ty2 then ()
   else match ty1, ty2 with
   | TypeVariable tv1, TypeVariable tv2 ->
-    (* Handle rigid type variables carefully.
-       Rigid variables come from locally abstract types: (type a).
-       They must not escape or unify with concrete types. *)
-    if tv1.rigid && tv2.rigid then begin
-      (* Both rigid - must be the same variable *)
-      if tv1.id <> tv2.id then
-        unification_error location ty1 ty2
-          "Cannot unify different rigid type variables"
-    end else if tv1.rigid then begin
-      (* tv1 is rigid - don't link it, link tv2 instead if not rigid *)
-      if not tv2.rigid then tv2.link <- Some ty1
-    end else if tv2.rigid then begin
-      (* tv2 is rigid - don't link it *)
-      tv1.link <- Some ty2
-    end else begin
-      (* Neither is rigid - normal unification *)
-      if tv1.level < tv2.level then
-        tv2.link <- Some ty1
-      else
-        tv1.link <- Some ty2
-    end
+    unify_type_variables location ty1 ty2 tv1 tv2
 
   | TypeVariable tv, ty | ty, TypeVariable tv ->
-    if tv.rigid then
-      (* Rigid variable: cannot unify with concrete types.
-         This ensures (type a) in function parameters stays abstract.
-         Only type variables can be unified with rigid variables. *)
-      begin match ty with
-      | TypeVariable tv2 when not tv2.rigid ->
-        (* Non-rigid variable can be linked to rigid variable *)
-        tv2.link <- Some (TypeVariable tv)
-      | TypeVariable tv2 when tv2.rigid && tv.id = tv2.id ->
-        (* Same rigid variable - OK *)
-        ()
-      | TypeVariable tv2 when tv2.rigid ->
-        (* Different rigid variables - error *)
-        unification_error location (TypeVariable tv) ty
-          "Cannot unify different rigid type variables"
-      | _ ->
-        (* Rigid variable vs concrete type - error *)
-        unification_error location (TypeVariable tv) ty
-          (Printf.sprintf "The type %s is abstract and cannot be unified with %s"
-            (type_expression_to_string (TypeVariable tv))
-            (type_expression_to_string ty))
-      end
-    else begin
-      occurs_check location tv ty;
-      tv.link <- Some ty
-    end
+    unify_variable_with_concrete location tv ty
 
   | TypeConstructor (path1, args1), TypeConstructor (path2, args2) ->
     if path_equal path1 path2 then begin
@@ -309,42 +353,17 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
 
   (* When one side is a TypeConstructor, try expanding it as a type alias *)
   | TypeConstructor _, _ ->
-    begin
-      try
-        let (expanded1, did_expand1) = expand_type_aux ~type_lookup PathSet.empty ty1 in
-        if did_expand1 then
-          unify_full ~type_lookup ~fresh_type_var location expanded1 ty2
-        else
-          unification_error location ty1 ty2
-            (Printf.sprintf "Type mismatch: expected %s, got %s"
-              (type_expression_to_string ty1)
-              (type_expression_to_string ty2))
-      with Cyclic_type_alias path ->
-        unification_error location ty1 ty2
-          (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
-    end
+    let unify_expanded exp other = unify_full ~type_lookup ~fresh_type_var location exp other in
+    if not (try_expand_and_unify ty1 ty2 unify_expanded) then
+      unification_error location ty1 ty2 (type_mismatch_message ty1 ty2)
 
   | _, TypeConstructor _ ->
-    begin
-      try
-        let (expanded2, did_expand2) = expand_type_aux ~type_lookup PathSet.empty ty2 in
-        if did_expand2 then
-          unify_full ~type_lookup ~fresh_type_var location ty1 expanded2
-        else
-          unification_error location ty1 ty2
-            (Printf.sprintf "Type mismatch: expected %s, got %s"
-              (type_expression_to_string ty1)
-              (type_expression_to_string ty2))
-      with Cyclic_type_alias path ->
-        unification_error location ty1 ty2
-          (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
-    end
+    let unify_with_expanded exp other = unify_full ~type_lookup ~fresh_type_var location other exp in
+    if not (try_expand_and_unify ty2 ty1 unify_with_expanded) then
+      unification_error location ty1 ty2 (type_mismatch_message ty1 ty2)
 
   | _ ->
-    unification_error location ty1 ty2
-      (Printf.sprintf "Type mismatch: expected %s, got %s"
-        (type_expression_to_string ty1)
-        (type_expression_to_string ty2))
+    unification_error location ty1 ty2 (type_mismatch_message ty1 ty2)
 
 (* Row unification using Leijen's row rewriting algorithm *)
 and unify_rows_full ~type_lookup ~fresh_type_var location row1 row2 =

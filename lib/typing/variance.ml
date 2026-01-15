@@ -27,6 +27,12 @@ let combine variance1 variance2 =
   (* Conflicting variances become invariant *)
   | Covariant, Contravariant | Contravariant, Covariant -> Invariant
 
+let combine_opt variance1_opt variance2_opt =
+  match variance1_opt, variance2_opt with
+  | None, variance -> variance
+  | variance, None -> variance
+  | Some variance1, Some variance2 -> Some (combine variance1 variance2)
+
 let compose context position =
   match context with
   | Covariant -> position

@@ -13,28 +13,6 @@ type state = {
 let create_state () =
   { document_store = Document_store.create (); workspace_root = None }
 
-(** Convert internal diagnostic to LSP diagnostic. *)
-let lsp_diagnostic_of_internal (diag : Lsp_types.diagnostic) : Diagnostic.t =
-  let range =
-    Range.create
-      ~start:
-        (Position.create ~line:diag.range.start_pos.line
-           ~character:diag.range.start_pos.character)
-      ~end_:
-        (Position.create ~line:diag.range.end_pos.line
-           ~character:diag.range.end_pos.character)
-  in
-  let severity =
-    match diag.severity with
-    | Lsp_types.Error -> Some DiagnosticSeverity.Error
-    | Lsp_types.Warning -> Some DiagnosticSeverity.Warning
-    | Lsp_types.Information -> Some DiagnosticSeverity.Information
-    | Lsp_types.Hint -> Some DiagnosticSeverity.Hint
-  in
-  Diagnostic.create ~range ?severity ~message:(`String diag.message)
-    ?code:(Option.map (fun c -> `String c) diag.code)
-    ?source:diag.source ()
-
 (** The Lina LSP server class. *)
 class lina_server =
   object (self)
@@ -97,7 +75,7 @@ class lina_server =
       let diagnostics =
         Diagnostics.compute_diagnostics state.document_store uri
       in
-      let lsp_diagnostics = List.map lsp_diagnostic_of_internal diagnostics in
+      let lsp_diagnostics = List.map Lsp_conversions.lsp_diagnostic_of_internal diagnostics in
       let params =
         PublishDiagnosticsParams.create
           ~uri:(DocumentUri.of_path uri)

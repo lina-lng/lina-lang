@@ -59,6 +59,17 @@ val type_of_constant : Parsing.Syntax_tree.constant -> Types.type_expression
 val unify_with_env :
   Environment.t -> Location.t -> Types.type_expression -> Types.type_expression -> unit
 
+(** [unify ctx loc ty1 ty2] unifies two types using the context's environment.
+    This is the primary unification entry point for inference modules.
+
+    @param ctx The typing context (provides environment for type lookups)
+    @param loc The source location for error reporting
+    @param ty1 The first type to unify
+    @param ty2 The second type to unify
+    @raise Type_error if types cannot be unified *)
+val unify :
+  Typing_context.t -> Location.t -> Types.type_expression -> Types.type_expression -> unit
+
 (** {1 Constructor Arity Checking} *)
 
 (** [check_constructor_arity loc name ~has_arg ~expects_arg] validates that
@@ -236,6 +247,27 @@ type inference_error =
   | CompilerError of Common.Compiler_error.t
   | UnificationError of unification_error_details
 
+(** {1 Callback Type Aliases}
+
+    These types define signatures for expression inference callbacks,
+    used when one inference module needs to call back to expression inference.
+    Centralizing these types avoids duplication across modules. *)
+
+(** Expression inference function signature.
+    Used by control_infer, record_infer, and binding_infer modules. *)
+type expression_infer_fn =
+  Typing_context.t ->
+  Parsing.Syntax_tree.expression ->
+  Typed_tree.typed_expression * Typing_context.t
+
+(** Expression inference with optional expected type for bidirectional checking.
+    Used by binding_infer for polymorphic recursion. *)
+type expression_infer_expected_fn =
+  Typing_context.t ->
+  Types.type_expression option ->
+  Parsing.Syntax_tree.expression ->
+  Typed_tree.typed_expression * Typing_context.t
+
 (** {1 Error Helpers} *)
 
 (** [error_unbound_variable loc name] raises a type error for unbound variable.
@@ -272,3 +304,11 @@ val error_unbound_type : Location.t -> string -> 'a
     @param name The unbound module type name
     @raise Type_error always *)
 val error_unbound_module_type : Location.t -> string -> 'a
+
+(** {1 Label Formatting} *)
+
+(** [format_arg_label label] formats an argument label for error messages.
+
+    @param label The argument label
+    @return ["~name"] for labeled, ["?name"] for optional, ["_"] for unlabeled *)
+val format_arg_label : Types.arg_label -> string

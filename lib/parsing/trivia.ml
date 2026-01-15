@@ -54,29 +54,29 @@ let with_trailing trailing = { leading = []; trailing }
 (** Create trivia with both leading and trailing content. *)
 let create ~leading ~trailing = { leading; trailing }
 
+(** {1 Trivia Piece Predicates} *)
+
+(** Check if a trivia piece is a newline. *)
+let is_newline piece =
+  match piece.kind with
+  | Newline -> true
+  | _ -> false
+
+(** Check if a trivia piece is a comment (line or block). *)
+let is_comment piece =
+  match piece.kind with
+  | LineComment _ | BlockComment _ -> true
+  | _ -> false
+
+(** {1 Trivia Queries} *)
+
 (** Check if trivia contains any newlines. *)
 let has_newline trivia =
-  let has_newline_in_list pieces =
-    List.exists
-      (fun piece ->
-        match piece.kind with
-        | Newline -> true
-        | _ -> false)
-      pieces
-  in
-  has_newline_in_list trivia.leading || has_newline_in_list trivia.trailing
+  List.exists is_newline trivia.leading || List.exists is_newline trivia.trailing
 
 (** Check if trivia contains any comments. *)
 let has_comment trivia =
-  let has_comment_in_list pieces =
-    List.exists
-      (fun piece ->
-        match piece.kind with
-        | LineComment _ | BlockComment _ -> true
-        | _ -> false)
-      pieces
-  in
-  has_comment_in_list trivia.leading || has_comment_in_list trivia.trailing
+  List.exists is_comment trivia.leading || List.exists is_comment trivia.trailing
 
 (** Check if trivia is empty (no leading or trailing content). *)
 let is_empty trivia =
@@ -84,27 +84,12 @@ let is_empty trivia =
 
 (** Count the number of newlines in trivia (useful for blank line detection). *)
 let newline_count trivia =
-  let count_in_list pieces =
-    List.fold_left
-      (fun acc piece ->
-        match piece.kind with
-        | Newline -> acc + 1
-        | _ -> acc)
-      0 pieces
-  in
-  count_in_list trivia.leading + count_in_list trivia.trailing
+  let count pieces = List.length (List.filter is_newline pieces) in
+  count trivia.leading + count trivia.trailing
 
 (** Extract all comments from trivia (both leading and trailing). *)
 let comments trivia =
-  let extract_comments pieces =
-    List.filter_map
-      (fun piece ->
-        match piece.kind with
-        | LineComment _ | BlockComment _ -> Some piece
-        | _ -> None)
-      pieces
-  in
-  extract_comments trivia.leading @ extract_comments trivia.trailing
+  List.filter is_comment trivia.leading @ List.filter is_comment trivia.trailing
 
 (** Get the text content of a trivia piece. *)
 let trivia_piece_text piece =

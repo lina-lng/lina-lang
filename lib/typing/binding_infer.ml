@@ -29,25 +29,45 @@ open Typed_tree
 (** {1 Callback Types} *)
 
 (** Expression inference function type for callback. *)
-type expression_infer_fn =
-  Typing_context.t -> expression -> typed_expression * Typing_context.t
+type expression_infer_fn = Inference_utils.expression_infer_fn
 
 (** Expression inference with expected type for bidirectional checking. *)
-type expression_infer_expected_fn =
-  Typing_context.t ->
-  type_expression option ->
-  expression ->
-  typed_expression * Typing_context.t
+type expression_infer_expected_fn = Inference_utils.expression_infer_expected_fn
 
 (** {1 Polymorphic Recursion Types} *)
 
-(** Binding info for recursive bindings - tracks whether standard or polymorphic recursion. *)
+(** Binding info for recursive bindings during the three-pass inference algorithm.
+
+    During recursive binding inference, we need to track whether each binding
+    uses standard inference (monomorphic type with later generalization) or
+    polymorphic recursion (explicit type annotation with rigid variables).
+
+    The three-pass algorithm:
+    1. Analyze bindings and set up environment with preliminary types
+    2. Type-check bodies against the preliminary types
+    3. Generalize and update environment with final schemes
+
+    {3 Standard Recursion}
+
+    For a binding like [let rec f x = ... f y ...]:
+    - Create fresh type variable for [f]
+    - Check body, allowing recursive calls to use the mono type
+    - After checking, generalize to get polymorphic scheme
+
+    {3 Polymorphic Recursion}
+
+    For a binding like [let rec f : type a. a -> a = fun x -> ... f 1 ...]:
+    - The [type a.] annotation creates rigid type variables
+    - Recursive calls instantiate the full scheme (enabling polymorphic recursion)
+    - Rigid vars prevent unification with concrete types until generalization *)
 type rec_binding_info =
   | PolyRecBinding of {
       name : string;
       id : Identifier.t;
       scheme : type_scheme;
       rigid_vars : (string * type_variable) list;
+          (** Rigid vars prevent unification with concrete types until generalization,
+              enabling recursive calls to instantiate the full polymorphic scheme. *)
       binding : binding;
     }
   | StandardRecBinding of {
@@ -59,12 +79,14 @@ type rec_binding_info =
 
 (** {1 Pattern Binding Collection} *)
 
-(** Collect all variable bindings from a typed pattern.
-    Returns a list of (name, identifier, type) tuples. *)
+(** Collect all variable bindings from a typed pattern. *)
 let rec collect_pattern_bindings pattern =
+  let open Typed_tree in
   match pattern.pattern_desc with
   | TypedPatternVariable id ->
-    [(Identifier.name id, id, pattern.pattern_type)]
+    [{ binding_name = Identifier.name id;
+       binding_id = id;
+       binding_type = pattern.pattern_type }]
   | TypedPatternWildcard
   | TypedPatternConstant _
   | TypedPatternLocallyAbstract _ ->
@@ -82,11 +104,11 @@ let rec collect_pattern_bindings pattern =
   | TypedPatternPolyVariant (_, Some p) ->
     collect_pattern_bindings p
   | TypedPatternAlias (inner, id) ->
-    (* Alias pattern: collect bindings from inner pattern plus the alias itself *)
     let inner_bindings = collect_pattern_bindings inner in
-    (Identifier.name id, id, pattern.pattern_type) :: inner_bindings
+    { binding_name = Identifier.name id;
+      binding_id = id;
+      binding_type = pattern.pattern_type } :: inner_bindings
   | TypedPatternOr (left, _right) ->
-    (* Or-pattern: both branches bind same variables, just collect from left *)
     collect_pattern_bindings left
   | TypedPatternError _ ->
     []
@@ -136,9 +158,7 @@ let check_forall_annotation ctx forall_vars body_ty_expr =
 (** {1 Helper Functions} *)
 
 (** Unify types using context's environment for alias expansion. *)
-let unify ctx loc ty1 ty2 =
-  let env = Typing_context.environment ctx in
-  Inference_utils.unify_with_env env loc ty1 ty2
+let unify = Inference_utils.unify
 
 (** {1 Binding Inference} *)
 
@@ -241,13 +261,13 @@ let infer_bindings
           let existential_ids = Gadt.collect_existentials_from_pattern typed_pat in
           List.iter (fun var_id ->
             let pattern_bindings = collect_pattern_bindings typed_pat in
-            List.iter (fun (_, _, ty) ->
+            List.iter (fun pb ->
               Type_traversal.iter (fun t ->
                 match t with
                 | Types.TypeVariable tv when tv.Types.id = var_id ->
                   tv.Types.weak <- true
                 | _ -> ()
-              ) ty
+              ) pb.Typed_tree.binding_type
             ) pattern_bindings
           ) existential_ids;
 
@@ -255,11 +275,13 @@ let infer_bindings
           (* Apply value restriction: only generalize if expression is a value. *)
           let env =
             let pattern_bindings = collect_pattern_bindings typed_pat in
-            List.fold_left (fun env (name, id, ty) ->
+            List.fold_left (fun env pb ->
               let binding_scheme =
-                Inference_utils.compute_binding_scheme_with_env ~level ~env typed_expr ty
+                Inference_utils.compute_binding_scheme_with_env ~level ~env
+                  typed_expr pb.Typed_tree.binding_type
               in
-              Environment.add_value name id binding_scheme binding.binding_location env
+              Environment.add_value pb.Typed_tree.binding_name pb.Typed_tree.binding_id
+                binding_scheme binding.binding_location env
             ) env pattern_bindings
           in
           let ctx = Typing_context.with_environment env ctx in

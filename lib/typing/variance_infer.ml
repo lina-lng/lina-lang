@@ -47,44 +47,31 @@ let rec infer_variance_in_type
 
   | TypeConstructor (path, args) ->
     let param_variances = get_declared_variances path (List.length args) in
-    (* Combine variances from all arguments *)
     List.fold_left2
       (fun accumulated arg param_variance ->
         let effective_variance = Variance.compose param_variance context_variance in
         let arg_variance = infer_variance_in_type param_id effective_variance arg in
-        match accumulated, arg_variance with
-        | None, v -> v
-        | v, None -> v
-        | Some v1, Some v2 -> Some (Variance.combine v1 v2))
+        Variance.combine_opt accumulated arg_variance)
       None
       args
       param_variances
 
   | TypeTuple elements ->
-    (* Tuple elements are covariant *)
     List.fold_left
       (fun accumulated element ->
         let element_variance = infer_variance_in_type param_id context_variance element in
-        match accumulated, element_variance with
-        | None, v -> v
-        | v, None -> v
-        | Some v1, Some v2 -> Some (Variance.combine v1 v2))
+        Variance.combine_opt accumulated element_variance)
       None
       elements
 
   | TypeArrow (_, arg_type, result_type) ->
-    (* Argument is contravariant, result is covariant *)
     let arg_variance =
       infer_variance_in_type param_id (Variance.flip context_variance) arg_type
     in
     let result_variance =
       infer_variance_in_type param_id context_variance result_type
     in
-    begin match arg_variance, result_variance with
-    | None, v -> v
-    | v, None -> v
-    | Some v1, Some v2 -> Some (Variance.combine v1 v2)
-    end
+    Variance.combine_opt arg_variance result_variance
 
   | TypeRecord row ->
     infer_variance_in_row param_id context_variance row
@@ -96,14 +83,10 @@ let rec infer_variance_in_type
     None
 
   | TypePackage pkg ->
-    (* Check variance in all type constraints of the package *)
     List.fold_left
       (fun accumulated (_, ty) ->
         let ty_variance = infer_variance_in_type param_id context_variance ty in
-        match accumulated, ty_variance with
-        | None, v -> v
-        | v, None -> v
-        | Some v1, Some v2 -> Some (Variance.combine v1 v2))
+        Variance.combine_opt accumulated ty_variance)
       None
       pkg.package_signature
 
@@ -118,23 +101,16 @@ and infer_variance_in_row
       (fun accumulated (_, field) ->
         match field with
         | RowFieldPresent field_type ->
-          (* Record fields are covariant (read-only access) *)
           let field_var = infer_variance_in_type param_id context_variance field_type in
-          match accumulated, field_var with
-          | None, v -> v
-          | v, None -> v
-          | Some v1, Some v2 -> Some (Variance.combine v1 v2))
+          Variance.combine_opt accumulated field_var)
       None
       row.row_fields
   in
-  (* Also check the row extension variable *)
+
   let row_more_variance =
     infer_variance_in_type param_id context_variance row.row_more
   in
-  match field_variance, row_more_variance with
-  | None, v -> v
-  | v, None -> v
-  | Some v1, Some v2 -> Some (Variance.combine v1 v2)
+  Variance.combine_opt field_variance row_more_variance
 
 (** Check variance in a polymorphic variant row type. *)
 and infer_variance_in_poly_variant_row
@@ -147,26 +123,18 @@ and infer_variance_in_poly_variant_row
       (fun accumulated (_, field) ->
         match field with
         | PVFieldPresent (Some field_type) ->
-          (* Variant arguments are covariant *)
           let field_var = infer_variance_in_type param_id context_variance field_type in
-          begin match accumulated, field_var with
-          | None, v -> v
-          | v, None -> v
-          | Some v1, Some v2 -> Some (Variance.combine v1 v2)
-          end
+          Variance.combine_opt accumulated field_var
         | PVFieldPresent None | PVFieldAbsent ->
           accumulated)
       None
       pv_row.pv_fields
   in
-  (* Also check the row extension variable *)
+
   let row_more_variance =
     infer_variance_in_type param_id context_variance pv_row.pv_more
   in
-  match field_variance, row_more_variance with
-  | None, v -> v
-  | v, None -> v
-  | Some v1, Some v2 -> Some (Variance.combine v1 v2)
+  Variance.combine_opt field_variance row_more_variance
 
 (** Infer variances for all parameters of a type declaration.
 
@@ -190,13 +158,9 @@ let infer_declaration_variances
           | None -> accumulated
           | Some arg_ty ->
             let arg_variance = infer_variance_in_type param.id Covariant arg_ty in
-            match accumulated, arg_variance with
-            | None, v -> v
-            | v, None -> v
-            | Some v1, Some v2 -> Some (Variance.combine v1 v2)
+            Variance.combine_opt accumulated arg_variance
         ) None constructors
       in
-      (* If the parameter doesn't appear, it's bivariant (phantom type) *)
       Option.value variance_from_ctors ~default:Bivariant
     ) params
 
@@ -205,13 +169,9 @@ let infer_declaration_variances
       let variance_from_fields =
         List.fold_left (fun accumulated (_, field_ty) ->
           let field_variance = infer_variance_in_type param.id Covariant field_ty in
-          match accumulated, field_variance with
-          | None, v -> v
-          | v, None -> v
-          | Some v1, Some v2 -> Some (Variance.combine v1 v2)
+          Variance.combine_opt accumulated field_variance
         ) None fields
       in
-      (* If the parameter doesn't appear, it's bivariant (phantom type) *)
       Option.value variance_from_fields ~default:Bivariant
     ) params
 

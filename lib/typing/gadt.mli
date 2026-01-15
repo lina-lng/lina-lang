@@ -113,3 +113,31 @@ val check_existential_escape : int list -> type_expression -> int option
     @param pattern The typed pattern to examine
     @return List of existential type variable IDs introduced by this pattern *)
 val collect_existentials_from_pattern : Typed_tree.typed_pattern -> int list
+
+(** {1 Equation Linking}
+
+    These functions manage temporary linking of rigid type variables to their
+    equation types during match arm body inference. *)
+
+(** [link_equations equations] sets the link field of each equation's rigid
+    type variable to point to its equation type.
+
+    Call this before processing a match arm body. *)
+val link_equations : equation list -> unit
+
+(** [unlink_equations equations] clears the link field of each equation's
+    rigid type variable.
+
+    Call this after processing a match arm body. *)
+val unlink_equations : equation list -> unit
+
+(** [with_equations equations f] executes [f] with equations temporarily linked.
+
+    Automatically unlinks equations after [f] returns, even if [f] raises
+    an exception. This is the preferred way to apply equations during
+    arm body inference.
+
+    @param equations The GADT equations to link
+    @param f The function to execute with linked equations
+    @return The result of [f ()] *)
+val with_equations : equation list -> (unit -> 'a) -> 'a

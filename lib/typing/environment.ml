@@ -63,12 +63,6 @@ let find_type_constructors type_name env =
     | DeclarationRecord _ -> None
     | DeclarationExtensible -> None
 
-let binary_int_op_type =
-  trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_int)))
-
-let comparison_int_type =
-  trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_bool)))
-
 let add_builtin name scheme env =
   add_value name (Identifier.create name) scheme Location.none env
 
@@ -132,10 +126,28 @@ let rec find_type_by_path path env =
     (* Functor application - not supported yet *)
     None
 
+(** Apply a functor binding to an argument path, returning the result module binding.
+    Handles both named and generative functors. *)
+and apply_functor_binding func_binding arg_path =
+  match func_binding.Module_types.binding_type with
+  | Module_types.ModTypeFunctor (param, result_mty) ->
+    let result_mty = match param with
+      | Module_types.FunctorParamNamed { parameter_id; _ } ->
+        (* Substitute the argument path for the parameter in the result type *)
+        let param_path = Types.PathIdent parameter_id in
+        Type_utils.substitute_path_in_module_type ~old_path:param_path ~new_path:arg_path result_mty
+      | Module_types.FunctorParamUnit ->
+        (* Generative functor - result unchanged *)
+        result_mty
+    in
+    let id = Common.Identifier.create "<apply>" in
+    Some Module_types.{ binding_name = "<apply>"; binding_id = id;
+                        binding_type = result_mty; binding_alias = None }
+  | _ -> None
+
 and find_module_by_path path env =
   match path with
   | Types.PathIdent id ->
-    (* Look up by identifier name in modules *)
     find_module (Identifier.name id) env
   | Types.PathLocal name ->
     find_module name env
@@ -146,30 +158,9 @@ and find_module_by_path path env =
       find_module_in_module_type name binding.Module_types.binding_type
     end
   | Types.PathApply (func_path, arg_path) ->
-    (* Functor application: F(M) - apply the functor to get result type *)
     begin match find_module_by_path func_path env with
     | None -> None
-    | Some func_binding ->
-      begin match func_binding.Module_types.binding_type with
-      | Module_types.ModTypeFunctor (param, result_mty) ->
-        begin match param with
-        | Module_types.FunctorParamNamed { parameter_id; _ } ->
-          (* Substitute the argument path for the parameter in the result type *)
-          let param_path = Types.PathIdent parameter_id in
-          let substituted_mty =
-            Type_utils.substitute_path_in_module_type ~old_path:param_path ~new_path:arg_path result_mty
-          in
-          let id = Common.Identifier.create "<apply>" in
-          Some Module_types.{ binding_name = "<apply>"; binding_id = id;
-                              binding_type = substituted_mty; binding_alias = None }
-        | Module_types.FunctorParamUnit ->
-          (* Generative functor - just return the result *)
-          let id = Common.Identifier.create "<apply>" in
-          Some Module_types.{ binding_name = "<apply>"; binding_id = id;
-                              binding_type = result_mty; binding_alias = None }
-        end
-      | _ -> None
-      end
+    | Some func_binding -> apply_functor_binding func_binding arg_path
     end
   | Types.PathBuiltin _ ->
     None
@@ -193,31 +184,29 @@ and find_module_in_module_type name mty =
   | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
     None
 
+(** Extract a concrete module type from an option wrapper. *)
+let unwrap_module_type = function
+  | Some (Some mty) -> Some mty
+  | _ -> None
+
+(** Find a module type definition in a module binding's signature. *)
+let find_module_type_in_binding name binding =
+  match binding.Module_types.binding_type with
+  | Module_types.ModTypeSig sig_ ->
+    unwrap_module_type (Module_types.find_module_type_in_sig name sig_)
+  | _ -> None
+
 (** Look up a module type definition by path.
     Returns [Some mty] if found and concrete, [None] if not found or abstract. *)
 let find_module_type_by_path path env =
   match path with
   | Types.PathLocal name ->
-    begin match find_module_type name env with
-    | Some (Some mty) -> Some mty
-    | _ -> None
-    end
+    unwrap_module_type (find_module_type name env)
   | Types.PathIdent id ->
-    begin match find_module_type (Identifier.name id) env with
-    | Some (Some mty) -> Some mty
-    | _ -> None
-    end
+    unwrap_module_type (find_module_type (Identifier.name id) env)
   | Types.PathDot (parent_path, name) ->
     begin match find_module_by_path parent_path env with
-    | Some binding ->
-      begin match binding.Module_types.binding_type with
-      | Module_types.ModTypeSig sig_ ->
-        begin match Module_types.find_module_type_in_sig name sig_ with
-        | Some (Some mty) -> Some mty
-        | _ -> None
-        end
-      | _ -> None
-      end
+    | Some binding -> find_module_type_in_binding name binding
     | None -> None
     end
   | Types.PathBuiltin _ | Types.PathApply _ ->
@@ -263,100 +252,37 @@ let fold_constructors f env acc =
 let fold_modules f env acc =
   StringMap.fold f env.modules acc
 
-(** [polymorphic_print_type] creates the type scheme ['a -> unit] for print.
-    The type variable is created at generic level so it can be instantiated
-    to any type. *)
-let polymorphic_print_type =
-  (* Create a type variable at generic level for polymorphism *)
-  let alpha = match new_type_variable_at_level generic_level with
-    | TypeVariable tv -> tv
-    | _ -> failwith "new_type_variable_at_level must return TypeVariable"
-  in
-  {
-    quantified_variables = [alpha];
-    body = TypeArrow (Nolabel, TypeVariable alpha, type_unit);
-  }
-
-(** Built-in option type: type 'a option = None | Some of 'a
-
-    The option type is fundamental for optional arguments - when a ?x:int
-    parameter is omitted, it receives None; when provided with ~x:value,
-    it receives Some value. *)
-let option_type_declaration, none_constructor, some_constructor =
-  (* Create a type variable for 'a at generic level so it can be instantiated *)
-  let alpha = match new_type_variable_at_level generic_level with
-    | TypeVariable tv -> tv
-    | _ -> failwith "new_type_variable_at_level must return TypeVariable"
-  in
-
-  (* Result type: 'a option *)
-  let option_result_type = TypeConstructor (PathLocal "option", [TypeVariable alpha]) in
-
-  let none_ctor = {
-    constructor_name = "None";
-    constructor_tag_index = 0;
-    constructor_type_name = "option";
-    constructor_argument_type = None;
-    constructor_result_type = option_result_type;
-    constructor_type_parameters = [alpha];
-    constructor_is_gadt = false;
-    constructor_existentials = [];
-  } in
-
-  let some_ctor = {
-    constructor_name = "Some";
-    constructor_tag_index = 1;
-    constructor_type_name = "option";
-    constructor_argument_type = Some (TypeVariable alpha);
-    constructor_result_type = option_result_type;
-    constructor_type_parameters = [alpha];
-    constructor_is_gadt = false;
-    constructor_existentials = [];
-  } in
-
-  let option_decl = {
-    declaration_name = "option";
-    declaration_parameters = [alpha];
-    declaration_variances = [Covariant];
-    declaration_injectivities = [true];
-    declaration_manifest = None;
-    declaration_kind = DeclarationVariant [none_ctor; some_ctor];
-    declaration_private = false;
-    declaration_constraints = [];
-  } in
-
-  (option_decl, none_ctor, some_ctor)
+(** Re-export built-in constructors for use by other modules. *)
+let none_constructor = Builtins.none_constructor
+let some_constructor = Builtins.some_constructor
 
 let initial =
   let env = empty in
 
   (* Add option type and its constructors *)
-  let env = add_type "option" option_type_declaration env in
-  let env = add_constructor "None" none_constructor env in
-  let env = add_constructor "Some" some_constructor env in
+  let env = add_type "option" Builtins.option_type_declaration env in
+  let env = add_constructor "None" Builtins.none_constructor env in
+  let env = add_constructor "Some" Builtins.some_constructor env in
 
   (* Add arithmetic operators *)
-  let env = add_builtin "+" binary_int_op_type env in
-  let env = add_builtin "-" binary_int_op_type env in
-  let env = add_builtin "*" binary_int_op_type env in
-  let env = add_builtin "/" binary_int_op_type env in
+  let env = add_builtin "+" Builtins.binary_int_op_type env in
+  let env = add_builtin "-" Builtins.binary_int_op_type env in
+  let env = add_builtin "*" Builtins.binary_int_op_type env in
+  let env = add_builtin "/" Builtins.binary_int_op_type env in
 
   (* Add string concatenation operator *)
-  let string_concat_type =
-    trivial_scheme (TypeArrow (Nolabel, type_string, TypeArrow (Nolabel, type_string, type_string)))
-  in
-  let env = add_builtin "^" string_concat_type env in
+  let env = add_builtin "^" Builtins.string_concat_type env in
 
   (* Add comparison operators *)
-  let env = add_builtin "<" comparison_int_type env in
-  let env = add_builtin ">" comparison_int_type env in
-  let env = add_builtin "<=" comparison_int_type env in
-  let env = add_builtin ">=" comparison_int_type env in
-  let env = add_builtin "=" comparison_int_type env in
-  let env = add_builtin "==" comparison_int_type env in
-  let env = add_builtin "!=" comparison_int_type env in
-  let env = add_builtin "<>" comparison_int_type env in
+  let env = add_builtin "<" Builtins.comparison_int_type env in
+  let env = add_builtin ">" Builtins.comparison_int_type env in
+  let env = add_builtin "<=" Builtins.comparison_int_type env in
+  let env = add_builtin ">=" Builtins.comparison_int_type env in
+  let env = add_builtin "=" Builtins.comparison_int_type env in
+  let env = add_builtin "==" Builtins.comparison_int_type env in
+  let env = add_builtin "!=" Builtins.comparison_int_type env in
+  let env = add_builtin "<>" Builtins.comparison_int_type env in
 
   (* Add print function *)
-  let env = add_builtin "print" polymorphic_print_type env in
+  let env = add_builtin "print" Builtins.polymorphic_print_type env in
   env

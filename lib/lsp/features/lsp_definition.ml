@@ -89,7 +89,6 @@ let find_definition_at_offset store uri offset =
   let* typed_ast = typed_ast_opt in
   find_definition_in_typed_ast typed_ast env uri offset
 
-let find_definition store uri (pos : Lsp_types.position) =
-  let* doc = Document_store.get_document store uri in
-  let* offset = Document_store.lsp_position_to_offset doc pos in
-  find_definition_at_offset store uri offset
+let find_definition store uri pos =
+  Lsp_pipeline.with_document_at_position store uri pos (fun ctx ->
+    find_definition_at_offset ctx.store ctx.uri ctx.offset)

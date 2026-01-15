@@ -59,6 +59,13 @@ val flip : t -> t
     - Bivariant only if both are bivariant *)
 val combine : t -> t -> t
 
+(** [combine_opt v1_opt v2_opt] combines two optional variances.
+    This is the monoid operation for [t option] used during variance inference:
+    - [combine_opt None v = v]
+    - [combine_opt v None = v]
+    - [combine_opt (Some v1) (Some v2) = Some (combine v1 v2)] *)
+val combine_opt : t option -> t option -> t option
+
 (** [compose context position] applies context variance to position variance.
     This is used when a type variable appears inside a type constructor
     whose parameter has a declared variance.

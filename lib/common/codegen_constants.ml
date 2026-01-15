@@ -1,5 +1,27 @@
 (** Constants used in Lambda IR and Lua code generation. *)
 
+(* Variant Runtime Representation *)
+
+let variant_tag_field = "_tag"
+(** Field name for variant tag in Lua tables.
+    Used in: [{_tag = N}], [{_tag = N, _0 = x}] *)
+
+let variant_arg_field = "_0"
+(** Field name for variant argument in Lua tables.
+    Used in: [{_tag = N, _0 = x}] *)
+
+(* Reference Cell Representation *)
+
+let ref_value_field = "value"
+(** Field name for ref cell value in Lua tables.
+    Used in: [{value = x}], [r.value] *)
+
+(* FFI Internal Names *)
+
+let ffi_result_name = "_ffi_result"
+(** Temporary variable for FFI return value wrapping.
+    Used in nullable return handling. *)
+
 (* Pattern Match Compilation *)
 
 let dispatch_table_threshold = 4

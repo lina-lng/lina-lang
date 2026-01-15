@@ -54,6 +54,14 @@ val with_trailing : trivia_piece list -> t
 (** Create trivia with both leading and trailing content. *)
 val create : leading:trivia_piece list -> trailing:trivia_piece list -> t
 
+(** {1 Trivia Piece Predicates} *)
+
+(** Check if a trivia piece is a newline. *)
+val is_newline : trivia_piece -> bool
+
+(** Check if a trivia piece is a comment (line or block). *)
+val is_comment : trivia_piece -> bool
+
 (** {1 Queries} *)
 
 (** Check if trivia contains any newlines. *)

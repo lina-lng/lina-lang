@@ -158,13 +158,13 @@ let build_switch_if_chain (type key) ~(config : key switch_config) ~translate_tr
   build cases
 
 let constructor_switch_config : (string * int * bool) switch_config = {
-  get_discriminant = (fun target -> LambdaGetRecordField ("_tag", target));
+  get_discriminant = (fun target -> LambdaGetRecordField (Codegen_constants.variant_tag_field, target));
   key_to_constant = (fun (_name, tag_index, _is_ext) -> ConstantInt tag_index);
   equality_primitive = PrimitiveIntEqual;
 }
 
 let extension_constructor_switch_config : (string * int * bool) switch_config = {
-  get_discriminant = (fun target -> LambdaGetRecordField ("_tag", target));
+  get_discriminant = (fun target -> LambdaGetRecordField (Codegen_constants.variant_tag_field, target));
   key_to_constant = (fun (name, _tag_index, _is_ext) -> ConstantString name);
   equality_primitive = PrimitiveStringEqual;
 }
@@ -176,7 +176,7 @@ let constant_switch_config : Parsing.Syntax_tree.constant switch_config = {
 }
 
 let poly_variant_switch_config : string switch_config = {
-  get_discriminant = (fun target -> LambdaGetRecordField ("_tag", target));
+  get_discriminant = (fun target -> LambdaGetRecordField (Codegen_constants.variant_tag_field, target));
   key_to_constant = (fun tag -> ConstantString tag);
   equality_primitive = PrimitiveStringEqual;
 }

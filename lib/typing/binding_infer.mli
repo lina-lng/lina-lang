@@ -39,15 +39,14 @@ type expression_infer_expected_fn =
 (** [collect_pattern_bindings pattern] collects all variable bindings from
     a typed pattern.
 
-    Returns a list of [(name, identifier, type)] tuples for each variable
+    Returns a list of {!Typed_tree.pattern_binding} records for each variable
     bound by the pattern. Nested patterns (tuples, records, constructors)
     have their bindings collected recursively.
 
     @param pattern The typed pattern to collect bindings from
-    @return List of (name, identifier, type) tuples *)
+    @return List of pattern bindings *)
 val collect_pattern_bindings :
-  Typed_tree.typed_pattern ->
-  (string * Common.Identifier.t * Types.type_expression) list
+  Typed_tree.typed_pattern -> Typed_tree.pattern_binding list
 
 (** {1 Binding Inference} *)
 

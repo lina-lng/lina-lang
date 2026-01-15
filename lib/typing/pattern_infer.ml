@@ -75,9 +75,7 @@ let check_pattern_linearity (pattern : pattern) : unit =
   check_duplicates [] bindings
 
 (** Unify types with context-based alias expansion. *)
-let unify ctx loc ty1 ty2 =
-  let env = Typing_context.environment ctx in
-  Inference_utils.unify_with_env env loc ty1 ty2
+let unify = Inference_utils.unify
 
 (** Substitute identifiers in a typed pattern based on a name -> identifier mapping.
     Used for or-patterns to ensure both branches use the same identifiers. *)

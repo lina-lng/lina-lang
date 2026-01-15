@@ -139,6 +139,28 @@ type module_binding = {
                                           Used for module strengthening. *)
 }
 
+(** {1 Module Binding Smart Constructors} *)
+
+(** [make_binding ~name ~id ~mty ?alias ()] creates a module binding.
+
+    @param name The module name
+    @param id The runtime identifier for code generation
+    @param mty The module type
+    @param alias Optional path for module alias (used for strengthening)
+    @return A new module binding *)
+val make_binding :
+  name:string -> id:Common.Identifier.t -> mty:module_type ->
+  ?alias:path -> unit -> module_binding
+
+(** [make_binding_from_id id mty] creates a module binding using the identifier's name.
+
+    Convenience function that extracts the name from the identifier.
+
+    @param id The runtime identifier (name is extracted from it)
+    @param mty The module type
+    @return A new module binding with [binding_name = Identifier.name id] *)
+val make_binding_from_id : Common.Identifier.t -> module_type -> module_binding
+
 (** {1 Pretty Printing} *)
 
 (** [pp_module_type fmt mty] pretty-prints a module type.

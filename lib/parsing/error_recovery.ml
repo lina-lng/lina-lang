@@ -85,35 +85,19 @@ let synchronize_to_structure (ls : lexer_state) : Location.t =
   in
   skip ()
 
+(** Create an error node with the given constructor. *)
+let make_error_node constructor error_span message =
+  let error_info = { Syntax_tree.error_message = message; error_span } in
+  Location.{ value = constructor error_info; location = error_span }
+
 (** Create an error structure item from an error span. *)
-let make_structure_error (error_span : Location.t) (message : string) : Syntax_tree.structure_item =
-  let error_info = {
-    Syntax_tree.error_message = message;
-    error_span;
-  } in
-  Location.{
-    value = Syntax_tree.StructureError error_info;
-    location = error_span;
-  }
+let make_structure_error error_span message =
+  make_error_node (fun info -> Syntax_tree.StructureError info) error_span message
 
 (** Create an error expression from an error span. *)
-let make_expression_error (error_span : Location.t) (message : string) : Syntax_tree.expression =
-  let error_info = {
-    Syntax_tree.error_message = message;
-    error_span;
-  } in
-  Location.{
-    value = Syntax_tree.ExpressionError error_info;
-    location = error_span;
-  }
+let make_expression_error error_span message =
+  make_error_node (fun info -> Syntax_tree.ExpressionError info) error_span message
 
 (** Create an error pattern from an error span. *)
-let make_pattern_error (error_span : Location.t) (message : string) : Syntax_tree.pattern =
-  let error_info = {
-    Syntax_tree.error_message = message;
-    error_span;
-  } in
-  Location.{
-    value = Syntax_tree.PatternError error_info;
-    location = error_span;
-  }
+let make_pattern_error error_span message =
+  make_error_node (fun info -> Syntax_tree.PatternError info) error_span message

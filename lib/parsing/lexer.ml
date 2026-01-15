@@ -592,44 +592,55 @@ let make_block_comment_piece state lexbuf =
   let location = Location.from_lexing_positions start_pos end_pos in
   { Trivia.kind = Trivia.BlockComment comment_text; location }
 
-(** Collect all trivia (whitespace and comments) until a real token.
-    Returns the trivia pieces in order. *)
-let rec collect_leading_trivia trivia_state acc =
+(** Policy for trivia collection behavior. *)
+type trivia_collect_policy =
+  | CollectAll     (** Leading trivia: collect everything including newlines *)
+  | StopAtLineEnd  (** Trailing trivia: stop at newline or line comment *)
+
+(** Collect trivia according to the given policy.
+    - [CollectAll]: continues on newlines and line comments
+    - [StopAtLineEnd]: stops at newlines, includes line comment and stops *)
+let rec collect_trivia_with_policy policy trivia_state acc =
   let state = trivia_state.state in
   let lexbuf = state.lexbuf in
   match%sedlex lexbuf with
   | Plus (' ' | '\t') ->
       let piece = make_trivia_piece state (Trivia.Whitespace (Sedlexing.Utf8.lexeme lexbuf)) in
-      collect_leading_trivia trivia_state (piece :: acc)
+      collect_trivia_with_policy policy trivia_state (piece :: acc)
+
   | '\n' | '\r' | "\r\n" ->
-      let piece = make_trivia_piece state Trivia.Newline in
-      collect_leading_trivia trivia_state (piece :: acc)
+      begin match policy with
+      | CollectAll ->
+          let piece = make_trivia_piece state Trivia.Newline in
+          collect_trivia_with_policy policy trivia_state (piece :: acc)
+      | StopAtLineEnd ->
+          (* Don't consume the newline - leave it for next token's leading trivia *)
+          Sedlexing.rollback lexbuf;
+          List.rev acc
+      end
+
   | "--" ->
       let piece = make_line_comment_piece lexbuf in
-      collect_leading_trivia trivia_state (piece :: acc)
+      begin match policy with
+      | CollectAll ->
+          collect_trivia_with_policy policy trivia_state (piece :: acc)
+      | StopAtLineEnd ->
+          List.rev (piece :: acc)
+      end
+
   | "(*" ->
       let piece = make_block_comment_piece state lexbuf in
-      collect_leading_trivia trivia_state (piece :: acc)
+      collect_trivia_with_policy policy trivia_state (piece :: acc)
+
   | _ -> List.rev acc
 
+(** Collect all trivia (whitespace and comments) until a real token. *)
+let collect_leading_trivia trivia_state =
+  collect_trivia_with_policy CollectAll trivia_state []
+
 (** Collect trailing trivia on the same line (whitespace and comments until newline). *)
-let rec collect_trailing_trivia trivia_state acc =
-  let state = trivia_state.state in
-  let lexbuf = state.lexbuf in
-  match%sedlex lexbuf with
-  | Plus (' ' | '\t') ->
-      let piece = make_trivia_piece state (Trivia.Whitespace (Sedlexing.Utf8.lexeme lexbuf)) in
-      collect_trailing_trivia trivia_state (piece :: acc)
-  | "--" ->
-      let piece = make_line_comment_piece lexbuf in
-      (* Line comment ends the line, so we stop collecting trailing trivia *)
-      List.rev (piece :: acc)
-  | "(*" ->
-      let piece = make_block_comment_piece state lexbuf in
-      collect_trailing_trivia trivia_state (piece :: acc)
-  | _ ->
-      (* Hit newline, EOF, or a real token - stop collecting *)
-      List.rev acc
+let collect_trailing_trivia trivia_state =
+  collect_trivia_with_policy StopAtLineEnd trivia_state []
 
 (** Get the next token with attached trivia.
 
@@ -637,11 +648,11 @@ let rec collect_trailing_trivia trivia_state acc =
     lexes the token, then collects trailing trivia (on the same line). *)
 let next_token_with_trivia trivia_state =
   let state = trivia_state.state in
-  let leading = collect_leading_trivia trivia_state [] in
+  let leading = collect_leading_trivia trivia_state in
 
   match lex_real_token state with
   | Some (token, location) ->
-      let trailing = collect_trailing_trivia trivia_state [] in
+      let trailing = collect_trailing_trivia trivia_state in
       let trivia = Trivia.create ~leading ~trailing in
       { token; location; trivia }
   | None ->

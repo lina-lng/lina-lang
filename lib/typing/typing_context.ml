@@ -81,6 +81,24 @@ let type_lookup ctx path =
 let module_type_lookup ctx path =
   Environment.find_module_type_by_path path ctx.env
 
+(* Environment Modification Helpers *)
+
+let add_value name id scheme loc ctx =
+  let env = Environment.add_value name id scheme loc ctx.env in
+  { ctx with env }
+
+let add_type name decl ctx =
+  let env = Environment.add_type name decl ctx.env in
+  { ctx with env }
+
+let add_module name binding ctx =
+  let env = Environment.add_module name binding ctx.env in
+  { ctx with env }
+
+let add_module_type name mty_opt ctx =
+  let env = Environment.add_module_type name mty_opt ctx.env in
+  { ctx with env }
+
 (* Type Scheme Operations *)
 
 let generalize ctx ty =

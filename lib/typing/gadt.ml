@@ -255,3 +255,22 @@ let rec collect_existentials_from_pattern (pattern : Typed_tree.typed_pattern) =
       collect_existentials_from_pattern f.typed_pattern_field_pattern
     ) fields
   | _ -> []
+
+(** Link GADT equations by setting type variable links. *)
+let link_equations equations =
+  List.iter (fun eq -> eq.eq_variable.link <- Some eq.eq_type) equations
+
+(** Unlink GADT equations by clearing type variable links. *)
+let unlink_equations equations =
+  List.iter (fun eq -> eq.eq_variable.link <- None) equations
+
+(** Execute a function with equations temporarily linked. *)
+let with_equations equations f =
+  link_equations equations;
+  match f () with
+  | result ->
+    unlink_equations equations;
+    result
+  | exception exn ->
+    unlink_equations equations;
+    raise exn
