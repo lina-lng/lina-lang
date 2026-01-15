@@ -142,7 +142,7 @@ let rec check_in_context
       Bivariant
       elements
 
-  | Types.TypeArrow (arg_type, result_type) ->
+  | Types.TypeArrow (_, arg_type, result_type) ->
     (* Argument is contravariant, result is covariant *)
     let arg_variance =
       check_in_context target_var (flip context_variance) arg_type
@@ -160,6 +160,15 @@ let rec check_in_context
 
   | Types.TypeRowEmpty ->
     Bivariant
+
+  | Types.TypePackage pkg ->
+    (* Check variance in all type constraints of the package *)
+    List.fold_left
+      (fun accumulated_variance (_, ty) ->
+        let ty_variance = check_in_context target_var context_variance ty in
+        combine accumulated_variance ty_variance)
+      Bivariant
+      pkg.Types.package_signature
 
 (** Check variance in a row type (for records). *)
 and check_in_row

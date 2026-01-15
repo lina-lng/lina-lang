@@ -10,10 +10,15 @@ let rec format_module_type = function
     let items_str = List.map format_sig_item items |> String.concat "; " in
     Printf.sprintf "sig [%s]" items_str
   | Module_types.ModTypeFunctor (param, result) ->
-    Printf.sprintf "functor (%s : %s) -> %s"
-      param.Module_types.parameter_name
-      (format_module_type param.Module_types.parameter_type)
-      (format_module_type result)
+    begin match param with
+    | Module_types.FunctorParamNamed { parameter_name; parameter_type; _ } ->
+      Printf.sprintf "functor (%s : %s) -> %s"
+        parameter_name
+        (format_module_type parameter_type)
+        (format_module_type result)
+    | Module_types.FunctorParamUnit ->
+      Printf.sprintf "functor () -> %s" (format_module_type result)
+    end
   | Module_types.ModTypeIdent path ->
     Printf.sprintf "ident(%s)" (Types.path_to_string path)
 
@@ -23,6 +28,8 @@ and format_sig_item = function
   | Module_types.SigModule (name, mty) ->
     Printf.sprintf "module %s : %s" name (format_module_type mty)
   | Module_types.SigModuleType (name, _) -> Printf.sprintf "module type %s" name
+  | Module_types.SigExtensionConstructor ctor ->
+    Printf.sprintf "extension %s" ctor.Types.constructor_name
 
 (** Helper to create a simple signature with a value. *)
 let make_sig_with_value name ty =
@@ -41,6 +48,7 @@ let make_sig_with_type name =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationAbstract;
     declaration_variances = [];
+    declaration_injectivities = [];
     declaration_private = false;
     declaration_constraints = [];
   } in
@@ -90,9 +98,11 @@ let%expect_test "expand: functor type is preserved" =
   let param_sig = make_sig_with_type "t" in
   let result_sig = make_sig_with_type "s" in
   let functor_type = Module_types.ModTypeFunctor (
-    { Module_types.parameter_name = "X";
+    Module_types.FunctorParamNamed {
+      parameter_name = "X";
       parameter_id = Common.Identifier.create "X";
-      parameter_type = param_sig },
+      parameter_type = param_sig;
+    },
     result_sig
   ) in
   let expanded = Module_expansion.expand state functor_type in

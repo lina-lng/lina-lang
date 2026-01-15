@@ -101,7 +101,15 @@ let infer_match ~(infer_expr : expression_infer_fn) ctx loc scrutinee_expr match
         []
     in
 
-    unify ctx match_arm.arm_location scrutinee_type pattern_type;
+    (* For GADT patterns, link rigid type variables to their equation types.
+       This allows the branch body to use variables at their refined types.
+       For non-GADT patterns, unify normally. *)
+    if gadt_equations <> [] then begin
+      List.iter (fun (eq : Gadt.equation) ->
+        eq.eq_variable.link <- Some eq.eq_type
+      ) gadt_equations
+    end else
+      unify ctx match_arm.arm_location scrutinee_type pattern_type;
 
     let typed_guard, arm_ctx = match match_arm.arm_guard with
       | None -> (None, arm_ctx)
@@ -128,6 +136,12 @@ let infer_match ~(infer_expr : expression_infer_fn) ctx loc scrutinee_expr match
       else result_type
     in
     unify ctx match_arm.arm_location expected_result_type typed_arm_expression.expression_type;
+
+    (* Unlink GADT equations after processing the branch.
+       Each branch has its own equations that shouldn't pollute other branches. *)
+    List.iter (fun (eq : Gadt.equation) ->
+      eq.eq_variable.link <- None
+    ) gadt_equations;
 
     let typed_arm = {
       Typed_tree.typed_arm_pattern = typed_pattern;
@@ -175,7 +189,13 @@ let infer_match_with_expected ~(infer_expr : expression_infer_fn) ctx loc expect
       if extraction.success then extraction.equations else []
     in
 
-    if gadt_equations = [] then
+    (* For GADT patterns, link rigid type variables to their equation types.
+       This allows the branch body to use variables at their refined types. *)
+    if gadt_equations <> [] then begin
+      List.iter (fun (eq : Gadt.equation) ->
+        eq.eq_variable.link <- Some eq.eq_type
+      ) gadt_equations
+    end else
       unify ctx match_arm.arm_location scrutinee_type pattern_type;
 
     let typed_guard, arm_ctx = match match_arm.arm_guard with
@@ -200,6 +220,11 @@ let infer_match_with_expected ~(infer_expr : expression_infer_fn) ctx loc expect
 
     let expected_branch_type = Gadt.apply_equations gadt_equations expected_ty in
     unify ctx match_arm.arm_location expected_branch_type typed_arm_expression.expression_type;
+
+    (* Unlink GADT equations after processing the branch. *)
+    List.iter (fun (eq : Gadt.equation) ->
+      eq.eq_variable.link <- None
+    ) gadt_equations;
 
     let typed_arm = {
       Typed_tree.typed_arm_pattern = typed_pattern;

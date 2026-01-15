@@ -116,7 +116,11 @@ let%expect_test "hover on constructor application" =
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
-  [%expect {| None |}]
+  [%expect {|
+    ```lina
+    int option
+    ```
+    |}]
 
 let%expect_test "hover on literal in nested expression" =
   reset ();
@@ -227,7 +231,11 @@ let%expect_test "hover on match expression result" =
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
-  [%expect {| None |}]
+  [%expect {|
+    ```lina
+    int
+    ```
+    |}]
 
 (* ============================================================ *)
 (* Hover Range *)

@@ -34,6 +34,13 @@ let add_value name id scheme location env =
 let find_value name env =
   StringMap.find_opt name env.values
 
+(** Get all value bindings as a list of (name, identifier, scheme) tuples.
+    Used for comparing environments in or-patterns. *)
+let get_value_bindings env =
+  StringMap.fold (fun name binding acc ->
+    (name, binding.binding_id, binding.binding_scheme) :: acc
+  ) env.values []
+
 let add_type name decl env =
   { env with types = StringMap.add name decl env.types }
 
@@ -54,12 +61,13 @@ let find_type_constructors type_name env =
     | DeclarationAbstract -> None
     | DeclarationVariant constructors -> Some constructors
     | DeclarationRecord _ -> None
+    | DeclarationExtensible -> None
 
 let binary_int_op_type =
-  trivial_scheme (TypeArrow (type_int, TypeArrow (type_int, type_int)))
+  trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_int)))
 
 let comparison_int_type =
-  trivial_scheme (TypeArrow (type_int, TypeArrow (type_int, type_bool)))
+  trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_bool)))
 
 let add_builtin name scheme env =
   add_value name (Identifier.create name) scheme Location.none env
@@ -96,6 +104,9 @@ let open_module (sig_ : Module_types.signature) env =
       (add_module name binding env, bindings)
     | Module_types.SigModuleType (name, mty_opt) ->
       (add_module_type name mty_opt env, bindings)
+    | Module_types.SigExtensionConstructor ctor ->
+      (* Add extension constructor to environment when opening module *)
+      (add_constructor ctor.Types.constructor_name ctor env, bindings)
   ) (env, []) sig_ in
   (env, List.rev value_bindings)
 
@@ -134,7 +145,33 @@ and find_module_by_path path env =
     | Some binding ->
       find_module_in_module_type name binding.Module_types.binding_type
     end
-  | Types.PathBuiltin _ | Types.PathApply _ ->
+  | Types.PathApply (func_path, arg_path) ->
+    (* Functor application: F(M) - apply the functor to get result type *)
+    begin match find_module_by_path func_path env with
+    | None -> None
+    | Some func_binding ->
+      begin match func_binding.Module_types.binding_type with
+      | Module_types.ModTypeFunctor (param, result_mty) ->
+        begin match param with
+        | Module_types.FunctorParamNamed { parameter_id; _ } ->
+          (* Substitute the argument path for the parameter in the result type *)
+          let param_path = Types.PathIdent parameter_id in
+          let substituted_mty =
+            Type_utils.substitute_path_in_module_type ~old_path:param_path ~new_path:arg_path result_mty
+          in
+          let id = Common.Identifier.create "<apply>" in
+          Some Module_types.{ binding_name = "<apply>"; binding_id = id;
+                              binding_type = substituted_mty; binding_alias = None }
+        | Module_types.FunctorParamUnit ->
+          (* Generative functor - just return the result *)
+          let id = Common.Identifier.create "<apply>" in
+          Some Module_types.{ binding_name = "<apply>"; binding_id = id;
+                              binding_type = result_mty; binding_alias = None }
+        end
+      | _ -> None
+      end
+    end
+  | Types.PathBuiltin _ ->
     None
 
 and find_type_in_module_type name mty =
@@ -186,6 +223,32 @@ let find_module_type_by_path path env =
   | Types.PathBuiltin _ | Types.PathApply _ ->
     None
 
+(** Find a constructor in a module signature by name. *)
+let find_constructor_in_module_type name mty =
+  match mty with
+  | Module_types.ModTypeSig sig_ ->
+    Module_types.find_constructor_in_sig name sig_
+  | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
+    None
+
+(** Look up a constructor by a qualified path (module path + constructor name).
+    For example, ["M"; "Some"] looks for constructor Some in module M. *)
+let find_constructor_by_path path_strings ctor_name env =
+  match path_strings with
+  | [] ->
+    (* No module path - look up directly in environment *)
+    find_constructor ctor_name env
+  | first :: rest ->
+    (* Qualified path - build internal path and look up module *)
+    let path = List.fold_left
+      (fun acc name -> Types.PathDot (acc, name))
+      (Types.PathLocal first)
+      rest
+    in
+    match find_module_by_path path env with
+    | Some binding -> find_constructor_in_module_type ctor_name binding.Module_types.binding_type
+    | None -> None
+
 (* Iteration functions for LSP features *)
 
 let fold_values f env acc =
@@ -211,15 +274,80 @@ let polymorphic_print_type =
   in
   {
     quantified_variables = [alpha];
-    body = TypeArrow (TypeVariable alpha, type_unit);
+    body = TypeArrow (Nolabel, TypeVariable alpha, type_unit);
   }
+
+(** Built-in option type: type 'a option = None | Some of 'a
+
+    The option type is fundamental for optional arguments - when a ?x:int
+    parameter is omitted, it receives None; when provided with ~x:value,
+    it receives Some value. *)
+let option_type_declaration, none_constructor, some_constructor =
+  (* Create a type variable for 'a at generic level so it can be instantiated *)
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ -> failwith "new_type_variable_at_level must return TypeVariable"
+  in
+
+  (* Result type: 'a option *)
+  let option_result_type = TypeConstructor (PathLocal "option", [TypeVariable alpha]) in
+
+  let none_ctor = {
+    constructor_name = "None";
+    constructor_tag_index = 0;
+    constructor_type_name = "option";
+    constructor_argument_type = None;
+    constructor_result_type = option_result_type;
+    constructor_type_parameters = [alpha];
+    constructor_is_gadt = false;
+    constructor_existentials = [];
+  } in
+
+  let some_ctor = {
+    constructor_name = "Some";
+    constructor_tag_index = 1;
+    constructor_type_name = "option";
+    constructor_argument_type = Some (TypeVariable alpha);
+    constructor_result_type = option_result_type;
+    constructor_type_parameters = [alpha];
+    constructor_is_gadt = false;
+    constructor_existentials = [];
+  } in
+
+  let option_decl = {
+    declaration_name = "option";
+    declaration_parameters = [alpha];
+    declaration_variances = [Covariant];
+    declaration_injectivities = [true];
+    declaration_manifest = None;
+    declaration_kind = DeclarationVariant [none_ctor; some_ctor];
+    declaration_private = false;
+    declaration_constraints = [];
+  } in
+
+  (option_decl, none_ctor, some_ctor)
 
 let initial =
   let env = empty in
+
+  (* Add option type and its constructors *)
+  let env = add_type "option" option_type_declaration env in
+  let env = add_constructor "None" none_constructor env in
+  let env = add_constructor "Some" some_constructor env in
+
+  (* Add arithmetic operators *)
   let env = add_builtin "+" binary_int_op_type env in
   let env = add_builtin "-" binary_int_op_type env in
   let env = add_builtin "*" binary_int_op_type env in
   let env = add_builtin "/" binary_int_op_type env in
+
+  (* Add string concatenation operator *)
+  let string_concat_type =
+    trivial_scheme (TypeArrow (Nolabel, type_string, TypeArrow (Nolabel, type_string, type_string)))
+  in
+  let env = add_builtin "^" string_concat_type env in
+
+  (* Add comparison operators *)
   let env = add_builtin "<" comparison_int_type env in
   let env = add_builtin ">" comparison_int_type env in
   let env = add_builtin "<=" comparison_int_type env in
@@ -228,5 +356,7 @@ let initial =
   let env = add_builtin "==" comparison_int_type env in
   let env = add_builtin "!=" comparison_int_type env in
   let env = add_builtin "<>" comparison_int_type env in
+
+  (* Add print function *)
   let env = add_builtin "print" polymorphic_print_type env in
   env

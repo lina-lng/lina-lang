@@ -62,6 +62,23 @@ let qualify_type_in_signature path type_names ty =
 let qualify_scheme_in_signature path type_names scheme =
   { scheme with Types.body = qualify_type_in_signature path type_names scheme.Types.body }
 
+(** Qualify types inside a constructor declaration. *)
+let qualify_constructor_in_signature path type_names (ctor : Types.constructor_info) =
+  let arg_type = Option.map (qualify_type_in_signature path type_names) ctor.constructor_argument_type in
+  let result_type = qualify_type_in_signature path type_names ctor.constructor_result_type in
+  { ctor with
+    constructor_argument_type = arg_type;
+    constructor_result_type = result_type;
+  }
+
+(** Qualify types inside a type declaration (especially in variant constructors). *)
+let qualify_declaration_in_signature path type_names (decl : Types.type_declaration) =
+  match decl.declaration_kind with
+  | Types.DeclarationVariant constructors ->
+    let qualified_ctors = List.map (qualify_constructor_in_signature path type_names) constructors in
+    { decl with declaration_kind = Types.DeclarationVariant qualified_ctors }
+  | _ -> decl
+
 let rec strengthen_signature path sig_ =
   (* First, collect all type names defined in this signature *)
   let type_names = collect_type_names sig_ in
@@ -69,17 +86,19 @@ let rec strengthen_signature path sig_ =
   List.map (fun item ->
     match item with
     | Module_types.SigType (name, decl) ->
-      begin match decl.Types.declaration_manifest with
+      (* First qualify types inside the declaration (e.g., in variant constructors) *)
+      let qualified_decl = qualify_declaration_in_signature path type_names decl in
+      begin match qualified_decl.Types.declaration_manifest with
       | Some _ ->
         (* Type already has a manifest (it's a type alias) - keep it as is.
            Overwriting would create a cycle: type t = int -> type t = M.t *)
-        item
+        Module_types.SigType (name, qualified_decl)
       | None ->
         (* Abstract type - make it concrete by binding to path.t *)
         let type_path = Types.PathDot (path, name) in
         let manifest = Types.TypeConstructor (type_path,
-          List.map (fun tv -> Types.TypeVariable tv) decl.Types.declaration_parameters) in
-        Module_types.SigType (name, { decl with declaration_manifest = Some manifest })
+          List.map (fun tv -> Types.TypeVariable tv) qualified_decl.Types.declaration_parameters) in
+        Module_types.SigType (name, { qualified_decl with declaration_manifest = Some manifest })
       end
     | Module_types.SigValue (name, desc) ->
       (* Qualify PathLocal references to types defined in this signature *)
@@ -221,8 +240,8 @@ let rec substitute_local_types subst ty =
     end
   | Types.TypeConstructor (path, args) ->
     Types.TypeConstructor (path, List.map (substitute_local_types subst) args)
-  | Types.TypeArrow (arg, res) ->
-    Types.TypeArrow (substitute_local_types subst arg, substitute_local_types subst res)
+  | Types.TypeArrow (label, arg, res) ->
+    Types.TypeArrow (label, substitute_local_types subst arg, substitute_local_types subst res)
   | Types.TypeTuple elems ->
     Types.TypeTuple (List.map (substitute_local_types subst) elems)
   | Types.TypeRecord row ->
@@ -346,6 +365,12 @@ let rec match_signature_generic
     | Module_types.SigModuleType (_name, _spec_mty_opt) ->
       (* Module type declarations - skip for now *)
       acc.empty
+
+    | Module_types.SigExtensionConstructor _ctor ->
+      (* Extension constructors are checked when they are used, not during
+         signature matching. The type extension must have been valid when
+         the module was type-checked. *)
+      acc.empty
   in
   (* Check all specification items *)
   List.fold_left (fun errors item ->
@@ -369,7 +394,18 @@ and match_module_type_generic
   | Module_types.ModTypeFunctor (param_impl, result_impl),
     Module_types.ModTypeFunctor (param_spec, result_spec) ->
     (* Parameters: contravariant, Results: covariant *)
-    let param_result = match_module_type_generic acc ctx loc param_spec.parameter_type param_impl.parameter_type in
+    let param_result = match param_impl, param_spec with
+      | Module_types.FunctorParamNamed impl_p, Module_types.FunctorParamNamed spec_p ->
+          (* Named functors: check parameter types contravariantly *)
+          match_module_type_generic acc ctx loc spec_p.parameter_type impl_p.parameter_type
+      | Module_types.FunctorParamUnit, Module_types.FunctorParamUnit ->
+          (* Generative functors: both unit, compatible *)
+          acc.empty
+      | Module_types.FunctorParamNamed _, Module_types.FunctorParamUnit
+      | Module_types.FunctorParamUnit, Module_types.FunctorParamNamed _ ->
+          (* Mismatch: one is generative, one is applicative *)
+          acc.singleton (ModuleTypeMismatch ("functor parameter mismatch: generative vs applicative", ""))
+    in
     if acc.should_continue param_result then
       acc.combine param_result (match_module_type_generic acc ctx loc result_impl result_spec)
     else

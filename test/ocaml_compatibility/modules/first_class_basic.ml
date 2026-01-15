@@ -1,0 +1,18 @@
+(* First-class modules: basic pack and unpack *)
+(* Expected: ACCEPT - pack module, unpack in let-module *)
+
+module type INTABLE = sig
+  val to_int : unit -> int
+end
+
+module FortyTwo : INTABLE = struct
+  let to_int () = 42
+end
+
+let packed = (module FortyTwo : INTABLE)
+
+let result =
+  let module M = (val packed : INTABLE) in
+  M.to_int ()
+
+let _ = print_int result

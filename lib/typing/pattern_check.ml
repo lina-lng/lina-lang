@@ -9,6 +9,7 @@ type simple_pattern =
   | PatTuple of simple_pattern list
   | PatConstant of constant_value
   | PatRecord of (string * simple_pattern) list * bool  (* fields, is_open *)
+  | PatOr of simple_pattern * simple_pattern  (* or-pattern: p1 | p2 *)
 
 and constant_value =
   | ConstInt of int
@@ -49,6 +50,12 @@ let rec simplify_pattern (pat : Typed_tree.typed_pattern) : simple_pattern =
       (f.typed_pattern_field_name, simplify_pattern f.typed_pattern_field_pattern)
     ) fields in
     PatRecord (simplified_fields, is_open)
+  | Typed_tree.TypedPatternAlias (inner, _id) ->
+    (* Alias patterns: the inner pattern determines matching behavior *)
+    simplify_pattern inner
+  | Typed_tree.TypedPatternOr (left, right) ->
+    (* Or-patterns: preserve structure for exhaustiveness *)
+    PatOr (simplify_pattern left, simplify_pattern right)
   | Typed_tree.TypedPatternLocallyAbstract _ ->
     (* Locally abstract types are wildcards for exhaustiveness checking *)
     PatWildcard
@@ -156,18 +163,25 @@ let get_signature env (scrutinee_type : Types.type_expression) : constructor_sig
   | _ -> SigInfinite
 
 (* Check if a pattern is a wildcard (matches anything) *)
-let is_wildcard = function
+let rec is_wildcard = function
   | PatWildcard -> true
+  | PatOr (left, right) -> is_wildcard left && is_wildcard right
   | _ -> false
+
+(* Extract head constructors from a pattern (for or-patterns, recursively extract from both sides) *)
+let rec extract_heads (pat : simple_pattern) : simple_pattern list =
+  match pat with
+  | PatOr (left, right) ->
+    extract_heads left @ extract_heads right
+  | PatWildcard -> []
+  | other -> [other]
 
 (* Extract head constructors from first column of matrix *)
 let head_constructors (matrix : pattern_matrix) : simple_pattern list =
-  let heads = List.filter_map (fun row ->
+  let heads = List.concat_map (fun row ->
     match row with
-    | [] -> None
-    | first :: _ ->
-      if is_wildcard first then None
-      else Some first
+    | [] -> []
+    | first :: _ -> extract_heads first
   ) matrix in
   (* Remove duplicates *)
   let rec unique acc = function
@@ -198,7 +212,7 @@ let is_complete_signature (heads : simple_pattern list) (sig_ : constructor_sign
     ) ctors
 
 (* Get arity of a head constructor *)
-let head_arity (head : simple_pattern) (sig_ : constructor_signature) : int =
+let rec head_arity (head : simple_pattern) (sig_ : constructor_signature) : int =
   match head, sig_ with
   | PatTuple pats, _ -> List.length pats
   | PatConstructor (name, _), SigVariant ctors ->
@@ -209,14 +223,22 @@ let head_arity (head : simple_pattern) (sig_ : constructor_signature) : int =
   | PatConstant (ConstBool _), SigBool -> 0
   | PatConstant _, _ -> 0
   | PatRecord (fields, _), _ -> List.length fields
+  | PatOr (left, _), _ -> head_arity left sig_  (* Use left branch's arity *)
   | PatWildcard, _ -> 0
 
-(* Expand a pattern to sub-patterns when specializing *)
-let expand_pattern (pat : simple_pattern) (head : simple_pattern) (arity : int) : simple_pattern list option =
+(* Expand a pattern to sub-patterns when specializing.
+   Returns a list of possible expansions (normally one, but or-patterns can produce multiple). *)
+let rec expand_pattern (pat : simple_pattern) (head : simple_pattern) (arity : int) : simple_pattern list option =
   match pat, head with
   | PatWildcard, _ ->
     (* Wildcard expands to n wildcards *)
     Some (List.init arity (fun _ -> PatWildcard))
+  | PatOr (left, right), _ ->
+    (* Or-pattern: try expanding left side first, then right side *)
+    begin match expand_pattern left head arity with
+    | Some _ as result -> result
+    | None -> expand_pattern right head arity
+    end
   | PatTuple pats, PatTuple _ when List.length pats = arity ->
     Some pats
   | PatConstructor (name1, arg), PatConstructor (name2, _) when name1 = name2 ->
@@ -240,8 +262,34 @@ let expand_pattern (pat : simple_pattern) (head : simple_pattern) (arity : int) 
     Some sub_pats
   | _ -> None
 
-(* Specialize matrix for a head constructor *)
+(* Expand or-patterns in first position into multiple rows *)
+let rec _expand_or_pattern_rows (row : pattern_vector) : pattern_vector list =
+  match row with
+  | [] -> [[]]
+  | PatOr (left, right) :: rest ->
+    (* Expand or-pattern into two rows *)
+    let left_rows = _expand_or_pattern_rows (left :: rest) in
+    let right_rows = _expand_or_pattern_rows (right :: rest) in
+    left_rows @ right_rows
+  | first :: rest ->
+    (* Non-or patterns: keep as is *)
+    List.map (fun expanded_rest -> first :: expanded_rest) (_expand_or_pattern_rows rest)
+
+(* Specialize matrix for a head constructor.
+   Or-patterns are expanded into multiple rows during specialization. *)
 let specialize (matrix : pattern_matrix) (head : simple_pattern) (arity : int) : pattern_matrix =
+  (* First expand any or-patterns in first column *)
+  let expanded_matrix = List.concat_map (fun row ->
+    match row with
+    | [] -> [[]]
+    | first :: rest ->
+      List.map (fun expanded_first -> expanded_first :: rest)
+        (let rec expand_or = function
+          | PatOr (left, right) -> expand_or left @ expand_or right
+          | p -> [p]
+        in expand_or first)
+  ) matrix in
+  (* Then apply standard specialization *)
   List.filter_map (fun row ->
     match row with
     | [] -> None
@@ -249,15 +297,21 @@ let specialize (matrix : pattern_matrix) (head : simple_pattern) (arity : int) :
       match expand_pattern first head arity with
       | Some sub_pats -> Some (sub_pats @ rest)
       | None -> None
-  ) matrix
+  ) expanded_matrix
 
-(* Default matrix - keep rows where first column is wildcard *)
+(* Check if an or-pattern contains a wildcard branch *)
+let rec or_contains_wildcard = function
+  | PatWildcard -> true
+  | PatOr (left, right) -> or_contains_wildcard left || or_contains_wildcard right
+  | _ -> false
+
+(* Default matrix - keep rows where first column is wildcard or contains a wildcard branch *)
 let default_matrix (matrix : pattern_matrix) : pattern_matrix =
   List.filter_map (fun row ->
     match row with
     | [] -> None
     | first :: rest ->
-      if is_wildcard first then Some rest
+      if or_contains_wildcard first then Some rest
       else None
   ) matrix
 

@@ -35,16 +35,16 @@ let dump_typed_structure typed_ast =
     | TypedExpressionTuple exprs ->
       Printf.sprintf "%s(tuple : %s)\n%s" (indent depth) ty
         (String.concat "\n" (List.map (dump_expr (depth + 1)) exprs))
-    | TypedExpressionApply (fn, args) ->
+    | TypedExpressionApply (fn, labeled_args) ->
       Printf.sprintf "%s(apply : %s)\n%s\n%s" (indent depth) ty
         (dump_expr (depth + 1) fn)
-        (String.concat "\n" (List.map (dump_expr (depth + 1)) args))
-    | TypedExpressionFunction (params, body) ->
-      let param_name p = match p.pattern_desc with
+        (String.concat "\n" (List.map (fun (_, e) -> dump_expr (depth + 1) e) labeled_args))
+    | TypedExpressionFunction (labeled_params, body) ->
+      let param_name (_, p) = match p.pattern_desc with
         | TypedPatternVariable id -> Identifier.name id
         | _ -> "_"
       in
-      let param_names = List.map param_name params in
+      let param_names = List.map param_name labeled_params in
       Printf.sprintf "%s(fun [%s] : %s)\n%s" (indent depth)
         (String.concat ", " param_names) ty (dump_expr (depth + 1) body)
     | TypedExpressionLet (_, bindings, body) ->

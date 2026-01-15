@@ -1,0 +1,10 @@
+(* Alias patterns: alias with constructor *)
+(* Expected: ACCEPT - (Some x as opt) binds both x and opt *)
+
+let get_or_default opt default =
+  match opt with
+  | (Some x as opt) -> (x, opt)
+  | None -> (default, None)
+
+let (v, opt) = get_or_default (Some 42) 0
+let () = print_int v

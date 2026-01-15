@@ -53,11 +53,11 @@ let rec expand_type_aux ~type_lookup visiting ty =
       else
         (ty, false)
     end
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     let (arg', arg_exp) = expand_type_aux ~type_lookup visiting arg in
     let (result', result_exp) = expand_type_aux ~type_lookup visiting result in
     if arg_exp || result_exp then
-      (TypeArrow (arg', result'), true)
+      (TypeArrow (Nolabel, arg', result'), true)
     else
       (ty, false)
   | TypeTuple elements ->
@@ -136,7 +136,7 @@ let rec occurs_check_with_path location tv ty path =
     let new_path = ty :: path in
     List.iter (fun elem -> occurs_check_with_path location tv elem new_path) elements
 
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     let new_path = ty :: path in
     occurs_check_with_path location tv arg new_path;
     occurs_check_with_path location tv result new_path
@@ -151,6 +151,12 @@ let rec occurs_check_with_path location tv ty path =
 
   | TypeRowEmpty ->
     ()
+
+  | TypePackage pkg ->
+    let new_path = TypePackage pkg :: path in
+    List.iter (fun (_, ty) ->
+      occurs_check_with_path location tv ty new_path
+    ) pkg.package_signature
 
 and occurs_check_row_with_path location tv row path =
   List.iter (fun (_, field) ->
@@ -279,7 +285,7 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
           (List.length elems1) (List.length elems2));
     List.iter2 (unify_full ~type_lookup ~fresh_type_var location) elems1 elems2
 
-  | TypeArrow (arg1, res1), TypeArrow (arg2, res2) ->
+  | TypeArrow (_, arg1, res1), TypeArrow (_, arg2, res2) ->
     unify_full ~type_lookup ~fresh_type_var location arg1 arg2;
     unify_full ~type_lookup ~fresh_type_var location res1 res2
 
@@ -291,6 +297,48 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
 
   | TypeRowEmpty, TypeRowEmpty ->
     ()
+
+  | TypePackage pkg1, TypePackage pkg2 ->
+    (* Package types unify if they have the same path.
+       For now we use simple path equality - both must refer to the same module type. *)
+    if not (path_equal pkg1.package_path pkg2.package_path) then
+      unification_error location ty1 ty2
+        (Printf.sprintf "Package type mismatch: (module %s) vs (module %s)"
+          (path_to_string pkg1.package_path)
+          (path_to_string pkg2.package_path))
+
+  (* When one side is a TypeConstructor, try expanding it as a type alias *)
+  | TypeConstructor _, _ ->
+    begin
+      try
+        let (expanded1, did_expand1) = expand_type_aux ~type_lookup PathSet.empty ty1 in
+        if did_expand1 then
+          unify_full ~type_lookup ~fresh_type_var location expanded1 ty2
+        else
+          unification_error location ty1 ty2
+            (Printf.sprintf "Type mismatch: expected %s, got %s"
+              (type_expression_to_string ty1)
+              (type_expression_to_string ty2))
+      with Cyclic_type_alias path ->
+        unification_error location ty1 ty2
+          (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
+    end
+
+  | _, TypeConstructor _ ->
+    begin
+      try
+        let (expanded2, did_expand2) = expand_type_aux ~type_lookup PathSet.empty ty2 in
+        if did_expand2 then
+          unify_full ~type_lookup ~fresh_type_var location ty1 expanded2
+        else
+          unification_error location ty1 ty2
+            (Printf.sprintf "Type mismatch: expected %s, got %s"
+              (type_expression_to_string ty1)
+              (type_expression_to_string ty2))
+      with Cyclic_type_alias path ->
+        unification_error location ty1 ty2
+          (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
+    end
 
   | _ ->
     unification_error location ty1 ty2

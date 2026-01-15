@@ -1,0 +1,71 @@
+(* Generative functors: functor () -> ... creates fresh types each application *)
+
+(* Test generative functor returning values - simplest case *)
+module MakeId () = struct
+  let value = 42
+end
+
+module Id1 = MakeId ()
+module Id2 = MakeId ()
+
+let _ = print Id1.value  (* 42 *)
+let _ = print Id2.value  (* 42 *)
+
+(* Generative functor with more structure *)
+module MakeNested () = struct
+  module Inner = struct
+    let x = 100
+  end
+  let y = 50
+end
+
+module N1 = MakeNested ()
+let _ = print N1.Inner.x  (* 100 *)
+let _ = print N1.y        (* 50 *)
+
+(* Generative functor using functor keyword *)
+module type COUNTER = sig
+  type t
+  val create : int -> t
+  val get : t -> int
+end
+
+module MakeCounter = functor () -> struct
+  type t = int
+  let create n = n
+  let get c = c
+end
+
+module C1 = MakeCounter ()
+module C2 = MakeCounter ()
+
+let v1 = C1.create 10
+let v2 = C2.create 20
+
+let _ = print (C1.get v1)  (* 10 *)
+let _ = print (C2.get v2)  (* 20 *)
+
+(* Combined with applicative functors for comparison *)
+module type S = sig
+  type t
+  val default : t
+end
+
+module IntS : S with type t = int = struct
+  type t = int
+  let default = 0
+end
+
+(* Applicative functor *)
+module Wrap (X : S) = struct
+  type wrapped = X.t
+  let wrap x = x
+  let unwrap x = x
+end
+
+module W1 = Wrap(IntS)
+module W2 = Wrap(IntS)
+
+(* Both have the same type since Wrap is applicative *)
+let w = W1.wrap 42
+let _ = print (W2.unwrap w)  (* 42 - works because types are equal *)

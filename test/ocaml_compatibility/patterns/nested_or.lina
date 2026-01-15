@@ -1,0 +1,11 @@
+(* Or-patterns: nested in tuple *)
+(* Expected: ACCEPT - or-patterns can be nested in tuples *)
+
+type ab = A | B
+type cd = C | D
+
+let both_first = fun p ->
+  match p with
+  | ((A | B), (C | D)) -> true
+
+let _ = if both_first (A, C) then print "yes" else print "no"

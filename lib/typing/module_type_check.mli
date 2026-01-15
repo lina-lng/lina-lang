@@ -20,6 +20,16 @@
     ([with module M = N]) are supported. Constraints can target nested
     paths like [with type M.N.t = int]. *)
 
+(** {1 Forward References} *)
+
+(** Forward reference for module expression inference.
+    Set by Structure_infer to break circular dependency.
+    Used for [module type of M] to get the signature of a module expression. *)
+val infer_module_expression_ref :
+  (Typing_context.t ->
+   Parsing.Syntax_tree.module_expression ->
+   Typed_tree.typed_module_expression * Typing_context.t) ref
+
 (** {1 Module Type Checking} *)
 
 (** [check_module_type ctx mty] checks a syntactic module type.

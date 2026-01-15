@@ -1,0 +1,18 @@
+(* Multiple extension constructors added to extensible type *)
+
+type event = ..
+
+type event += Click of int * int
+type event += KeyPress of string
+type event += Scroll of int
+
+let describe_event e =
+  match e with
+  | Click (x, y) -> "click"
+  | KeyPress k -> "key"
+  | Scroll n -> "scroll"
+  | _ -> "unknown"
+
+let _ = print (describe_event (Click (10, 20)))
+let _ = print (describe_event (KeyPress "a"))
+let _ = print (describe_event (Scroll 5))

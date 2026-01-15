@@ -89,6 +89,23 @@ and symbols_of_item (item : Typing.Typed_tree.typed_structure_item) =
           children;
         };
       ]
+  | Typing.Typed_tree.TypedStructureRecModule rec_bindings ->
+      List.map (fun (binding : Typing.Typed_tree.typed_rec_module_binding) ->
+        let name = Common.Identifier.name binding.rec_module_id in
+        let children =
+          match binding.rec_module_expr.module_desc with
+          | Typing.Typed_tree.TypedModuleStructure items ->
+              symbols_of_structure items
+          | _ -> []
+        in
+        {
+          name;
+          kind = Module;
+          range = Lsp_types.range_of_location binding.rec_module_location;
+          detail = Some "recursive";
+          children;
+        }
+      ) rec_bindings
   | _ -> []
 
 (** Get document symbols. *)

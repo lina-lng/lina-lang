@@ -45,12 +45,18 @@ let rec expand state mty =
       Module_types.ModTypeSig (expand_signature state sig_)
 
   | Module_types.ModTypeFunctor (param, result) ->
-      let expanded_parameter_type = expand state param.Module_types.parameter_type in
+      let expanded_param = match param with
+        | Module_types.FunctorParamNamed { parameter_name; parameter_id; parameter_type } ->
+            let expanded_type = expand state parameter_type in
+            Module_types.FunctorParamNamed {
+              parameter_name;
+              parameter_id;
+              parameter_type = expanded_type;
+            }
+        | Module_types.FunctorParamUnit -> Module_types.FunctorParamUnit
+      in
       let expanded_result = expand state result in
-      Module_types.ModTypeFunctor (
-        { param with Module_types.parameter_type = expanded_parameter_type },
-        expanded_result
-      )
+      Module_types.ModTypeFunctor (expanded_param, expanded_result)
 
   | Module_types.ModTypeIdent path ->
       check_cycle state path;
@@ -75,6 +81,8 @@ and expand_signature_item state item =
       Module_types.SigModule (name, expand state mty)
   | Module_types.SigModuleType (name, mty_opt) ->
       Module_types.SigModuleType (name, Option.map (expand state) mty_opt)
+  | Module_types.SigExtensionConstructor ctor ->
+      Module_types.SigExtensionConstructor ctor
 
 (** Try to expand, returning None on failure instead of raising. *)
 let try_expand state mty =

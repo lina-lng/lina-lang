@@ -1,0 +1,13 @@
+(* Or-pattern contributes to exhaustiveness checking *)
+
+type abc = A | B | C
+
+(* This should be exhaustive: A|B covers A and B, C covers C *)
+let to_int x =
+  match x with
+  | A | B -> 1
+  | C -> 2
+
+let _ = print (to_int A)
+let _ = print (to_int B)
+let _ = print (to_int C)

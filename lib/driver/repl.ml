@@ -25,7 +25,7 @@ let type_to_string ty =
     | TypeConstructor (path, args) ->
       let args_str = String.concat ", " (List.map pp args) in
       Printf.sprintf "%s<%s>" (path_to_string path) args_str
-    | TypeArrow (arg, result) ->
+    | TypeArrow (_, arg, result) ->
       Printf.sprintf "(%s -> %s)" (pp arg) (pp result)
     | TypeTuple elements ->
       Printf.sprintf "(%s)" (String.concat " * " (List.map pp elements))
@@ -34,6 +34,8 @@ let type_to_string ty =
     | TypePolyVariant pv_row ->
       Printf.sprintf "[%s]" (pp_poly_variant_row pv_row)
     | TypeRowEmpty -> ""
+    | TypePackage pkg ->
+      Printf.sprintf "(module %s)" (path_to_string pkg.package_path)
   and pp_row row =
     let fields = List.map (fun (label, field) ->
       match field with
@@ -164,6 +166,7 @@ let show_env state =
         | Typing.Types.DeclarationAbstract -> "abstract"
         | Typing.Types.DeclarationVariant _ -> "variant"
         | Typing.Types.DeclarationRecord _ -> "record"
+        | Typing.Types.DeclarationExtensible -> "extensible"
       in
       Printf.sprintf "  type %s [%s]" name kind :: acc)
     state.env []

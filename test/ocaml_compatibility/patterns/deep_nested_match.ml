@@ -1,0 +1,19 @@
+(* Deep nested pattern matching - 5+ levels *)
+
+type tree = Leaf of int | Node of tree * tree
+
+let rec sum_tree t =
+  match t with
+  | Leaf n -> n
+  | Node (Leaf a, Leaf b) -> a + b
+  | Node (Leaf a, Node (Leaf b, Leaf c)) -> a + b + c
+  | Node (Node (Leaf a, Leaf b), Leaf c) -> a + b + c
+  | Node (Node (Leaf a, Leaf b), Node (Leaf c, Leaf d)) -> a + b + c + d
+  | Node (Node (Node (Leaf a, Leaf b), Leaf c), Leaf d) -> a + b + c + d
+  | Node (left, right) -> sum_tree left + sum_tree right
+
+let deep = Node (Node (Node (Leaf 1, Leaf 2), Leaf 3), Leaf 4)
+let () = print_int (sum_tree deep); print_newline ()
+
+let deeper = Node (Node (Node (Node (Leaf 1, Leaf 2), Leaf 3), Leaf 4), Leaf 5)
+let () = print_int (sum_tree deeper); print_newline ()

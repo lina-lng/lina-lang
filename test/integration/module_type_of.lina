@@ -1,0 +1,42 @@
+(* Test module type of *)
+
+module M = struct
+  type t = int
+  let x = 42
+  let f y = y + 1
+end
+
+(* Extract the module type of M *)
+module type S = module type of M
+
+(* Use the extracted module type *)
+module N : S = struct
+  type t = int
+  let x = 100
+  let f y = y * 2
+end
+
+let () = print N.x  (* Expected: 100 *)
+let () = print (N.f 5)  (* Expected: 10 *)
+
+(* module type of with nested modules *)
+module Outer = struct
+  module Inner = struct
+    type t = bool
+    let v = true
+  end
+  let x = 1
+end
+
+module type OuterSig = module type of Outer
+
+module Outer2 : OuterSig = struct
+  module Inner = struct
+    type t = bool
+    let v = false
+  end
+  let x = 99
+end
+
+let () = print Outer2.x  (* Expected: 99 *)
+let () = print Outer2.Inner.v  (* Expected: false *)

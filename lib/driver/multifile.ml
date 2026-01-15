@@ -15,6 +15,18 @@ let rec extract_imports (structure : Parsing.Syntax_tree.structure) : string lis
   (* Return referenced modules that aren't defined locally *)
   List.filter (fun m -> not (List.mem m !defined)) (List.sort_uniq String.compare !referenced)
 
+and extract_from_longident referenced (longident : Parsing.Syntax_tree.longident) =
+  let open Parsing.Syntax_tree in
+  let rec find_root (lid : longident_desc) =
+    match lid with
+    | Lident name ->
+      (* Check if this looks like a module name (uppercase first letter) *)
+      if String.length name > 0 && Char.uppercase_ascii name.[0] = name.[0] then
+        referenced := name :: !referenced
+    | Ldot (parent, _) -> find_root parent.Location.value
+  in
+  find_root longident.Location.value
+
 and extract_from_item defined referenced (item : Parsing.Syntax_tree.structure_item) =
   let open Parsing.Syntax_tree in
   match item.Location.value with
@@ -36,6 +48,15 @@ and extract_from_item defined referenced (item : Parsing.Syntax_tree.structure_i
   | StructureExternal _ ->
     (* External declarations don't reference other modules *)
     ()
+  | StructureRecModule rec_bindings ->
+    (* Each recursive module binding defines a module and may reference others *)
+    List.iter (fun (binding : Parsing.Syntax_tree.rec_module_binding) ->
+      defined := binding.rec_module_name.Location.value :: !defined;
+      extract_from_module_expr referenced binding.rec_module_expr
+    ) rec_bindings
+  | StructureTypeExtension ext ->
+    (* Type extensions may reference other modules via the type path *)
+    extract_from_longident referenced ext.extension_type_name
   | StructureError _ ->
     (* Error nodes don't reference other modules *)
     ()
@@ -58,6 +79,8 @@ and extract_from_module_expr referenced (mexpr : Parsing.Syntax_tree.module_expr
     extract_from_module_expr referenced arg
   | ModuleConstraint (inner, _) ->
     extract_from_module_expr referenced inner
+  | ModuleUnpack (e, _) ->
+    extract_from_expr referenced e
 
 and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
   let open Parsing.Syntax_tree in
@@ -68,9 +91,9 @@ and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
     List.iter (extract_from_expr referenced) es
   | ExpressionConstructor (_, arg) ->
     Option.iter (extract_from_expr referenced) arg
-  | ExpressionApply (f, args) ->
+  | ExpressionApply (f, labeled_args) ->
     extract_from_expr referenced f;
-    List.iter (extract_from_expr referenced) args
+    List.iter (fun (_, e) -> extract_from_expr referenced e) labeled_args
   | ExpressionFunction (_, body) ->
     extract_from_expr referenced body
   | ExpressionLet (_, bindings, body) ->
@@ -114,6 +137,11 @@ and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
     extract_from_expr referenced value_expr
   | ExpressionPolyVariant (_, arg) ->
     Option.iter (extract_from_expr referenced) arg
+  | ExpressionPack (me, _) ->
+    extract_from_module_expr referenced me
+  | ExpressionLetModule (_, me, body) ->
+    extract_from_module_expr referenced me;
+    extract_from_expr referenced body
   | ExpressionError _ ->
     (* Error nodes don't reference other modules *)
     ()

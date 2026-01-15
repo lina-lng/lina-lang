@@ -1,0 +1,11 @@
+(* Or-patterns: basic usage *)
+(* Expected: ACCEPT - simple A | B pattern should work *)
+
+type color = Red | Green | Blue
+
+let is_primary = fun c ->
+  match c with
+  | Red | Blue -> true
+  | Green -> false
+
+let _ = if is_primary Red then print "yes" else print "no"

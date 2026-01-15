@@ -1,0 +1,14 @@
+(* Or-pattern with guard *)
+
+type t = A of int | B of int | C
+
+let is_positive x =
+  match x with
+  | A n | B n when n > 0 -> true
+  | A _ | B _ -> false
+  | C -> false
+
+let _ = print (is_positive (A 5))
+let _ = print (is_positive (A (-1)))
+let _ = print (is_positive (B 10))
+let _ = print (is_positive C)

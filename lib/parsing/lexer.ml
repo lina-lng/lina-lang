@@ -13,6 +13,7 @@ type token =
   | REC
   | IN
   | FUN
+  | FUNCTION
   | IF
   | THEN
   | ELSE
@@ -58,6 +59,7 @@ type token =
   | PLUS
   | MINUS
   | SLASH
+  | CARET                (** ^ string concatenation *)
   | LESS
   | GREATER
   | LESS_EQUAL
@@ -68,8 +70,14 @@ type token =
   | REF            (** ref keyword for creating references *)
   | BANG           (** ! for dereference *)
   | COLONEQUALS    (** := for assignment *)
+  | COLONCOLON     (** :: for list cons *)
   (* Polymorphic variants *)
   | BACKTICK_TAG of string  (** `` `Tag `` for polymorphic variant constructors *)
+  (* Labeled arguments *)
+  | TILDE          (** ~ for labeled arguments *)
+  | QUESTION       (** ? for optional arguments *)
+  (* Extensible variants *)
+  | PLUSEQUAL      (** += for type extension *)
   | EOF
 [@@deriving show, eq]
 
@@ -99,6 +107,7 @@ let keywords_table : (string, token) Hashtbl.t =
       ("rec", REC);
       ("in", IN);
       ("fun", FUN);
+      ("function", FUNCTION);
       ("if", IF);
       ("then", THEN);
       ("else", ELSE);
@@ -371,6 +380,7 @@ let lex_real_token state =
   | ',' -> make_token COMMA state
   | ';' -> make_token SEMICOLON state
   | ":=" -> make_token COLONEQUALS state
+  | "::" -> make_token COLONCOLON state
   | ':' -> make_token COLON state
   | "->" -> make_token ARROW state
   (* Comparison operators - multi-char first *)
@@ -391,6 +401,10 @@ let lex_real_token state =
   | '+' -> make_token PLUS state
   | '-' -> make_token MINUS state
   | '/' -> make_token SLASH state
+  | '^' -> make_token CARET state
+  | '~' -> make_token TILDE state
+  | '?' -> make_token QUESTION state
+  | "+=" -> make_token PLUSEQUAL state
   (* String literals *)
   | '"' ->
       update_location state;

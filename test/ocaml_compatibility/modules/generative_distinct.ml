@@ -1,0 +1,17 @@
+(* Generative functor creates distinct types per application *)
+
+module F () = struct
+  type t = int
+  let create n = n
+end
+
+module A = F ()
+module B = F ()
+
+(* A.t and B.t are distinct even though both are int internally *)
+let a : A.t = A.create 1
+let b : B.t = B.create 2
+
+(* This should work - each module uses its own type *)
+let () = print_int (a + 0); print_newline ()
+let () = print_int (b + 0); print_newline ()

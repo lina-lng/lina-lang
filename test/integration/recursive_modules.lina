@@ -1,0 +1,72 @@
+(* Test recursive modules - basic function recursion *)
+
+(* Simple mutually recursive modules with functions *)
+module rec Even : sig
+  val is_even : int -> bool
+end = struct
+  let is_even n =
+    if n = 0 then true
+    else if n < 0 then Odd.is_odd (0 - n - 1)
+    else Odd.is_odd (n - 1)
+end
+
+and Odd : sig
+  val is_odd : int -> bool
+end = struct
+  let is_odd n =
+    if n = 0 then false
+    else if n < 0 then Even.is_even (0 - n - 1)
+    else Even.is_even (n - 1)
+end
+
+let () = print (Even.is_even 10)    (* Expected: true *)
+let () = print (Odd.is_odd 7)       (* Expected: true *)
+let () = print (Even.is_even 3)     (* Expected: false *)
+let () = print (Odd.is_odd 4)       (* Expected: false *)
+
+(* Recursive modules with multiple functions *)
+module rec Counter : sig
+  val count_down : int -> int
+  val count_up : int -> int -> int
+end = struct
+  let count_down n =
+    if n <= 0 then 0
+    else 1 + Accumulator.accumulate (n - 1)
+
+  let rec count_up start stop =
+    if start >= stop then 0
+    else 1 + count_up (start + 1) stop
+end
+
+and Accumulator : sig
+  val accumulate : int -> int
+end = struct
+  let accumulate n =
+    if n <= 0 then 0
+    else Counter.count_down n
+end
+
+let () = print (Counter.count_down 5)  (* Expected: 5 *)
+let () = print (Counter.count_up 0 3)  (* Expected: 3 *)
+
+(* Three mutually recursive modules *)
+module rec X : sig
+  val x : int -> int
+end = struct
+  let x n = if n <= 0 then 0 else Y.y (n - 1)
+end
+
+and Y : sig
+  val y : int -> int
+end = struct
+  let y n = if n <= 0 then 1 else Z.z (n - 1)
+end
+
+and Z : sig
+  val z : int -> int
+end = struct
+  let z n = if n <= 0 then 2 else X.x (n - 1)
+end
+
+let () = print (X.x 6)  (* Expected: 0 (X->Y->Z->X->Y->Z->X returns 0) *)
+let () = print (Y.y 6)  (* Expected: 1 (Y->Z->X->Y->Z->X->Y returns 1) *)

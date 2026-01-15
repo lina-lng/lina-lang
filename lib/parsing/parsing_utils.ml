@@ -19,6 +19,7 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.REC -> Parser.REC
   | Lexer.IN -> Parser.IN
   | Lexer.FUN -> Parser.FUN
+  | Lexer.FUNCTION -> Parser.FUNCTION
   | Lexer.IF -> Parser.IF
   | Lexer.THEN -> Parser.THEN
   | Lexer.ELSE -> Parser.ELSE
@@ -60,6 +61,7 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.PLUS -> Parser.PLUS
   | Lexer.MINUS -> Parser.MINUS
   | Lexer.SLASH -> Parser.SLASH
+  | Lexer.CARET -> Parser.CARET
   | Lexer.LESS -> Parser.LESS
   | Lexer.GREATER -> Parser.GREATER
   | Lexer.LESS_EQUAL -> Parser.LESS_EQUAL
@@ -69,7 +71,11 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.REF -> Parser.REF
   | Lexer.BANG -> Parser.BANG
   | Lexer.COLONEQUALS -> Parser.COLONEQUALS
+  | Lexer.COLONCOLON -> Parser.COLONCOLON
   | Lexer.BACKTICK_TAG s -> Parser.BACKTICK_TAG s
+  | Lexer.TILDE -> Parser.TILDE
+  | Lexer.QUESTION -> Parser.QUESTION
+  | Lexer.PLUSEQUAL -> Parser.PLUSEQUAL
   | Lexer.EOF -> Parser.EOF
 
 (** Convert Lina position to Lexing.position. *)

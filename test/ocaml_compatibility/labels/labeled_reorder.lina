@@ -1,0 +1,14 @@
+(* Labeled arguments can be reordered *)
+
+let make_pair ~first ~second = (first, second)
+
+let pair1 = make_pair ~first:1 ~second:2
+let pair2 = make_pair ~second:20 ~first:10
+
+let (a, b) = pair1
+let (c, d) = pair2
+
+let _ = print a
+let _ = print b
+let _ = print c
+let _ = print d

@@ -4,6 +4,14 @@ open Common
 open Parsing.Syntax_tree
 open Types
 
+(** Forward reference for module expression inference.
+    Set by Structure_infer to break circular dependency.
+    Used for [module type of M] to get the signature of a module expression. *)
+let infer_module_expression_ref :
+    (Typing_context.t -> module_expression -> Typed_tree.typed_module_expression * Typing_context.t) ref =
+  ref (fun _ctx _mexpr ->
+    failwith "infer_module_expression not initialized - Structure_infer must set this")
+
 let module_path_to_internal_path base_id path_modules =
   match path_modules with
   | [] -> Types.PathIdent base_id
@@ -169,30 +177,37 @@ let rec check_module_type ctx (mty : module_type) =
     (Module_types.ModTypeSig semantic_sig, ctx)
 
   | ModuleTypeFunctor (params, result) ->
-    (* Functor type: functor (X : S) -> MT *)
+    (* Functor type: functor (X : S) -> MT or functor () -> MT *)
     begin match params with
     | [] ->
       Compiler_error.type_error loc "Functor type must have at least one parameter"
     | [param] ->
-      let parameter_name = param.functor_param_name.Location.value in
-      let parameter_type, ctx = check_module_type ctx param.functor_param_type in
-      let parameter_id = Identifier.create parameter_name in
-      let param_binding = Module_types.{
-        binding_name = parameter_name;
-        binding_id = parameter_id;
-        binding_type = parameter_type;
-        binding_alias = None;
-      } in
-      (* Add parameter to environment for checking result type *)
-      let result_env = Environment.add_module parameter_name param_binding env in
-      let result_ctx = Typing_context.with_environment result_env ctx in
-      let result_mty, ctx = check_module_type result_ctx result in
-      let semantic_param = Module_types.{
-        parameter_name;
-        parameter_id;
-        parameter_type;
-      } in
-      (Module_types.ModTypeFunctor (semantic_param, result_mty), ctx)
+      begin match param with
+      | FunctorParamNamed (name_loc, param_type) ->
+        let parameter_name = name_loc.Location.value in
+        let parameter_type, ctx = check_module_type ctx param_type in
+        let parameter_id = Identifier.create parameter_name in
+        let param_binding = Module_types.{
+          binding_name = parameter_name;
+          binding_id = parameter_id;
+          binding_type = parameter_type;
+          binding_alias = None;
+        } in
+        (* Add parameter to environment for checking result type *)
+        let result_env = Environment.add_module parameter_name param_binding env in
+        let result_ctx = Typing_context.with_environment result_env ctx in
+        let result_mty, ctx = check_module_type result_ctx result in
+        let semantic_param = Module_types.FunctorParamNamed {
+          parameter_name;
+          parameter_id;
+          parameter_type;
+        } in
+        (Module_types.ModTypeFunctor (semantic_param, result_mty), ctx)
+      | FunctorParamUnit _ ->
+        (* Generative functor: functor () -> MT *)
+        let result_mty, ctx = check_module_type ctx result in
+        (Module_types.ModTypeFunctor (Module_types.FunctorParamUnit, result_mty), ctx)
+      end
     | param :: rest ->
       (* Multiple parameters - desugar to nested functor type *)
       let inner_type = {
@@ -216,6 +231,12 @@ let rec check_module_type ctx (mty : module_type) =
       ) (base, ctx) constraints
     in
     (result, ctx)
+
+  | ModuleTypeOf module_expr ->
+    (* module type of M - extract the signature of the module expression *)
+    let infer_module_expression = !infer_module_expression_ref in
+    let typed_mexpr, ctx = infer_module_expression ctx module_expr in
+    (typed_mexpr.Typed_tree.module_type, ctx)
 
 and apply_with_constraint ctx mty constraint_ loc =
   match constraint_ with
@@ -286,7 +307,13 @@ and refine_type_in_sig ctx sig_ path params type_expr loc =
             (Printf.sprintf "Type %s has %d parameters but constraint has %d"
               name (List.length decl.declaration_parameters) (List.length params));
 
-        let manifest_type, new_ctx = Type_expression_check.check_type_expression ctx type_expr in
+        (* Use the declaration's type parameters so that references in the
+           manifest type (like 'a in "'a -> unit") correctly match the
+           declaration's parameters for proper substitution later. *)
+        let manifest_type, new_ctx =
+          Type_expression_check.check_type_expression_with_params
+            ctx params decl.Types.declaration_parameters type_expr
+        in
         let refined_decl = { decl with declaration_manifest = Some manifest_type } in
         (Module_types.SigType (name, refined_decl), new_ctx)
       in
@@ -357,6 +384,9 @@ and destructive_refine_type_in_sig ctx sig_ path params type_expr loc =
         | Module_types.SigModuleType (n, mty_opt) ->
             let new_mty_opt = Option.map (substitute_type_in_module_type name decl_params replacement_type) mty_opt in
             Some (Module_types.SigModuleType (n, new_mty_opt))
+        | Module_types.SigExtensionConstructor ctor ->
+            (* Extension constructors reference types by path, not substitutable *)
+            Some (Module_types.SigExtensionConstructor ctor)
       in
 
       let refined_sig = List.filter_map substitute_in_item sig_ in
@@ -390,8 +420,9 @@ and substitute_type_in_type type_name type_params replacement ty =
           Types.TypeConstructor (path, args')
       end
 
-  | Types.TypeArrow (t1, t2) ->
+  | Types.TypeArrow (label, t1, t2) ->
       Types.TypeArrow (
+        label,
         substitute_type_in_type type_name type_params replacement t1,
         substitute_type_in_type type_name type_params replacement t2
       )
@@ -428,15 +459,30 @@ and substitute_type_in_type type_name type_params replacement ty =
   | Types.TypeRowEmpty ->
       ty
 
+  | Types.TypePackage pkg ->
+      (* Apply substitution to all types in the package signature *)
+      let new_sig = List.map (fun (name, ty) ->
+        (name, substitute_type_in_type type_name type_params replacement ty)
+      ) pkg.package_signature in
+      Types.TypePackage { pkg with package_signature = new_sig }
+
 and substitute_type_in_module_type type_name type_params replacement mty =
   match mty with
   | Module_types.ModTypeSig sig_ ->
     Module_types.ModTypeSig (substitute_type_in_signature type_name type_params replacement sig_)
   | Module_types.ModTypeFunctor (param, result) ->
-    let new_param_type = substitute_type_in_module_type type_name type_params replacement param.parameter_type in
-    let new_param = { param with Module_types.parameter_type = new_param_type } in
-    let new_result = substitute_type_in_module_type type_name type_params replacement result in
-    Module_types.ModTypeFunctor (new_param, new_result)
+      let new_param = match param with
+        | Module_types.FunctorParamNamed { parameter_name; parameter_id; parameter_type } ->
+            let new_type = substitute_type_in_module_type type_name type_params replacement parameter_type in
+            Module_types.FunctorParamNamed {
+              parameter_name;
+              parameter_id;
+              parameter_type = new_type;
+            }
+        | Module_types.FunctorParamUnit -> Module_types.FunctorParamUnit
+      in
+      let new_result = substitute_type_in_module_type type_name type_params replacement result in
+      Module_types.ModTypeFunctor (new_param, new_result)
   | Module_types.ModTypeIdent _ -> mty
 
 and substitute_type_in_signature type_name type_params replacement sig_ =
@@ -453,6 +499,8 @@ and substitute_type_in_signature type_name type_params replacement sig_ =
       Module_types.SigModule (n, substitute_type_in_module_type type_name type_params replacement inner_mty)
     | Module_types.SigModuleType (n, mty_opt) ->
       Module_types.SigModuleType (n, Option.map (substitute_type_in_module_type type_name type_params replacement) mty_opt)
+    | Module_types.SigExtensionConstructor ctor ->
+      Module_types.SigExtensionConstructor ctor
   ) sig_
 
 and check_signature ctx sig_items =
@@ -496,17 +544,106 @@ and check_signature_item ctx item =
         ) ([], ctx) decl.type_parameters
       in
 
-      let kind = match decl.type_kind with
-        | Parsing.Syntax_tree.TypeAbstract -> Types.DeclarationAbstract
-        | Parsing.Syntax_tree.TypeVariant _ -> Types.DeclarationAbstract
-        | Parsing.Syntax_tree.TypeAlias _ -> Types.DeclarationAbstract
+      (* Get parameter names for mapping when checking type expressions *)
+      let param_names = List.map (fun (param : Parsing.Syntax_tree.type_parameter) ->
+        param.parameter_name
+      ) decl.type_parameters in
+
+      (* Build the result type: T or 'a T or ('a, 'b) T *)
+      let result_type =
+        TypeConstructor (PathLocal name, List.map (fun tv -> TypeVariable tv) type_params)
       in
+
+      (* Add a preliminary declaration so constructors can reference the type *)
+      let env = Typing_context.environment ctx in
+      let preliminary_decl = Types.{
+        declaration_name = name;
+        declaration_parameters = type_params;
+        declaration_variances = List.map (fun _ -> Types.Invariant) type_params;
+        declaration_injectivities = List.map (fun _ -> true) type_params;
+        declaration_manifest = None;
+        declaration_kind = DeclarationAbstract;
+        declaration_private = decl.type_private;
+        declaration_constraints = [];
+      } in
+      let env_with_type = Environment.add_type name preliminary_decl env in
+      let ctx_with_type = Typing_context.with_environment env_with_type ctx in
+
+      let (kind, manifest, ctx) = match decl.type_kind with
+        | Parsing.Syntax_tree.TypeAbstract -> (Types.DeclarationAbstract, None, ctx)
+        | Parsing.Syntax_tree.TypeVariant constructors ->
+          (* Process variant constructors including GADT constructors *)
+          let indexed_constructors = List.mapi (fun index ctor -> (index, ctor)) constructors in
+          let constructor_infos, ctx =
+            List.fold_left (fun (infos, ctx) (tag_index, (ctor : constructor_declaration)) ->
+              let arg_type, ctor_result_type, is_gadt, ctor_type_params, existentials, ctx =
+                match ctor.constructor_return_type with
+                | Some ret_ty_expr ->
+                  (* GADT constructor with explicit return type *)
+                  let arg_ty, ret_ty, _gadt_params, ctx =
+                    Type_expression_check.check_gadt_constructor ctx_with_type param_names type_params
+                      ctor.constructor_argument ret_ty_expr
+                  in
+                  (* Collect ALL type variables from both argument and result types *)
+                  let result_vars = Type_traversal.free_type_variables ret_ty in
+                  let arg_vars = match arg_ty with
+                    | Some arg_ty_val -> Type_traversal.free_type_variables arg_ty_val
+                    | None -> []
+                  in
+
+                  let result_var_ids = List.map (fun tv -> tv.Types.id) result_vars in
+                  let all_type_params = result_vars @ List.filter (fun tv ->
+                    not (List.mem tv.Types.id result_var_ids)
+                  ) arg_vars in
+
+                  let existentials =
+                    List.filter (fun tv -> not (List.mem tv.Types.id result_var_ids)) arg_vars
+                  in
+                  (arg_ty, ret_ty, true, all_type_params, existentials, ctx)
+                | None ->
+                  (* Regular constructor without GADT return type *)
+                  let arg_type, ctx = match ctor.constructor_argument with
+                    | Some ty_expr ->
+                      let ty, ctx = Type_expression_check.check_type_expression_with_params
+                        ctx_with_type param_names type_params ty_expr in
+                      (Some ty, ctx)
+                    | None -> (None, ctx)
+                  in
+                  (arg_type, result_type, false, type_params, [], ctx)
+              in
+              let ctor_info = Types.{
+                constructor_name = ctor.constructor_name.Location.value;
+                constructor_tag_index = tag_index;
+                constructor_type_name = name;
+                constructor_argument_type = arg_type;
+                constructor_result_type = ctor_result_type;
+                constructor_type_parameters = ctor_type_params;
+                constructor_is_gadt = is_gadt;
+                constructor_existentials = existentials;
+              } in
+              (infos @ [ctor_info], ctx)
+            ) ([], ctx) indexed_constructors
+          in
+          (Types.DeclarationVariant constructor_infos, None, ctx)
+        | Parsing.Syntax_tree.TypeAlias ty_expr ->
+          let manifest_type, ctx = Type_expression_check.check_type_expression_with_params
+            ctx_with_type param_names type_params ty_expr in
+          (Types.DeclarationAbstract, Some manifest_type, ctx)
+        | Parsing.Syntax_tree.TypeExtensible ->
+          (Types.DeclarationExtensible, None, ctx)
+      in
+
+      (* Compute injectivities: use explicit !'a annotation, or default to true for abstract types *)
+      let injectivities = List.map2 (fun (param : Parsing.Syntax_tree.type_parameter) _ ->
+        param.parameter_injective || true  (* Abstract types in signatures default to injective *)
+      ) decl.type_parameters type_params in
 
       let sig_decl = Types.{
         declaration_name = name;
         declaration_parameters = type_params;
         declaration_variances = List.map (fun _ -> Types.Invariant) type_params;
-        declaration_manifest = None;
+        declaration_injectivities = injectivities;
+        declaration_manifest = manifest;
         declaration_kind = kind;
         declaration_private = decl.type_private;
         declaration_constraints = [];

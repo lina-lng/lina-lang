@@ -1,0 +1,33 @@
+(* Test extensible variants (type t = ..) *)
+
+(* Declare an extensible type *)
+type exn = ..
+
+(* Add some constructors *)
+type exn += Error of string
+type exn += InvalidArg of string * int
+type exn += NotFound
+
+(* A function that uses the extensible variant *)
+let handle_exn e =
+  match e with
+  | Error msg -> print msg
+  | InvalidArg (name, code) -> print name
+  | NotFound -> print "not found"
+  | _ -> print "unknown"
+
+(* Create instances *)
+let e1 = Error "something went wrong"
+let e2 = InvalidArg ("x", 42)
+let e3 = NotFound
+
+(* Use them *)
+let _ = handle_exn e1
+let _ = handle_exn e2
+let _ = handle_exn e3
+
+(* Expected output:
+   something went wrong
+   x
+   not found
+*)

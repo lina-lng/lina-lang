@@ -215,10 +215,16 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
     in
     (result, ctx, var_map)
 
-  | TypeArrow (arg_ty, ret_ty) ->
+  | TypeArrow (label, arg_ty, ret_ty) ->
     let arg, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars arg_ty in
     let ret, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars ret_ty in
-    (TypeArrow (arg, ret), ctx, var_map)
+    (* Convert syntax label to type system label *)
+    let types_label = match label with
+      | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
+      | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
+      | Parsing.Syntax_tree.Optional s -> Types.Optional s
+    in
+    (Types.TypeArrow (types_label, arg, ret), ctx, var_map)
 
   | TypeTuple tys ->
     (* Note: We accumulate in reverse order using cons for O(n) complexity. *)
@@ -254,6 +260,16 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
        for polymorphic recursion. It's handled specially in expression_infer.ml *)
     Compiler_error.type_error ty_expr.location
       "'type a.' syntax can only appear at the top level of a let binding type annotation"
+
+  | TypePackage path ->
+    (* Package type: (module S) *)
+    (* For now, create a package type with just the path and empty signature.
+       The actual signature will be resolved during module type checking. *)
+    let package_ty = Types.TypePackage {
+      package_path = Types.PathLocal (String.concat "." path.value);
+      package_signature = [];
+    } in
+    (package_ty, ctx, var_map)
 
 (** Check a type expression from a signature and convert to semantic type.
     Note: This does NOT preserve type variable sharing - use check_type_expression_with_params

@@ -1,0 +1,44 @@
+(* Integration test for or-patterns and alias patterns *)
+
+type color = Red | Green | Blue
+
+(* Or-pattern: match multiple constructors *)
+let is_warm = fun c ->
+  match c with
+  | Red | Green -> true
+  | Blue -> false
+
+(* Or-pattern with binding: same variable in both branches *)
+type result = Ok of int | Error of int
+
+let get_value = fun r ->
+  match r with
+  | Ok x | Error x -> x
+
+(* Alias pattern: bind both whole and part *)
+type 'a option = None | Some of 'a
+
+let get_opt_value = fun opt ->
+  match opt with
+  | (Some x as whole) ->
+    let _ = print x in
+    whole
+  | None -> None
+
+(* Nested or-pattern in tuple *)
+type ab = A | B
+type cd = C | D
+
+let match_pair = fun p ->
+  match p with
+  | ((A | B), (C | D)) -> 1
+  | _ -> 0
+
+(* Test the functions *)
+let _ = print (is_warm Red)
+let _ = print (is_warm Blue)
+let _ = print (get_value (Ok 42))
+let _ = print (get_value (Error 100))
+let _ = get_opt_value (Some 10)
+let _ = print (match_pair (A, C))
+let _ = print (match_pair (B, D))

@@ -103,13 +103,13 @@ let test_mult_precedence =
         | Syntax_tree.ExpressionApply
             ( { value = Syntax_tree.ExpressionVariable "+"; _ },
               [
-                { value = Syntax_tree.ExpressionVariable left; _ };
-                {
+                (_, { value = Syntax_tree.ExpressionVariable left; _ });
+                (_, {
                   value =
                     Syntax_tree.ExpressionApply
                       ({ value = Syntax_tree.ExpressionVariable "*"; _ }, _);
                   _;
-                };
+                });
               ] ) ->
             left = a
         | _ -> false
@@ -127,13 +127,13 @@ let test_app_precedence =
         | Syntax_tree.ExpressionApply
             ( { value = Syntax_tree.ExpressionVariable "+"; _ },
               [
-                {
+                (_, {
                   value =
                     Syntax_tree.ExpressionApply
                       ({ value = Syntax_tree.ExpressionVariable func; _ }, _);
                   _;
-                };
-                { value = Syntax_tree.ExpressionVariable right; _ };
+                });
+                (_, { value = Syntax_tree.ExpressionVariable right; _ });
               ] ) ->
             func = f && right = y
         | _ -> false

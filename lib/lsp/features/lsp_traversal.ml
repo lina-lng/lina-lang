@@ -29,6 +29,13 @@ let rec find_pattern_at offset (pat : typed_pattern) =
           fields
     | TypedPatternPolyVariant (_, Some arg) ->
         find_pattern_at offset arg
+    | TypedPatternAlias (inner, _) ->
+        find_pattern_at offset inner
+    | TypedPatternOr (left, right) ->
+        try_searches [
+          (fun () -> find_pattern_at offset left);
+          (fun () -> find_pattern_at offset right);
+        ]
 
     (* Terminal patterns - no children to search *)
     | TypedPatternVariable _
@@ -77,14 +84,24 @@ and search_children offset expr =
       find_node_at offset arg
 
   (* Application and function definition *)
-  | TypedExpressionApply (func, args) ->
+  | TypedExpressionApply (func, labeled_args) ->
       try_searches [
         (fun () -> find_node_at offset func);
-        (fun () -> find_first (find_node_at offset) args);
+        (fun () -> find_first (fun (_, e) -> find_node_at offset e) labeled_args);
       ]
-  | TypedExpressionFunction (params, body) ->
+  | TypedExpressionPartialApply { partial_func; partial_slots } ->
+      let filled_exprs = List.filter_map (fun (_, slot) ->
+        match slot with
+        | SlotFilled expr -> Some expr
+        | SlotNeeded _ -> None
+      ) partial_slots in
       try_searches [
-        (fun () -> find_pattern_in_list offset params);
+        (fun () -> find_node_at offset partial_func);
+        (fun () -> find_first (fun e -> find_node_at offset e) filled_exprs);
+      ]
+  | TypedExpressionFunction (labeled_params, body) ->
+      try_searches [
+        (fun () -> find_pattern_in_list offset (List.map snd labeled_params));
         (fun () -> find_node_at offset body);
       ]
 
@@ -143,6 +160,8 @@ and search_children offset expr =
   | TypedExpressionConstructor (_, None)
   | TypedExpressionModuleAccess _
   | TypedExpressionPolyVariant (_, None)
+  | TypedExpressionPack _
+  | TypedExpressionLetModule _
   | TypedExpressionError _ ->
       None
 
@@ -168,11 +187,17 @@ let rec find_in_structure_item offset (item : typed_structure_item) =
   | TypedStructureModule (_, mod_expr) ->
       find_in_module_expression offset mod_expr
 
+  | TypedStructureRecModule rec_bindings ->
+      find_first (fun (binding : typed_rec_module_binding) ->
+        find_in_module_expression offset binding.rec_module_expr
+      ) rec_bindings
+
   | TypedStructureType _
   | TypedStructureModuleType _
   | TypedStructureOpen _
   | TypedStructureInclude _
   | TypedStructureExternal _
+  | TypedStructureTypeExtension _
   | TypedStructureError _ ->
       None
 
@@ -190,7 +215,8 @@ and find_in_module_expression offset (mod_expr : typed_module_expression) =
   | TypedModulePath _
   | TypedModuleFunctor _
   | TypedModuleApply _
-  | TypedModuleConstraint _ ->
+  | TypedModuleConstraint _
+  | TypedModuleUnpack _ ->
       None
 
 let find_node_in_structure offset structure =

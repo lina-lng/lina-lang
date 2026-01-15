@@ -1,0 +1,85 @@
+(* First-class modules tests *)
+
+(* Simple module type with concrete type *)
+module type INTABLE = sig
+  val to_int : unit -> int
+end
+
+module FortyTwo : INTABLE = struct
+  let to_int () = 42
+end
+
+(* Pack the module into a first-class value *)
+let packed = (module FortyTwo : INTABLE)
+
+(* Unpack and use *)
+let result =
+  let module M = (val packed : INTABLE) in
+  M.to_int ()
+
+let _ = print result
+
+(* Another implementation *)
+module TwentyOne : INTABLE = struct
+  let to_int () = 21
+end
+
+let packed2 = (module TwentyOne : INTABLE)
+
+let result2 =
+  let module M = (val packed2 : INTABLE) in
+  M.to_int ()
+
+let _ = print result2
+
+(* Function taking a packed module as argument *)
+let use_intable (m : (module INTABLE)) =
+  let module I = (val m : INTABLE) in
+  I.to_int ()
+
+let result3 = use_intable packed
+let result4 = use_intable packed2
+
+let _ = print result3
+let _ = print result4
+
+(* Module type with abstract type *)
+module type SHOWABLE = sig
+  type t
+  val value : t
+  val show : t -> int
+end
+
+module IntShow = struct
+  type t = int
+  let value = 100
+  let show x = x
+end
+
+module StrShow = struct
+  type t = string
+  let value = "hello"
+  let show _ = 50
+end
+
+let int_show = (module IntShow : SHOWABLE)
+let str_show = (module StrShow : SHOWABLE)
+
+let use_showable (m : (module SHOWABLE)) =
+  let module S = (val m : SHOWABLE) in
+  S.show S.value
+
+let result5 = use_showable int_show
+let result6 = use_showable str_show
+
+let _ = print result5
+let _ = print result6
+
+(* Expected output:
+   42
+   21
+   42
+   21
+   100
+   50
+*)

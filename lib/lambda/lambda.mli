@@ -38,6 +38,7 @@ type primitive =
   | PrimitiveIntLessEqual        (** Integer less-or-equal *)
   | PrimitiveIntGreaterEqual     (** Integer greater-or-equal *)
   | PrimitiveStringEqual         (** String equality *)
+  | PrimitiveStringConcat        (** String concatenation *)
   | PrimitiveMakeBlock of int    (** Create a tuple of given arity *)
   | PrimitiveGetField of int     (** Get tuple field by index (0-based) *)
   | PrimitivePrint               (** Print any value *)
@@ -63,6 +64,7 @@ type constructor_tag_index = {
   tag_index : int;         (** Numeric tag (0-based within type) *)
   tag_type_name : string;  (** Parent type name (e.g., "option") *)
   tag_is_nullary : bool;   (** True if constructor takes no arguments *)
+  tag_is_extension : bool; (** True for extensible variant constructors *)
 }
 
 (** {1 Lambda Expressions} *)

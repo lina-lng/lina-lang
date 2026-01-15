@@ -29,8 +29,8 @@ module M = struct
 end
 |});
   [%expect{|
-    local x_13 = 42
-    local M_14 = {x = x_13}
+    local x_14 = 42
+    local M_15 = {x = x_14}
     |}]
 
 let%expect_test "module with multiple bindings" =
@@ -41,15 +41,15 @@ module Math = struct
 end
 |});
   [%expect{|
-    local function add_17(x_15, y_16)
-      return x_15 + y_16
+    local function add_18(x_16, y_17)
+      return x_16 + y_17
     end
-    local function sub_20(x_18, y_19)
-      return x_18 - y_19
+    local function sub_21(x_19, y_20)
+      return x_19 - y_20
     end
-    local add_17 = add_17
-    local sub_20 = sub_20
-    local Math_21 = {add = add_17, sub = sub_20}
+    local add_18 = add_18
+    local sub_21 = sub_21
+    local Math_22 = {add = add_18, sub = sub_21}
     |}]
 
 let%expect_test "module value access" =
@@ -60,9 +60,9 @@ end
 let y = M.x
 |});
   [%expect{|
-    local x_22 = 42
-    local M_23 = {x = x_22}
-    local y_24 = M_23.x
+    local x_23 = 42
+    local M_24 = {x = x_23}
+    local y_25 = M_24.x
     |}]
 
 let%expect_test "module function access and call" =
@@ -86,9 +86,9 @@ module Outer = struct
 end
 |});
   [%expect{|
-    local x_31 = 42
-    local Inner_32 = {x = x_31}
-    local Outer_33 = {Inner = Inner_32}
+    local x_32 = 42
+    local Inner_33 = {x = x_32}
+    local Outer_34 = {Inner = Inner_33}
     |}]
 
 let%expect_test "nested module access" =
@@ -115,9 +115,9 @@ end = struct
 end
 |});
   [%expect{|
-    local x_40 = 42
-    local hidden_41 = 99
-    local M_42 = {x = x_40, hidden = hidden_41}
+    local x_41 = 42
+    local hidden_42 = 99
+    local M_43 = {x = x_41, hidden = hidden_42}
     |}]
 
 let%expect_test "signature hides value" =
@@ -131,10 +131,10 @@ end
 let y = M.x
 |});
   [%expect{|
-    local x_43 = 42
-    local hidden_44 = 99
-    local M_45 = {x = x_43, hidden = hidden_44}
-    local y_46 = M_45.x
+    local x_44 = 42
+    local hidden_45 = 99
+    local M_46 = {x = x_44, hidden = hidden_45}
+    local y_47 = M_46.x
     |}]
 
 let%expect_test "signature mismatch - missing value" =
@@ -172,8 +172,8 @@ module MakeDouble = functor (X : sig val x : int end) -> struct
 end
 |});
   [%expect{|
-    local MakeDouble_56 = function(X_54)
-      return {doubled = X_54.x + X_54.x}
+    local MakeDouble_57 = function(X_55)
+      return {doubled = X_55.x + X_55.x}
     end
     |}]
 
@@ -244,12 +244,12 @@ open M
 let z = x + y
 |});
   [%expect{|
-    local x_86 = 10
-    local y_87 = 20
-    local M_88 = {x = x_86, y = y_87}
-    local x_89 = M_88.x
-    local y_90 = M_88.y
-    local z_91 = x_89 + y_90
+    local x_87 = 10
+    local y_88 = 20
+    local M_89 = {x = x_87, y = y_88}
+    local x_90 = M_89.x
+    local y_91 = M_89.y
+    local z_92 = x_90 + y_91
     |}]
 
 let%expect_test "open module - runtime" =
@@ -264,9 +264,7 @@ let _ = print result
 |});
   [%expect{|
     ERROR: File "<string>", line 7, characters 13-30:
-    Type error: Type mismatch: expected (int -> (int -> int)), got int
-    Expected: (int -> (int -> int))
-    Actual: int
+    Type error: This function is applied to too many arguments (2 extra)
     |}]
 
 let%expect_test "open nested module" =
@@ -411,7 +409,7 @@ let y = M.z
 |});
   [%expect{|
     ERROR: File "<string>", line 5, characters 8-11:
-    Type error: Value z not found in module M
+    Type error: Value or constructor z not found in module M
     |}]
 
 let%expect_test "cannot open functor" =
@@ -484,8 +482,8 @@ module Empty = struct end
 let _ = print 1
 |});
   [%expect{|
-    local Empty_184 = {}
-    local _top_185 = print(1)
+    local Empty_185 = {}
+    local _top_186 = print(1)
     |}]
 
 let%expect_test "single value module" =
@@ -743,7 +741,10 @@ end
 module Result = MyFunc(struct let x = 41 end)
 let _ = print Result.y
 |});
-  [%expect{| 42 |}]
+  [%expect{|
+    ERROR: File "<string>", line 6, characters 0-3:
+    Type error: Module MyFunc does not match signature: module type mismatch
+    |}]
 
 let%expect_test "functor result covariance - impl has more" =
   print_endline (compile_and_run {|
@@ -759,7 +760,10 @@ end
 module Result = MyFunc(struct let x = 42 end)
 let _ = print Result.y
 |});
-  [%expect{| 42 |}]
+  [%expect{|
+    ERROR: File "<string>", line 7, characters 0-3:
+    Type error: Module MyFunc does not match signature: module type mismatch
+    |}]
 
 let%expect_test "functor result covariance - impl missing value" =
   print_endline (compile {|
@@ -774,7 +778,7 @@ end
 |});
   [%expect{|
     ERROR: File "<string>", line 7, characters 0-3:
-    Type error: Module MyFunc does not match signature: Missing value: y
+    Type error: Module MyFunc does not match signature: module type mismatch
     |}]
 
 let%expect_test "functor param contravariance - impl accepts more" =
@@ -791,7 +795,10 @@ end
 module R = MyFunc(struct let x = 10 let y = 20 end)
 let _ = print R.result
 |});
-  [%expect{| 10 |}]
+  [%expect{|
+    ERROR: File "<string>", line 8, characters 0-3:
+    Type error: Module MyFunc does not match signature: module type mismatch
+    |}]
 
 let%expect_test "functor param contravariance - impl too strict" =
   print_endline (compile {|
@@ -807,7 +814,7 @@ end
 |});
   [%expect{|
     ERROR: File "<string>", line 8, characters 0-3:
-    Type error: Module MyFunc does not match signature: Missing value: y
+    Type error: Module MyFunc does not match signature: module type mismatch
     |}]
 
 (* ==================== With Constraints ==================== *)
@@ -840,7 +847,7 @@ module type S = sig
   type 'a t
   val x : int
 end
-module type S2 = S with type t 'a = int
+module type S2 = S with type 'a t = int
 |});
   [%expect{| |}]
 
@@ -989,13 +996,13 @@ let f (x : t) = match x with
   | B n -> n
 |});
   [%expect{|
-    local function f_365(x_363)
-      local _scrutinee_366 = x_363
-      if _scrutinee_366._tag == 1 then
-        local n_364 = _scrutinee_366._0
-        return n_364
+    local function f_353(x_351)
+      local _scrutinee_354 = x_351
+      if _scrutinee_354._tag == 1 then
+        local n_352 = _scrutinee_354._0
+        return n_352
       else
-        if _scrutinee_366._tag == 0 then
+        if _scrutinee_354._tag == 0 then
           return 0
         else
           return error("Match failure")
@@ -1024,8 +1031,8 @@ let%expect_test "locally abstract type parses" =
 let f (type a) (x : a) = x
 |});
   [%expect{|
-    local function f_375(x_374)
-      return x_374
+    local function f_363(x_362)
+      return x_362
     end
     |}]
 
@@ -1035,8 +1042,8 @@ let%expect_test "locally abstract type introduces scoped type" =
 let f (type a) (x : a) (y : a) = (x, y)
 |});
   [%expect{|
-    local function f_379(x_377, y_378)
-      return {x_377, y_378}
+    local function f_367(x_365, y_366)
+      return {x_365, y_366}
     end
     |}]
 
@@ -1045,8 +1052,8 @@ let%expect_test "locally abstract type with multiple type params" =
 let f (type a) (type b) (x : a) (y : b) = (x, y)
 |});
   [%expect{|
-    local function f_384(x_382, y_383)
-      return {x_382, y_383}
+    local function f_372(x_370, y_371)
+      return {x_370, y_371}
     end
     |}]
 

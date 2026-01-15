@@ -1,0 +1,23 @@
+(* Extensible type interacting with regular GADT *)
+
+type value = ..
+type value += VInt of int | VString of string
+
+type _ wrapper =
+  | WrapInt : int -> int wrapper
+  | WrapString : string -> string wrapper
+
+let wrap_value : type a. a wrapper -> value = function
+  | WrapInt n -> VInt n
+  | WrapString s -> VString s
+
+let test_int = wrap_value (WrapInt 42)
+let test_str = wrap_value (WrapString "hello")
+
+let extract v =
+  match v with
+  | VInt n -> n
+  | VString _ -> 0
+  | _ -> (-1)
+
+let _ = print (extract test_int)

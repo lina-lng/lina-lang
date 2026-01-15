@@ -67,14 +67,26 @@ let compute_binding_scheme ~level typed_expr ty =
 
 (** {1 Module Path Extraction} *)
 
-(** [extract_typed_module_path mexpr] extracts a path from a typed module expression
-    if it's a simple path reference.
+(** [extract_typed_module_path mexpr] extracts a path from a typed module expression.
+    Handles simple paths, functor applications, and constrained modules.
+
+    For applicative functor semantics, we need paths for functor applications too
+    so that nested applications like Id(Wrap(Base)) can perform proper path substitution.
 
     @param mexpr The typed module expression
-    @return [Some path] if the expression is a simple module path, [None] otherwise *)
-let extract_typed_module_path mexpr =
+    @return [Some path] if a path can be constructed, [None] otherwise *)
+let rec extract_typed_module_path mexpr =
   match mexpr.Typed_tree.module_desc with
   | Typed_tree.TypedModulePath path -> Some path
+  | Typed_tree.TypedModuleApply (func_expr, arg_expr) ->
+    (* For functor application F(M), construct PathApply(F_path, M_path) *)
+    begin match extract_typed_module_path func_expr, extract_typed_module_path arg_expr with
+    | Some func_path, Some arg_path -> Some (Types.PathApply (func_path, arg_path))
+    | _ -> None
+    end
+  | Typed_tree.TypedModuleConstraint (inner_expr, _) ->
+    (* For constrained module (M : S), use the inner module's path *)
+    extract_typed_module_path inner_expr
   | _ -> None
 
 (** {1 Error Helpers} *)
@@ -141,6 +153,44 @@ let lookup_constructor ctx loc name =
   let env = Typing_context.environment ctx in
   match Environment.find_constructor name env with
   | None -> error_unbound_constructor loc name
+  | Some constructor_info ->
+    let expected_arg_type, result_type = instantiate_constructor_with_ctx ctx constructor_info in
+    { constructor_info; expected_arg_type; result_type }
+
+(** Convert a longident to a module path (list of strings) and constructor name.
+    For example, [Ldot(Ldot(Lident "M", "N"), "Some")] becomes (["M"; "N"], "Some").
+
+    The longident structure is: Ldot(Ldot(Lident "M", "N"), "Some")
+    where the rightmost name is the constructor, and all preceding are the path. *)
+let split_longident (longident : Parsing.Syntax_tree.longident) : string list * string =
+  let rec collect_path lid =
+    match lid.Location.value with
+    | Parsing.Syntax_tree.Lident name -> [name]
+    | Parsing.Syntax_tree.Ldot (prefix, name) -> collect_path prefix @ [name]
+  in
+  let all_parts = collect_path longident in
+  match List.rev all_parts with
+  | [] -> failwith "empty longident"
+  | ctor_name :: path_rev -> (List.rev path_rev, ctor_name)
+
+(** [lookup_constructor_longident ctx loc longident] looks up a constructor by longident.
+    Handles both simple names like [Some] and qualified names like [M.Some].
+
+    @param ctx The typing context
+    @param loc Source location for error messages
+    @param longident The constructor's longident (simple or qualified)
+    @return Constructor info with instantiated types
+    @raise Type_error if constructor is not found *)
+let lookup_constructor_longident ctx loc (longident : Parsing.Syntax_tree.longident) =
+  let env = Typing_context.environment ctx in
+  let (path, ctor_name) = split_longident longident in
+  match Environment.find_constructor_by_path path ctor_name env with
+  | None ->
+    let full_name = match path with
+      | [] -> ctor_name
+      | _ -> String.concat "." path ^ "." ^ ctor_name
+    in
+    error_unbound_constructor loc full_name
   | Some constructor_info ->
     let expected_arg_type, result_type = instantiate_constructor_with_ctx ctx constructor_info in
     { constructor_info; expected_arg_type; result_type }

@@ -14,7 +14,7 @@ type head_constructor =
   | HCWildcard
   | HCConstant of Parsing.Syntax_tree.constant
   | HCTuple of int
-  | HCConstructor of string * int  (** name, tag_index *)
+  | HCConstructor of string * int * bool  (** name, tag_index, is_extension *)
   | HCRecord of string list
   | HCPolyVariant of string  (** polymorphic variant tag *)
 

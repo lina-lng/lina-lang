@@ -1,0 +1,15 @@
+(* Recursive modules - basic test *)
+module rec Even : sig
+  val is_even : int -> bool
+end = struct
+  let is_even n = if n = 0 then true else Odd.is_odd (n - 1)
+end
+
+and Odd : sig
+  val is_odd : int -> bool
+end = struct
+  let is_odd n = if n = 0 then false else Even.is_even (n - 1)
+end
+
+let () = print_endline (string_of_bool (Even.is_even 4))
+let () = print_endline (string_of_bool (Odd.is_odd 3))

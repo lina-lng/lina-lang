@@ -154,8 +154,8 @@ let%expect_test "unify_with_env: incompatible types fail" =
 
 let%expect_test "unify_with_env: arrow types unify component-wise" =
   let env = Environment.empty in
-  let arrow1 = Types.TypeArrow (type_int, type_string) in
-  let arrow2 = Types.TypeArrow (type_int, type_string) in
+  let arrow1 = Types.TypeArrow (Nolabel, type_int, type_string) in
+  let arrow2 = Types.TypeArrow (Nolabel, type_int, type_string) in
   (try
      Inference_utils.unify_with_env env Common.Location.none arrow1 arrow2;
      print_endline "unified"

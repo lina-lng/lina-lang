@@ -1,0 +1,27 @@
+(* Private type with covariant position *)
+(* Uses user-defined list instead of built-in list *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+module IntSet : sig
+  type t = private int list
+  val empty : t
+  val add : int -> t -> t
+  val to_list : t -> int list
+end = struct
+  type t = int list
+  let empty = Nil
+  let add x xs = Cons (x, xs)
+  let to_list xs = xs
+end
+
+let s = IntSet.add 1 (IntSet.add 2 IntSet.empty)
+
+(* Can read as list but cannot construct directly *)
+let lst = IntSet.to_list s
+
+let rec sum = function
+  | Nil -> 0
+  | Cons (x, xs) -> x + sum xs
+
+let () = print_int (sum lst); print_newline ()

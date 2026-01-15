@@ -15,6 +15,7 @@ type t =
   | TK_REC
   | TK_IN
   | TK_FUN
+  | TK_FUNCTION
   | TK_IF
   | TK_THEN
   | TK_ELSE
@@ -79,6 +80,7 @@ type t =
   | TK_PLUS
   | TK_MINUS
   | TK_SLASH
+  | TK_CARET         (** ^ string concatenation *)
   | TK_LESS
   | TK_GREATER
   | TK_LESS_EQUAL
@@ -88,6 +90,10 @@ type t =
   | TK_REF           (** ref keyword *)
   | TK_BANG          (** ! dereference operator *)
   | TK_COLONEQUALS   (** := assignment operator *)
+  | TK_COLONCOLON    (** :: list cons operator *)
+  | TK_TILDE         (** ~ labeled argument prefix *)
+  | TK_QUESTION      (** ? optional argument prefix *)
+  | TK_PLUSEQUAL     (** += type extension *)
 
   (* Special *)
   | TK_EOF

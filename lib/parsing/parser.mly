@@ -9,6 +9,52 @@ let make_located value loc = Location.{ value; location = make_loc loc }
 
 let make_binding pattern expression loc =
   { binding_pattern = pattern; binding_expression = expression; binding_location = make_loc loc }
+
+(** Helper to create a parameter without default. *)
+let make_param label pattern : fun_param =
+  { param_label = label; param_pattern = pattern; param_default = None }
+
+(** Helper to create a parameter with default (for optional arguments). *)
+let make_param_default label pattern default : fun_param =
+  { param_label = label; param_pattern = pattern; param_default = Some default }
+
+(** Desugar optional arguments with defaults.
+    [fun ?(x=default) -> body] becomes:
+    [fun ?x -> let x = match x with None -> default | Some x -> x in body]
+*)
+let desugar_defaults params body =
+  List.fold_right (fun p body ->
+    match p.param_default with
+    | None -> body
+    | Some default ->
+        let name = match p.param_pattern.Location.value with
+          | PatternVariable n -> n
+          | _ -> failwith "optional argument with default must use simple variable pattern"
+        in
+        let loc = p.param_pattern.Location.location in
+
+        (* Build: let name = match name with None -> default | Some name -> name in body *)
+        let var_expr = Location.{ value = ExpressionVariable name; location = loc } in
+        let none_ctor = Location.{ value = Lident "None"; location = loc } in
+        let some_ctor = Location.{ value = Lident "Some"; location = loc } in
+        let none_pat = Location.{ value = PatternConstructor (none_ctor, None); location = loc } in
+        let some_inner_pat = Location.{ value = PatternVariable name; location = loc } in
+        let some_pat = Location.{ value = PatternConstructor (some_ctor, Some some_inner_pat); location = loc } in
+        let none_arm = { arm_pattern = none_pat; arm_guard = None; arm_expression = default; arm_location = loc } in
+        let some_arm = { arm_pattern = some_pat; arm_guard = None; arm_expression = var_expr; arm_location = loc } in
+        let match_expr = Location.{ value = ExpressionMatch (var_expr, [none_arm; some_arm]); location = loc } in
+        let var_pat = Location.{ value = PatternVariable name; location = loc } in
+        let binding = { binding_pattern = var_pat; binding_expression = match_expr; binding_location = loc } in
+
+        Location.{ value = ExpressionLet (Nonrecursive, [binding], body); location = loc }
+  ) params body
+
+(** Build a function expression from parameters (with possible defaults) and body.
+    Desugars defaults and creates the ExpressionFunction node. *)
+let build_function loc params body =
+  let desugared_body = desugar_defaults params body in
+  let labels_patterns = List.map (fun p -> (p.param_label, p.param_pattern)) params in
+  Location.{ value = ExpressionFunction (labels_patterns, desugared_body); location = make_loc loc }
 %}
 
 %token <int> INTEGER
@@ -18,15 +64,16 @@ let make_binding pattern expression loc =
 %token <string> UPPERCASE_IDENTIFIER
 %token <string> TYPE_VARIABLE
 %token TRUE FALSE
-%token LET REC IN FUN IF THEN ELSE TYPE OF AND AS MATCH WITH WHEN
+%token LET REC IN FUN FUNCTION IF THEN ELSE TYPE OF AND AS MATCH WITH WHEN
 %token MODULE STRUCT END SIG FUNCTOR OPEN INCLUDE VAL PRIVATE CONSTRAINT
 %token EXTERNAL AT
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
-%token STAR PLUS MINUS SLASH
+%token STAR PLUS MINUS SLASH CARET
 %token LESS GREATER LESS_EQUAL GREATER_EQUAL EQUAL_EQUAL NOT_EQUAL
-%token REF BANG COLONEQUALS
+%token REF BANG COLONEQUALS COLONCOLON
 %token <string> BACKTICK_TAG
+%token TILDE QUESTION PLUSEQUAL
 %token EOF
 
 %right ARROW
@@ -41,8 +88,10 @@ let make_binding pattern expression loc =
 %nonassoc THEN
 %nonassoc ELSE
 %left EQUAL EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
+%right COLONCOLON
 %left PLUS MINUS
 %left STAR SLASH
+%right CARET
 %nonassoc unary_minus
 %nonassoc REF BANG
 %left DOT
@@ -74,6 +123,9 @@ structure_item:
     { make_located (StructureType decls) $loc }
   | MODULE; binding = module_binding
     { make_located (StructureModule binding) $loc }
+  (* Recursive modules: module rec A : S = ... and B : T = ... *)
+  | MODULE; REC; bindings = separated_nonempty_list(AND, rec_module_binding)
+    { make_located (StructureRecModule bindings) $loc }
   | MODULE; TYPE; name = UPPERCASE_IDENTIFIER; EQUAL; mt = module_type
     { make_located (StructureModuleType (make_located name $loc(name), mt)) $loc }
   | OPEN; path = module_path
@@ -82,6 +134,27 @@ structure_item:
     { make_located (StructureInclude me) $loc }
   | ext = external_declaration
     { make_located (StructureExternal ext) $loc }
+  (* Type extension: type t += Constructor of type *)
+  | TYPE; params = type_parameters; name = longident; PLUSEQUAL; constrs = separated_nonempty_list(BAR, constructor_declaration)
+    {
+      let ext = {
+        extension_type_name = name;
+        extension_type_params = params;
+        extension_constructors = constrs;
+        extension_location = make_loc $loc;
+      } in
+      make_located (StructureTypeExtension ext) $loc
+    }
+  | TYPE; params = type_parameters; name = longident; PLUSEQUAL; BAR; constrs = separated_nonempty_list(BAR, constructor_declaration)
+    {
+      let ext = {
+        extension_type_name = name;
+        extension_type_params = params;
+        extension_constructors = constrs;
+        extension_location = make_loc $loc;
+      } in
+      make_located (StructureTypeExtension ext) $loc
+    }
 
 rec_flag:
   | { Nonrecursive }
@@ -96,17 +169,17 @@ let_binding:
       let constrained_pattern = make_located (PatternConstraint (pattern, ty)) $loc(pattern) in
       make_binding constrained_pattern expr $loc
     }
-  | name = LOWERCASE_IDENTIFIER; params = nonempty_list(simple_pattern); EQUAL; expr = expression
+  | name = LOWERCASE_IDENTIFIER; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
     {
-      let func_expr = make_located (ExpressionFunction (params, expr)) $loc in
+      let func_expr = build_function $loc params expr in
       let name_pattern = make_located (PatternVariable name) $loc(name) in
       make_binding name_pattern func_expr $loc
     }
   (* let f x y : return_type = expr - return type annotation on function *)
-  | name = LOWERCASE_IDENTIFIER; params = nonempty_list(simple_pattern); COLON; ty = type_expression; EQUAL; expr = expression
+  | name = LOWERCASE_IDENTIFIER; params = nonempty_list(labeled_pattern); COLON; ty = type_expression; EQUAL; expr = expression
     {
       let constrained_expr = make_located (ExpressionConstraint (expr, ty)) $loc(expr) in
-      let func_expr = make_located (ExpressionFunction (params, constrained_expr)) $loc in
+      let func_expr = build_function $loc params constrained_expr in
       let name_pattern = make_located (PatternVariable name) $loc(name) in
       make_binding name_pattern func_expr $loc
     }
@@ -179,17 +252,19 @@ signature_type_declaration:
         type_location = make_loc $loc }
     }
 
-(* Type parameter with optional variance annotation: 'a, +'a, -'a, _ *)
+(* Type parameter with optional variance/injectivity annotation: 'a, +'a, -'a, !'a, _ *)
 type_param:
   | PLUS; v = TYPE_VARIABLE
-    { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceCovariant } }
+    { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceCovariant; parameter_injective = false } }
   | MINUS; v = TYPE_VARIABLE
-    { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceContravariant } }
+    { { Syntax_tree.parameter_name = v; parameter_variance = Some VarianceContravariant; parameter_injective = false } }
+  | BANG; v = TYPE_VARIABLE
+    { { Syntax_tree.parameter_name = v; parameter_variance = None; parameter_injective = true } }
   | v = TYPE_VARIABLE
-    { { Syntax_tree.parameter_name = v; parameter_variance = None } }
+    { { Syntax_tree.parameter_name = v; parameter_variance = None; parameter_injective = false } }
   (* Wildcard type parameter for GADTs: type _ t = ... *)
   | UNDERSCORE
-    { { Syntax_tree.parameter_name = "_"; parameter_variance = None } }
+    { { Syntax_tree.parameter_name = "_"; parameter_variance = None; parameter_injective = false } }
 
 type_parameters:
   | { [] }
@@ -203,6 +278,8 @@ type_declaration_kind:
     { TypeVariant constructors }
   | ty = type_expression
     { TypeAlias ty }
+  | DOTDOT
+    { TypeExtensible }
 
 constructor_declaration:
   (* Standard constructor: Name *)
@@ -237,8 +314,17 @@ type_expression:
 (* Arrow types - TypeForall cannot appear on the left of an arrow *)
 arrow_type_expression:
   | t = non_arrow_type_expression { t }
+  (* Unlabeled argument: type -> result *)
   | t1 = non_arrow_type_expression; ARROW; t2 = arrow_type_expression
-    { make_located (TypeArrow (t1, t2)) $loc }
+    { make_located (TypeArrow (Nolabel, t1, t2)) $loc }
+  (* Labeled argument: ~label:type -> result or label:type -> result *)
+  | TILDE; label = LOWERCASE_IDENTIFIER; COLON; t1 = non_arrow_type_expression; ARROW; t2 = arrow_type_expression
+    { make_located (TypeArrow (Labelled label, t1, t2)) $loc }
+  | label = LOWERCASE_IDENTIFIER; COLON; t1 = non_arrow_type_expression; ARROW; t2 = arrow_type_expression
+    { make_located (TypeArrow (Labelled label, t1, t2)) $loc }
+  (* Optional argument: ?label:type -> result *)
+  | QUESTION; label = LOWERCASE_IDENTIFIER; COLON; t1 = non_arrow_type_expression; ARROW; t2 = arrow_type_expression
+    { make_located (TypeArrow (Optional label, t1, t2)) $loc }
 
 (* Types that are not arrows or foralls *)
 non_arrow_type_expression:
@@ -297,6 +383,9 @@ simple_type_expression:
     { make_located (TypePolyVariant (PolyRowAtMost (fields, []))) $loc }
   | LBRACKET; LESS; fields = poly_variant_fields; GREATER; required = separated_nonempty_list(BAR, BACKTICK_TAG); RBRACKET
     { make_located (TypePolyVariant (PolyRowAtMost (fields, required))) $loc }
+  (* First-class module type: (module S) where S is a module type path *)
+  | LPAREN; MODULE; path = module_path; RPAREN
+    { make_located (TypePackage path) $loc }
 
 (* Helper for multi-level qualified type paths like M.N.t (after initial M.) *)
 (* Returns (module_path_list, type_name) where module_path_list is the intermediate modules *)
@@ -313,8 +402,20 @@ expression:
   | e = simple_expression { e }
   | LET; rf = rec_flag; bindings = separated_nonempty_list(AND, let_binding); IN; body = expression
     { make_located (ExpressionLet (rf, bindings, body)) $loc }
-  | FUN; params = nonempty_list(simple_pattern); ARROW; body = expression
-    { make_located (ExpressionFunction (params, body)) $loc }
+  | LET; MODULE; name = UPPERCASE_IDENTIFIER; EQUAL; me = module_expression; IN; body = expression
+    { make_located (ExpressionLetModule (make_located name $loc(name), me, body)) $loc }
+  | FUN; params = nonempty_list(labeled_pattern); ARROW; body = expression
+    { build_function $loc params body }
+  (* function | pat -> expr | ... is sugar for fun x -> match x with | pat -> expr | ... *)
+  | FUNCTION; arms = match_arms
+    {
+      (* Generate a fresh variable name for the implicit argument *)
+      let arg_name = "_function_arg" in
+      let arg_pattern = make_located (PatternVariable arg_name) $loc in
+      let arg_expr = make_located (ExpressionVariable arg_name) $loc in
+      let match_expr = make_located (ExpressionMatch (arg_expr, arms)) $loc in
+      make_located (ExpressionFunction ([(Nolabel, arg_pattern)], match_expr)) $loc
+    }
   | IF; cond = expression; THEN; then_branch = expression; ELSE; else_branch = expression
     { make_located (ExpressionIf (cond, then_branch, Some else_branch)) $loc }
   | IF; cond = expression; THEN; then_branch = expression %prec THEN
@@ -335,7 +436,7 @@ simple_expression:
     {
       let zero = make_located (ExpressionConstant (ConstantInteger 0)) $loc in
       let minus = make_located (ExpressionVariable "-") $loc in
-      make_located (ExpressionApply (minus, [zero; e])) $loc
+      make_located (ExpressionApply (minus, [(Nolabel, zero); (Nolabel, e)])) $loc
     }
   (* Reference creation: ref e *)
   | REF; e = simple_expression %prec REF
@@ -343,7 +444,14 @@ simple_expression:
   | e1 = simple_expression; op = binary_operator; e2 = simple_expression
     {
       let op_expr = make_located (ExpressionVariable op) $loc(op) in
-      make_located (ExpressionApply (op_expr, [e1; e2])) $loc
+      make_located (ExpressionApply (op_expr, [(Nolabel, e1); (Nolabel, e2)])) $loc
+    }
+  (* List cons operator: e1 :: e2 desugars to Cons (e1, e2) *)
+  | e1 = simple_expression; COLONCOLON; e2 = simple_expression
+    {
+      let cons_name = make_located (Lident "Cons") $loc in
+      let tuple_arg = make_located (ExpressionTuple [e1; e2]) $loc in
+      make_located (ExpressionConstructor (cons_name, Some tuple_arg)) $loc
     }
 
 %inline binary_operator:
@@ -351,6 +459,7 @@ simple_expression:
   | MINUS { "-" }
   | STAR { "*" }
   | SLASH { "/" }
+  | CARET { "^" }
   | EQUAL { "=" }
   | EQUAL_EQUAL { "==" }
   | NOT_EQUAL { "<>" }
@@ -361,15 +470,46 @@ simple_expression:
 
 application_expression:
   | e = postfix_expression { e }
+  (* Unlabeled argument *)
   | func = application_expression; arg = postfix_expression %prec APP
     {
       match func.value with
-      | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [arg])) $loc
+      | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [(Nolabel, arg)])) $loc
       (* Constructor application: Some x becomes ExpressionConstructor("Some", Some x) *)
       | ExpressionConstructor (name, None) -> make_located (ExpressionConstructor (name, Some arg)) $loc
       (* Polymorphic variant application: `Tag x becomes ExpressionPolyVariant("Tag", Some x) *)
       | ExpressionPolyVariant (tag, None) -> make_located (ExpressionPolyVariant (tag, Some arg)) $loc
-      | _ -> make_located (ExpressionApply (func, [arg])) $loc
+      | _ -> make_located (ExpressionApply (func, [(Nolabel, arg)])) $loc
+    }
+  (* Labeled argument: f ~x:e *)
+  | func = application_expression; TILDE; label = LOWERCASE_IDENTIFIER; COLON; arg = postfix_expression %prec APP
+    {
+      match func.value with
+      | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [(Labelled label, arg)])) $loc
+      | _ -> make_located (ExpressionApply (func, [(Labelled label, arg)])) $loc
+    }
+  (* Labeled argument with punning: f ~x is short for f ~x:x *)
+  | func = application_expression; TILDE; label = LOWERCASE_IDENTIFIER %prec APP
+    {
+      let arg = make_located (ExpressionVariable label) $loc(label) in
+      match func.value with
+      | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [(Labelled label, arg)])) $loc
+      | _ -> make_located (ExpressionApply (func, [(Labelled label, arg)])) $loc
+    }
+  (* Optional argument: f ?x:e *)
+  | func = application_expression; QUESTION; label = LOWERCASE_IDENTIFIER; COLON; arg = postfix_expression %prec APP
+    {
+      match func.value with
+      | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [(Optional label, arg)])) $loc
+      | _ -> make_located (ExpressionApply (func, [(Optional label, arg)])) $loc
+    }
+  (* Optional argument with punning: f ?x is short for f ?x:x *)
+  | func = application_expression; QUESTION; label = LOWERCASE_IDENTIFIER %prec APP
+    {
+      let arg = make_located (ExpressionVariable label) $loc(label) in
+      match func.value with
+      | ExpressionApply (f, args) -> make_located (ExpressionApply (f, args @ [(Optional label, arg)])) $loc
+      | _ -> make_located (ExpressionApply (func, [(Optional label, arg)])) $loc
     }
 
 (* Postfix expressions: record/field access binds tighter than application *)
@@ -391,6 +531,9 @@ atomic_expression:
     { e }
   | LPAREN; es = expression_tuple; RPAREN
     { make_located (ExpressionTuple es) $loc }
+  (* First-class module packing: (module ME : MT) *)
+  | LPAREN; MODULE; me = module_expression; COLON; mt = module_type; RPAREN
+    { make_located (ExpressionPack (me, mt)) $loc }
   | n = INTEGER
     { make_located (ExpressionConstant (ConstantInteger n)) $loc }
   | f = FLOAT
@@ -403,8 +546,9 @@ atomic_expression:
     { make_located (ExpressionConstant (ConstantBoolean false)) $loc }
   | name = LOWERCASE_IDENTIFIER
     { make_located (ExpressionVariable name) $loc }
+  (* Constructor expressions: simple constructor or module *)
   | name = UPPERCASE_IDENTIFIER
-    { make_located (ExpressionConstructor (name, None)) $loc }
+    { make_located (ExpressionConstructor (make_located (Lident name) $loc(name), None)) $loc }
   | LBRACE; fields = separated_list(SEMICOLON, record_field); RBRACE
     { make_located (ExpressionRecord fields) $loc }
   | LBRACE; base = simple_expression; WITH; fields = separated_nonempty_list(SEMICOLON, record_field); RBRACE
@@ -412,6 +556,24 @@ atomic_expression:
   (* Polymorphic variant expression: `Tag (arg applied at application level) *)
   | tag = BACKTICK_TAG
     { make_located (ExpressionPolyVariant (tag, None)) $loc }
+  (* Empty list: [] desugars to Nil *)
+  | LBRACKET; RBRACKET
+    {
+      let nil_name = make_located (Lident "Nil") $loc in
+      make_located (ExpressionConstructor (nil_name, None)) $loc
+    }
+  (* List literal: [e1; e2; e3] desugars to Cons(e1, Cons(e2, Cons(e3, Nil)))
+     Uses simple_expression to avoid conflict with e1 SEMICOLON e2 sequence operator *)
+  | LBRACKET; es = separated_nonempty_list(SEMICOLON, simple_expression); RBRACKET
+    {
+      let nil_name = make_located (Lident "Nil") $loc in
+      let nil = make_located (ExpressionConstructor (nil_name, None)) $loc in
+      let cons_name = make_located (Lident "Cons") $loc in
+      List.fold_right (fun e acc ->
+        let tuple_arg = make_located (ExpressionTuple [e; acc]) $loc in
+        make_located (ExpressionConstructor (cons_name, Some tuple_arg)) $loc
+      ) es nil
+    }
 
 expression_tuple:
   | e1 = expression; COMMA; e2 = expression
@@ -419,10 +581,38 @@ expression_tuple:
   | es = expression_tuple; COMMA; e = expression
     { es @ [e] }
 
+(* Labeled patterns for function parameters - returns fun_param with optional defaults *)
+labeled_pattern:
+  (* Unlabeled: p *)
+  | p = simple_pattern
+    { make_param Nolabel p }
+  (* Labeled with punning: ~x binds variable x with label ~x *)
+  | TILDE; name = LOWERCASE_IDENTIFIER
+    { make_param (Labelled name) (make_located (PatternVariable name) $loc(name)) }
+  (* Labeled with pattern: ~x:pattern *)
+  | TILDE; label = LOWERCASE_IDENTIFIER; COLON; p = simple_pattern
+    { make_param (Labelled label) p }
+  (* Optional with punning: ?x binds variable x with label ?x *)
+  | QUESTION; name = LOWERCASE_IDENTIFIER
+    { make_param (Optional name) (make_located (PatternVariable name) $loc(name)) }
+  (* Optional with pattern: ?x:pattern *)
+  | QUESTION; label = LOWERCASE_IDENTIFIER; COLON; p = simple_pattern
+    { make_param (Optional label) p }
+  (* Optional with default: ?(x=expr) - desugared to match on None/Some *)
+  | QUESTION; LPAREN; name = LOWERCASE_IDENTIFIER; EQUAL; default = simple_expression; RPAREN
+    { make_param_default (Optional name) (make_located (PatternVariable name) $loc(name)) default }
+
 simple_pattern:
   | p = atomic_pattern { p }
   | p = simple_pattern; AS; name = LOWERCASE_IDENTIFIER
     { make_located (PatternAlias (p, name)) $loc }
+  (* List cons pattern: p1 :: p2 desugars to Cons (p1, p2) *)
+  | p1 = simple_pattern; COLONCOLON; p2 = simple_pattern
+    {
+      let cons_ctor = make_located (Lident "Cons") $loc in
+      let tuple_pat = make_located (PatternTuple [p1; p2]) $loc in
+      make_located (PatternConstructor (cons_ctor, Some tuple_pat)) $loc
+    }
 
 atomic_pattern:
   | UNDERSCORE
@@ -445,10 +635,11 @@ atomic_pattern:
     { make_located (PatternConstant (ConstantBoolean false)) $loc }
   | name = LOWERCASE_IDENTIFIER
     { make_located (PatternVariable name) $loc }
-  | name = UPPERCASE_IDENTIFIER
-    { make_located (PatternConstructor (name, None)) $loc }
-  | name = UPPERCASE_IDENTIFIER; p = atomic_pattern
-    { make_located (PatternConstructor (name, Some p)) $loc }
+  (* Constructor patterns: simple (Some) or qualified (M.Some, M.N.Some) *)
+  | ctor = constructor_longident
+    { make_located (PatternConstructor (ctor, None)) $loc }
+  | ctor = constructor_longident; p = atomic_pattern
+    { make_located (PatternConstructor (ctor, Some p)) $loc }
   | LBRACE; fields = separated_list(SEMICOLON, record_pattern_field); RBRACE
     { make_located (PatternRecord (fields, false)) $loc }
   | LBRACE; fields = record_pattern_field_list_open; RBRACE
@@ -458,9 +649,29 @@ atomic_pattern:
     { make_located (PatternPolyVariant (tag, None)) $loc }
   | tag = BACKTICK_TAG; p = atomic_pattern
     { make_located (PatternPolyVariant (tag, Some p)) $loc }
+  (* Empty list pattern: [] desugars to Nil *)
+  | LBRACKET; RBRACKET
+    {
+      let nil_ctor = make_located (Lident "Nil") $loc in
+      make_located (PatternConstructor (nil_ctor, None)) $loc
+    }
+  (* List literal pattern: [p1; p2; p3] desugars to Cons(p1, Cons(p2, Cons(p3, Nil)))
+     Uses simple_pattern to avoid conflicts *)
+  | LBRACKET; ps = separated_nonempty_list(SEMICOLON, simple_pattern); RBRACKET
+    {
+      let nil_ctor = make_located (Lident "Nil") $loc in
+      let nil_pat = make_located (PatternConstructor (nil_ctor, None)) $loc in
+      let cons_ctor = make_located (Lident "Cons") $loc in
+      List.fold_right (fun p acc ->
+        let tuple_pat = make_located (PatternTuple [p; acc]) $loc in
+        make_located (PatternConstructor (cons_ctor, Some tuple_pat)) $loc
+      ) ps nil_pat
+    }
 
 pattern:
   | p = simple_pattern { p }
+  | p1 = pattern; BAR; p2 = pattern
+    { make_located (PatternOr (p1, p2)) $loc }
   | p = pattern; COLON; t = type_expression
     { make_located (PatternConstraint (p, t)) $loc }
 
@@ -561,10 +772,21 @@ module_binding:
         module_expr = expr;
         module_location = make_loc $loc } }
 
-(* Functor parameters: (X : S) *)
+(* Functor parameters: (X : S) for applicative, () for generative *)
 functor_parameter:
   | LPAREN; name = UPPERCASE_IDENTIFIER; COLON; mt = module_type; RPAREN
-    { { functor_param_name = make_located name $loc(name); functor_param_type = mt } }
+    { FunctorParamNamed (make_located name $loc(name), mt) }
+  | LPAREN; RPAREN
+    { FunctorParamUnit (make_loc $loc) }
+
+(* Recursive module bindings: module rec A : S = ME and B : T = ME2
+   Unlike regular modules, recursive modules MUST have explicit signatures *)
+rec_module_binding:
+  | name = UPPERCASE_IDENTIFIER; COLON; mt = module_type; EQUAL; expr = module_expression
+    { { rec_module_name = make_located name $loc(name);
+        rec_module_type = mt;
+        rec_module_expr = expr;
+        rec_module_location = make_loc $loc } }
 
 (* Module expressions *)
 module_expression:
@@ -576,6 +798,10 @@ simple_module_expression:
   | me = atomic_module_expression { me }
   | func = simple_module_expression; LPAREN; arg = module_expression; RPAREN
     { make_located (ModuleApply (func, arg)) $loc }
+  (* Generative functor application: F() - unit argument for generative functors *)
+  | func = simple_module_expression; LPAREN; RPAREN
+    { let unit_struct = make_located (ModuleStructure []) $loc in
+      make_located (ModuleApply (func, unit_struct)) $loc }
 
 atomic_module_expression:
   | STRUCT; items = list(structure_item); END
@@ -586,6 +812,9 @@ atomic_module_expression:
     { make_located (ModuleConstraint (me, mt)) $loc }
   | LPAREN; me = module_expression; RPAREN
     { me }
+  (* First-class module unpacking: (val e : MT) *)
+  | LPAREN; VAL; e = expression; COLON; mt = module_type; RPAREN
+    { make_located (ModuleUnpack (e, mt)) $loc }
 
 (* Module types (signatures) *)
 module_type:
@@ -605,6 +834,8 @@ atomic_module_type:
     { make_located (ModuleTypePath path) $loc }
   | LPAREN; mt = module_type; RPAREN
     { mt }
+  | MODULE; TYPE; OF; me = module_expression
+    { make_located (ModuleTypeOf me) $loc }
 
 (* Signature items *)
 signature_item:
@@ -625,13 +856,13 @@ signature_item:
   | ext = external_declaration
     { make_located (SignatureExternal ext) $loc }
 
-(* With constraints - use simple type variable names, no variance annotations *)
+(* With constraints - type parameters come BEFORE the type name, like 'a t or ('a, 'b) t *)
 with_constraint:
-  | TYPE; path = longident_type; params = type_parameters; EQUAL; ty = type_expression
+  | TYPE; params = type_parameters; path = longident_type; EQUAL; ty = type_expression
     { WithType (path, List.map (fun p -> p.Syntax_tree.parameter_name) params, ty) }
-  | TYPE; path = longident_type; params = type_parameters; COLONEQUALS; ty = type_expression
+  | TYPE; params = type_parameters; path = longident_type; COLONEQUALS; ty = type_expression
     { WithTypeDestructive (path, List.map (fun p -> p.Syntax_tree.parameter_name) params, ty) }
-  | MODULE; path = longident; EQUAL; target = module_path
+  | MODULE; path = module_longident; EQUAL; target = module_path
     { WithModule (path, target) }
 
 (* Longidents for qualified names *)
@@ -641,18 +872,33 @@ longident:
   | li = longident; DOT; name = LOWERCASE_IDENTIFIER
     { make_located (Ldot (li, name)) $loc }
 
+(* Module longidents (uppercase) for with module constraints *)
+module_longident:
+  | name = UPPERCASE_IDENTIFIER
+    { make_located (Lident name) $loc }
+  | li = module_longident; DOT; name = UPPERCASE_IDENTIFIER
+    { make_located (Ldot (li, name)) $loc }
+
+(* Constructor longidents (uppercase) for pattern matching: Some, M.Some, M.N.Some *)
+constructor_longident:
+  | name = UPPERCASE_IDENTIFIER
+    { make_located (Lident name) $loc }
+  | li = constructor_longident; DOT; name = UPPERCASE_IDENTIFIER
+    { make_located (Ldot (li, name)) $loc }
+
+(* Type paths for with-constraints: t, M.t, M.N.t, Inner.t, M.Inner.t
+   Uses a separate prefix rule to avoid conflicts with module_path *)
 longident_type:
   | name = LOWERCASE_IDENTIFIER
     { make_located (Lident name) $loc }
-  | path = module_path; DOT; name = LOWERCASE_IDENTIFIER
-    { let rec build_longident = function
-        | [] -> failwith "empty module path"
-        | [m] -> make_located (Lident m) $loc(path)
-        | m :: rest ->
-            let inner = build_longident rest in
-            make_located (Ldot (inner, m)) $loc(path)
-      in
-      make_located (Ldot (build_longident (List.rev path.value), name)) $loc }
+  | prefix = longident_type_prefix; DOT; name = LOWERCASE_IDENTIFIER
+    { make_located (Ldot (prefix, name)) $loc }
+
+longident_type_prefix:
+  | mod_name = UPPERCASE_IDENTIFIER
+    { make_located (Lident mod_name) $loc }
+  | prefix = longident_type_prefix; DOT; mod_name = UPPERCASE_IDENTIFIER
+    { make_located (Ldot (prefix, mod_name)) $loc }
 
 (* ==================== FFI External Declarations ==================== *)
 

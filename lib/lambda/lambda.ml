@@ -13,6 +13,7 @@ type primitive =
   | PrimitiveIntLessEqual
   | PrimitiveIntGreaterEqual
   | PrimitiveStringEqual
+  | PrimitiveStringConcat
   | PrimitiveMakeBlock of int
   | PrimitiveGetField of int
   | PrimitivePrint
@@ -29,6 +30,7 @@ type constructor_tag_index = {
   tag_index : int;
   tag_type_name : string;
   tag_is_nullary : bool;
+  tag_is_extension : bool;  (** True for extensible variant constructors - use string tag *)
 }
 
 type lambda =
@@ -90,6 +92,7 @@ let primitive_of_operator = function
   | ">" -> Some PrimitiveIntGreater
   | "<=" -> Some PrimitiveIntLessEqual
   | ">=" -> Some PrimitiveIntGreaterEqual
+  | "^" -> Some PrimitiveStringConcat
   | "print" -> Some PrimitivePrint
   | _ -> None
 
@@ -154,10 +157,16 @@ let build_switch_if_chain (type key) ~(config : key switch_config) ~translate_tr
   in
   build cases
 
-let constructor_switch_config : (string * int) switch_config = {
+let constructor_switch_config : (string * int * bool) switch_config = {
   get_discriminant = (fun target -> LambdaGetRecordField ("_tag", target));
-  key_to_constant = (fun (_name, tag_index) -> ConstantInt tag_index);
+  key_to_constant = (fun (_name, tag_index, _is_ext) -> ConstantInt tag_index);
   equality_primitive = PrimitiveIntEqual;
+}
+
+let extension_constructor_switch_config : (string * int * bool) switch_config = {
+  get_discriminant = (fun target -> LambdaGetRecordField ("_tag", target));
+  key_to_constant = (fun (name, _tag_index, _is_ext) -> ConstantString name);
+  equality_primitive = PrimitiveStringEqual;
 }
 
 let constant_switch_config : Parsing.Syntax_tree.constant switch_config = {
@@ -208,8 +217,8 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
       match head with
       | Pattern_match.HCConstant c ->
           ((c, tree) :: consts, ctors, pvs, others)
-      | Pattern_match.HCConstructor (name, tag_index) ->
-          (consts, ((name, tag_index), tree) :: ctors, pvs, others)
+      | Pattern_match.HCConstructor (name, tag_index, is_extension) ->
+          (consts, ((name, tag_index, is_extension), tree) :: ctors, pvs, others)
       | Pattern_match.HCPolyVariant tag ->
           (consts, ctors, (tag, tree) :: pvs, others)
       | _ ->
@@ -240,16 +249,26 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
 and translate_dt_constructor_switch target cases default translate_tree =
   let num_cases = List.length cases in
 
-  (* Use LambdaSwitch for many cases (enables dispatch table in codegen) *)
-  if num_cases >= Codegen_constants.dispatch_table_threshold then
-    let switch_cases = List.map (fun ((_name, tag_index), tree) ->
-      { switch_tag = tag_index; switch_body = translate_tree tree }
-    ) cases in
-    let switch_default = Option.map translate_tree default in
-    LambdaSwitch (target, switch_cases, switch_default)
+  (* Check if any case is an extension constructor *)
+  let has_extension = List.exists (fun ((_name, _tag_index, is_ext), _tree) -> is_ext) cases in
 
-  else
-    build_switch_if_chain ~config:constructor_switch_config ~translate_tree target cases default
+  if has_extension then
+    (* Extension constructors use string tags - always use if-chain *)
+    build_switch_if_chain ~config:extension_constructor_switch_config ~translate_tree target cases default
+
+  else begin
+    (* Regular constructors use numeric tags *)
+    (* Use LambdaSwitch for many cases (enables dispatch table in codegen) *)
+    if num_cases >= Codegen_constants.dispatch_table_threshold then
+      let switch_cases = List.map (fun ((_name, tag_index, _is_ext), tree) ->
+        { switch_tag = tag_index; switch_body = translate_tree tree }
+      ) cases in
+      let switch_default = Option.map translate_tree default in
+      LambdaSwitch (target, switch_cases, switch_default)
+
+    else
+      build_switch_if_chain ~config:constructor_switch_config ~translate_tree target cases default
+  end
 
 (** Bind compound pattern components via a temp variable.
     Creates let-bindings for each sub-pattern using the given field accessors. *)
@@ -304,6 +323,15 @@ let rec translate_pattern_binding pattern value body =
 
   | TypedPatternLocallyAbstract _ ->
       body
+
+  | TypedPatternAlias (inner, id) ->
+      (* Alias pattern: bind value to alias, then handle inner pattern *)
+      let inner_body = translate_pattern_binding inner value body in
+      LambdaLet (id, value, inner_body)
+
+  | TypedPatternOr (left, _right) ->
+      (* Or-pattern: both branches bind same variables, translate from left *)
+      translate_pattern_binding left value body
 
   | TypedPatternError _ ->
       body
@@ -378,11 +406,19 @@ and analyze_and_collect_structure structure =
           let value = translate_module_expression inner_mexpr in
           { state with bindings = { mb_id = name_id; mb_value = value } :: state.bindings }
 
+    | TypedStructureRecModule _ ->
+        (* Recursive modules always require complex translation *)
+        { state with needs_complex = true }
+
     | TypedStructureExternal ext ->
         if state.needs_complex then state
         else
           let func = make_ffi_wrapper ext.external_spec in
           { state with bindings = { mb_id = ext.external_id; mb_value = func } :: state.bindings }
+
+    | TypedStructureTypeExtension _ ->
+        (* Type extensions don't generate runtime code *)
+        state
 
     | TypedStructureError _ ->
         state
@@ -450,6 +486,17 @@ and translate_structure_with_opens structure =
           let new_field = { mb_id = name_id; mb_value = LambdaVariable name_id } in
           process rest (new_local :: local_bindings) (new_field :: module_fields)
 
+      | TypedStructureRecModule rec_bindings ->
+          (* Recursive modules are translated as a recursive let group *)
+          let translated_bindings = List.map (fun (binding : Typing.Typed_tree.typed_rec_module_binding) ->
+            (binding.rec_module_id, translate_module_expression binding.rec_module_expr)
+          ) rec_bindings in
+          let new_local = `Recursive translated_bindings in
+          let new_fields = List.map (fun (binding : Typing.Typed_tree.typed_rec_module_binding) ->
+            { mb_id = binding.rec_module_id; mb_value = LambdaVariable binding.rec_module_id }
+          ) rec_bindings in
+          process rest (new_local :: local_bindings) (List.rev_append new_fields module_fields)
+
       | TypedStructureOpen (module_path, opened_bindings) ->
           let module_lambda = translate_module_path module_path in
           let new_locals = List.map (fun (name, id) ->
@@ -480,6 +527,10 @@ and translate_structure_with_opens structure =
           let new_field = { mb_id = ext.external_id; mb_value = LambdaVariable ext.external_id } in
           process rest (new_local :: local_bindings) (new_field :: module_fields)
 
+      | TypedStructureTypeExtension _ ->
+          (* Type extensions don't generate runtime code *)
+          process rest local_bindings module_fields
+
       | TypedStructureError _ ->
           process rest local_bindings module_fields
   in
@@ -496,11 +547,23 @@ and translate_module_expression mexpr =
   | TypedModulePath path ->
     translate_module_path path
   | TypedModuleFunctor (param, body) ->
-    LambdaFunctor (param.Typing.Module_types.parameter_id, translate_module_expression body)
+      let param_id = match param with
+        | Typing.Module_types.FunctorParamNamed { parameter_id; _ } -> parameter_id
+        | Typing.Module_types.FunctorParamUnit ->
+            (* Generative functor: use a dummy parameter *)
+            Common.Identifier.create "_unit"
+      in
+      LambdaFunctor (param_id, translate_module_expression body)
   | TypedModuleApply (func_mexpr, arg_mexpr) ->
     LambdaFunctorApply (translate_module_expression func_mexpr, translate_module_expression arg_mexpr)
   | TypedModuleConstraint (inner, _) ->
     translate_module_expression inner
+
+  | TypedModuleUnpack (expr, _module_type) ->
+    (* First-class module unpacking: (val e : MT)
+       The expression is a packed module (a table), which we can use directly
+       as a module structure since modules are already tables at runtime. *)
+    translate_expression expr
 
 and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   let open Typing.Typed_tree in
@@ -516,18 +579,33 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     LambdaMakeBlock (0, translated)
 
   | TypedExpressionConstructor (ctor_info, arg_expr) ->
-    let translated_arg = Option.map translate_expression arg_expr in
+    let is_extension = ctor_info.Typing.Types.constructor_tag_index < 0 in
     let tag = {
       tag_name = ctor_info.Typing.Types.constructor_name;
       tag_index = ctor_info.Typing.Types.constructor_tag_index;
       tag_type_name = ctor_info.Typing.Types.constructor_type_name;
       tag_is_nullary = Option.is_none ctor_info.Typing.Types.constructor_argument_type;
+      tag_is_extension = is_extension;
     } in
-    LambdaConstructor (tag, translated_arg)
+    begin match arg_expr with
+    | Some arg ->
+        LambdaConstructor (tag, Some (translate_expression arg))
+    | None ->
+        (* Constructor without argument. If the constructor expects an argument,
+           we return a lambda that builds the constructor when called. *)
+        if Option.is_some ctor_info.Typing.Types.constructor_argument_type then
+          (* Constructor expects an argument - wrap in a lambda *)
+          let arg_id = Identifier.create "ctor_arg" in
+          LambdaFunction ([arg_id], LambdaConstructor (tag, Some (LambdaVariable arg_id)))
+        else
+          (* Nullary constructor - no argument needed *)
+          LambdaConstructor (tag, None)
+    end
 
-  | TypedExpressionApply (func_expr, arg_exprs) ->
+  | TypedExpressionApply (func_expr, labeled_arg_exprs) ->
     let func = translate_expression func_expr in
-    let args = List.map translate_expression arg_exprs in
+    (* Extract expressions from labeled pairs - Lua doesn't have labeled args *)
+    let args = List.map (fun (_, e) -> translate_expression e) labeled_arg_exprs in
     begin match func with
     | LambdaVariable id ->
       let name = Identifier.name id in
@@ -538,12 +616,38 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     | _ -> LambdaApply (func, args)
     end
 
-  | TypedExpressionFunction (param_patterns, body_expr) ->
-      let runtime_patterns = List.filter (fun (p : typed_pattern) ->
+  | TypedExpressionPartialApply { partial_func; partial_slots } ->
+    (* Partial application: generate a wrapper function that takes remaining params
+       and calls the original function with all arguments in correct order *)
+    let func = translate_expression partial_func in
+
+    (* Create identifiers for needed slots and build argument list in order *)
+    let param_counter = ref 0 in
+    let needed_ids = ref [] in
+
+    let all_args = List.map (fun (_, slot) ->
+      match slot with
+      | SlotFilled expr ->
+        translate_expression expr
+      | SlotNeeded _ ->
+        let param_id = Identifier.create (Printf.sprintf "partial_arg%d" !param_counter) in
+        incr param_counter;
+        needed_ids := param_id :: !needed_ids;
+        LambdaVariable param_id
+    ) partial_slots in
+
+    let param_ids = List.rev !needed_ids in
+
+    (* Create wrapper function that captures provided args and accepts remaining *)
+    LambdaFunction (param_ids, LambdaApply (func, all_args))
+
+  | TypedExpressionFunction (labeled_param_patterns, body_expr) ->
+      (* Extract patterns from labeled pairs - Lua doesn't have labeled args *)
+      let runtime_patterns = List.filter_map (fun (_, p : _ * typed_pattern) ->
         match p.pattern_desc with
-        | TypedPatternLocallyAbstract _ -> false
-        | _ -> true
-      ) param_patterns in
+        | TypedPatternLocallyAbstract _ -> None
+        | _ -> Some p
+      ) labeled_param_patterns in
 
       let param_ids =
         List.map (fun (p : typed_pattern) ->
@@ -645,6 +749,17 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   | TypedExpressionPolyVariant (tag, arg) ->
     LambdaPolyVariant (tag, Option.map translate_expression arg)
 
+  | TypedExpressionPack (module_expr, _module_type) ->
+    (* First-class module packing: (module ME : MT)
+       Modules are already tables at runtime, so packing just means
+       translating the module expression to a lambda value. *)
+    translate_module_expression module_expr
+
+  | TypedExpressionLetModule (id, module_expr, body) ->
+    (* Local module binding: let module M = ME in body
+       Translate as: let M = translate(ME) in translate(body) *)
+    LambdaLet (id, translate_module_expression module_expr, translate_expression body)
+
   | TypedExpressionError _ ->
     LambdaApply (
       LambdaVariable (Identifier.create "error"),
@@ -689,6 +804,13 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
   | TypedStructureModule (module_id, mexpr) ->
     [LambdaLet (module_id, translate_module_expression mexpr, LambdaConstant ConstantUnit)]
 
+  | TypedStructureRecModule rec_bindings ->
+    (* Recursive modules: translate each binding, then create recursive let *)
+    let bindings = List.map (fun (binding : Typing.Typed_tree.typed_rec_module_binding) ->
+      (binding.rec_module_id, translate_module_expression binding.rec_module_expr)
+    ) rec_bindings in
+    [LambdaLetRecursive (bindings, LambdaConstant ConstantUnit)]
+
   | TypedStructureOpen (module_path, opened_bindings) ->
     let module_expr = translate_module_path module_path in
     List.map (fun (name, id) ->
@@ -706,6 +828,10 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
   | TypedStructureExternal ext ->
     let func = make_ffi_wrapper ext.external_spec in
     [LambdaLet (ext.external_id, func, LambdaConstant ConstantUnit)]
+
+  | TypedStructureTypeExtension _ ->
+    (* Type extensions don't generate runtime code - constructors are used in expressions *)
+    []
 
   | TypedStructureError _ ->
     []

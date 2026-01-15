@@ -1,0 +1,17 @@
+(* GADT with higher-rank-like polymorphism through existential *)
+(* Simplified to avoid polymorphic record field syntax and visible type params *)
+
+type 'a list = Nil | Cons of ('a * 'a list)
+
+(* GADT that captures a function with hidden type *)
+type 'a hidden_val = HiddenVal : 'b * ('b -> 'a) -> 'a hidden_val
+
+let make_int_hidden () : int hidden_val =
+  HiddenVal ("42", fun s -> 42)
+
+let reveal : type a. a hidden_val -> a = function
+  | HiddenVal (v, f) -> f v
+
+let result = reveal (make_int_hidden ())
+
+let _ = print result

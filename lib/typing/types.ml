@@ -20,6 +20,13 @@ let fresh_type_variable_id () =
 let reset_type_variable_id () =
   next_type_variable_id := 0
 
+(** Argument labels for function types and applications.
+    Mirrors OCaml's Asttypes.arg_label. *)
+type arg_label =
+  | Nolabel                 (** Regular unlabeled argument *)
+  | Labelled of string      (** Labeled argument: [~label:] *)
+  | Optional of string      (** Optional argument: [?label:] *)
+
 type type_variable = {
   id : int;
   mutable level : level;
@@ -32,10 +39,18 @@ and type_expression =
   | TypeVariable of type_variable
   | TypeConstructor of path * type_expression list
   | TypeTuple of type_expression list
-  | TypeArrow of type_expression * type_expression
+  | TypeArrow of arg_label * type_expression * type_expression  (** [label:arg -> result] *)
   | TypeRecord of row
   | TypePolyVariant of poly_variant_row  (** Polymorphic variant type *)
+  | TypePackage of package_type  (** First-class module type: (module S) *)
   | TypeRowEmpty
+
+(** Package type for first-class modules.
+    Contains the module type signature that the packed module must satisfy. *)
+and package_type = {
+  package_path : path;  (** The module type path (for printing) *)
+  package_signature : (string * type_expression) list;  (** Flattened type constraints *)
+}
 
 and row = {
   row_fields : (string * row_field) list;  (* Sorted by label *)
@@ -148,7 +163,17 @@ let rec representative ty =
     begin match tv.link with
     | Some linked_ty ->
       let repr = representative linked_ty in
-      tv.link <- Some repr;
+      (* Path compression optimization: flatten the link chain.
+         However, don't compress past rigid variables - they may be temporarily
+         linked for GADT type refinement and will be unlinked later.
+         Compressing past them would bypass the unlink. *)
+      begin match linked_ty with
+      | TypeVariable linked_tv when linked_tv.rigid ->
+        (* Don't compress - keep the chain through the rigid variable *)
+        ()
+      | _ ->
+        tv.link <- Some repr
+      end;
       repr
     | None -> ty
     end
@@ -189,6 +214,7 @@ type type_declaration = {
   declaration_name : string;
   declaration_parameters : type_variable list;
   declaration_variances : variance list;  (** Variance of each type parameter *)
+  declaration_injectivities : bool list;  (** Injectivity of each type parameter *)
   declaration_manifest : type_expression option;  (* Type alias: type t = int *)
   declaration_kind : type_declaration_kind;
   declaration_private : bool;  (** True if private (pattern match ok, construction blocked) *)
@@ -199,6 +225,7 @@ and type_declaration_kind =
   | DeclarationAbstract
   | DeclarationVariant of constructor_info list
   | DeclarationRecord of (string * type_expression) list  (* Record types *)
+  | DeclarationExtensible  (** Extensible variant: type t = .. *)
 
 (** Convert a path to its string representation. *)
 let rec path_to_string = function
@@ -231,12 +258,14 @@ let rec pp_type_expression fmt ty =
   | TypeTuple elements ->
     Format.fprintf fmt "(%a)"
       (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") pp_type_expression) elements
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     Format.fprintf fmt "(%a -> %a)" pp_type_expression arg pp_type_expression result
   | TypeRecord row ->
     pp_row fmt row
   | TypePolyVariant pv_row ->
     pp_poly_variant_row fmt pv_row
+  | TypePackage pkg ->
+    Format.fprintf fmt "(module %a)" pp_path pkg.package_path
   | TypeRowEmpty ->
     Format.fprintf fmt "{}"
 

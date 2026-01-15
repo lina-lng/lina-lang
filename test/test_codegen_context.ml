@@ -44,7 +44,7 @@ let x = None
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local x_13 = _Ctor_option_0
+    local x_14 = _Ctor_option_0
     |}]
 
 let%expect_test "multiple nullary constructors share singletons" =
@@ -60,9 +60,9 @@ let b = Blue
     local _Ctor_color_2 = {_tag = 2}
     local _Ctor_color_1 = {_tag = 1}
     local _Ctor_color_0 = {_tag = 0}
-    local r_14 = _Ctor_color_0
-    local g_15 = _Ctor_color_1
-    local b_16 = _Ctor_color_2
+    local r_15 = _Ctor_color_0
+    local g_16 = _Ctor_color_1
+    local b_17 = _Ctor_color_2
     |}]
 
 let%expect_test "same nullary constructor used multiple times reuses singleton" =
@@ -77,9 +77,9 @@ let c = None
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local a_17 = _Ctor_option_0
-    local b_18 = _Ctor_option_0
-    local c_19 = _Ctor_option_0
+    local a_18 = _Ctor_option_0
+    local b_19 = _Ctor_option_0
+    local c_20 = _Ctor_option_0
     |}]
 
 let%expect_test "non-nullary constructor does not generate singleton" =
@@ -89,7 +89,7 @@ let x = Some 42
 |} in
   let lua = compile code in
   print_endline lua;
-  [%expect {| local x_20 = {_tag = 1, _0 = 42} |}]
+  [%expect {| local x_21 = {_tag = 1, _0 = 42} |}]
 
 let%expect_test "mixed nullary and non-nullary constructors" =
   let code = {|
@@ -102,9 +102,9 @@ let c = None
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local a_21 = _Ctor_option_0
-    local b_22 = {_tag = 1, _0 = 42}
-    local c_23 = _Ctor_option_0
+    local a_22 = _Ctor_option_0
+    local b_23 = {_tag = 1, _0 = 42}
+    local c_24 = _Ctor_option_0
     |}]
 
 (** {1 Dispatch Table Threshold Tests} *)
@@ -183,9 +183,9 @@ let x =
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local a_33 = _Ctor_option_0
-    local b_34 = _Ctor_option_0
-    local x_35 = a_33
+    local a_34 = _Ctor_option_0
+    local b_35 = _Ctor_option_0
+    local x_36 = a_34
     |}]
 
 let%expect_test "conditionals with singletons in both branches" =
@@ -198,8 +198,8 @@ let f b = if b then None else None
   print_endline lua;
   [%expect {|
     local _Ctor_option_0 = {_tag = 0}
-    local function f_37(b_36)
-      if b_36 then
+    local function f_38(b_37)
+      if b_37 then
         return _Ctor_option_0
       else
         return _Ctor_option_0

@@ -27,7 +27,7 @@ type extraction_result = {
 let rec has_rigid_variables ty =
   match representative ty with
   | TypeVariable tv -> tv.rigid
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     has_rigid_variables arg || has_rigid_variables result
   | TypeTuple types ->
     List.exists has_rigid_variables types
@@ -47,6 +47,9 @@ let rec has_rigid_variables ty =
     ) pv_row.pv_fields ||
     has_rigid_variables pv_row.pv_more
   | TypeRowEmpty -> false
+
+  | TypePackage pkg ->
+    List.exists (fun (_, ty) -> has_rigid_variables ty) pkg.package_signature
 
 (** Extract GADT type equations by comparing scrutinee type with constructor result type.
 
@@ -91,7 +94,7 @@ let extract_equations scrutinee_type constructor_result_type =
         success := false
 
     (* Arrows - recurse on both parts *)
-    | TypeArrow (arg1, res1), TypeArrow (arg2, res2) ->
+    | TypeArrow (_, arg1, res1), TypeArrow (_, arg2, res2) ->
       extract arg1 arg2;
       extract res1 res2
 

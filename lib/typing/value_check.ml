@@ -99,6 +99,7 @@ module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = 
 
     (* Non-values *)
     | Typed_tree.TypedExpressionApply _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionPartialApply _ -> ShapeNonValue
     | Typed_tree.TypedExpressionSequence _ -> ShapeNonValue
     | Typed_tree.TypedExpressionRecordAccess _ -> ShapeNonValue
     | Typed_tree.TypedExpressionRecordUpdate _ -> ShapeNonValue
@@ -106,6 +107,8 @@ module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = 
     | Typed_tree.TypedExpressionRef _ -> ShapeNonValue
     | Typed_tree.TypedExpressionDeref _ -> ShapeNonValue
     | Typed_tree.TypedExpressionAssign _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionPack _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionLetModule (_, _, body) -> ShapeLet ([], body)
     | Typed_tree.TypedExpressionError _ -> ShapeNonValue
 end
 
@@ -153,6 +156,8 @@ module SyntaxExpression : EXPRESSION with type t = Parsing.Syntax_tree.expressio
     | Parsing.Syntax_tree.ExpressionRef _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionDeref _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionAssign _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionPack _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionLetModule (_, _, body) -> ShapeLet ([], body)
     | Parsing.Syntax_tree.ExpressionError _ -> ShapeNonValue
 end
 

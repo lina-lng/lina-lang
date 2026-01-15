@@ -1,0 +1,11 @@
+(* GADT capturing existential type with function *)
+
+type showable = Show : 'a * ('a -> string) -> showable
+
+let show (Show (x, f)) = f x
+
+let int_show = Show (42, fun n -> "int")
+let str_show = Show ("hello", fun s -> s)
+
+let _ = print (show int_show)
+let _ = print (show str_show)

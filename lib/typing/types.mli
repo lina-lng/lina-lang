@@ -44,6 +44,18 @@ val fresh_type_variable_id : unit -> int
     names between test runs. Should not be used in production code. *)
 val reset_type_variable_id : unit -> unit
 
+(** {1 Argument Labels} *)
+
+(** Argument labels for function types and applications.
+    Mirrors OCaml's Asttypes.arg_label.
+    - [Nolabel]: Regular unlabeled argument
+    - [Labelled name]: Labeled argument [~name:]
+    - [Optional name]: Optional argument [?name:] *)
+type arg_label =
+  | Nolabel
+  | Labelled of string
+  | Optional of string
+
 (** {1 Type Expressions} *)
 
 (** Type variables with mutable link for unification.
@@ -66,17 +78,26 @@ type type_variable = {
     - [TypeVariable]: unification variables
     - [TypeConstructor]: named types like [int], [option]
     - [TypeTuple]: product types [(a * b * c)]
-    - [TypeArrow]: function types [a -> b]
+    - [TypeArrow]: function types [label:a -> b] with optional label
     - [TypeRecord]: structural record types with row polymorphism
+    - [TypePackage]: first-class module types [(module S)]
     - [TypeRowEmpty]: closed row (no more fields) *)
 and type_expression =
   | TypeVariable of type_variable
   | TypeConstructor of path * type_expression list
   | TypeTuple of type_expression list
-  | TypeArrow of type_expression * type_expression
+  | TypeArrow of arg_label * type_expression * type_expression  (** [label:arg -> result] *)
   | TypeRecord of row
   | TypePolyVariant of poly_variant_row  (** Polymorphic variant type *)
+  | TypePackage of package_type  (** First-class module type: (module S) *)
   | TypeRowEmpty
+
+(** Package type for first-class modules.
+    Contains the module type signature that the packed module must satisfy. *)
+and package_type = {
+  package_path : path;  (** The module type path (for printing) *)
+  package_signature : (string * type_expression) list;  (** Flattened type constraints *)
+}
 
 (** Row type for record fields.
     A row contains named fields and a "tail" that is either:
@@ -271,6 +292,7 @@ type type_declaration = {
   declaration_name : string;
   declaration_parameters : type_variable list;
   declaration_variances : variance list;  (** Variance of each type parameter *)
+  declaration_injectivities : bool list;  (** Injectivity of each type parameter. True for datatypes, may be false for aliases *)
   declaration_manifest : type_expression option;  (** [Some t] for type aliases *)
   declaration_kind : type_declaration_kind;
   declaration_private : bool;  (** True if private (pattern match ok, construction blocked) *)
@@ -282,6 +304,7 @@ and type_declaration_kind =
   | DeclarationAbstract                          (** Abstract type *)
   | DeclarationVariant of constructor_info list  (** Variant/sum type *)
   | DeclarationRecord of (string * type_expression) list  (** Record type *)
+  | DeclarationExtensible  (** Extensible variant: [type t = ..] *)
 
 (** {1 Path Operations} *)
 

@@ -39,6 +39,29 @@
     Type variables are created via [Typing_context.new_type_variable] which
     returns an updated context with incremented ID. *)
 
+(** {1 Forward References}
+
+    These forward references break circular dependencies between modules.
+    They are initialized by Structure_infer. *)
+
+(** Forward reference for module expression inference.
+    Set by Structure_infer to break circular dependency. *)
+val infer_module_expression_ref :
+  (Typing_context.t -> Parsing.Syntax_tree.module_expression ->
+   Typed_tree.typed_module_expression * Typing_context.t) ref
+
+(** {1 Path Conversion} *)
+
+(** Convert a module_path (string list) to a Types.path.
+    Used by first-class module inference. *)
+val module_path_to_types_path :
+  Parsing.Syntax_tree.module_path -> Types.path
+
+(** Convert a longident to a Types.path.
+    Used by first-class module inference. *)
+val longident_to_path :
+  Parsing.Syntax_tree.longident -> Types.path
+
 (** {1 Expression Inference} *)
 
 (** [infer_expression ctx expr] infers the type of an expression.
@@ -54,6 +77,34 @@ val infer_expression :
   Typing_context.t ->
   Parsing.Syntax_tree.expression ->
   Typed_tree.typed_expression * Typing_context.t
+
+(** {1 Labeled Argument Reordering} *)
+
+(** [reorder_arguments params args] matches arguments to parameters for type-directed
+    argument reordering. Returns a list of slots (filled with argument or needing value)
+    and any unused arguments.
+
+    For labeled parameters, matching labeled arguments are found regardless of position.
+    For unlabeled parameters, unlabeled arguments are consumed in order.
+
+    Slot types:
+    - [`Filled arg]: argument matches parameter directly
+    - [`FilledWrapped arg]: labeled arg filling optional param (needs [Some] wrapping)
+    - [`OptionalDefault ty]: optional param with no arg (needs [None] default)
+    - [`Needed ty]: required param with no arg (partial application)
+
+    @param params Expected parameters as (label, type) pairs
+    @param args Provided arguments as (label, typed_expression) pairs
+    @return A pair [(slots, unused_args)] where slots are in parameter order *)
+val reorder_arguments :
+  (Types.arg_label * Types.type_expression) list ->
+  (Types.arg_label * Typed_tree.typed_expression) list ->
+  (Types.arg_label *
+    [> `Filled of Typed_tree.typed_expression
+     | `FilledWrapped of Typed_tree.typed_expression
+     | `OptionalDefault of Types.type_expression
+     | `Needed of Types.type_expression ]) list *
+  (Types.arg_label * Typed_tree.typed_expression) list
 
 (** {1 Binding Inference} *)
 

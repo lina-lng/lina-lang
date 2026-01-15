@@ -1,0 +1,8 @@
+(* Alias patterns: basic usage *)
+(* Expected: ACCEPT - x as y binds both x and y *)
+
+let extract_both = fun n ->
+  match n with
+  | (x as y) -> x + y
+
+let _ = print (extract_both 21)

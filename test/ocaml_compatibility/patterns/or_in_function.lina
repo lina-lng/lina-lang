@@ -1,0 +1,11 @@
+(* Or-patterns in function expression *)
+
+type color = Red | Green | Blue
+
+let is_primary = function
+  | Red | Blue -> true
+  | Green -> false
+
+let _ = print (is_primary Red)
+let _ = print (is_primary Green)
+let _ = print (is_primary Blue)

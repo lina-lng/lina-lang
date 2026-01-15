@@ -48,7 +48,7 @@ let%expect_test "iter: visits TypeConstructor with args" =
   [%expect {| 2 |}]
 
 let%expect_test "iter: visits nested TypeArrow" =
-  let arrow_ty = Types.TypeArrow (type_int, Types.TypeArrow (type_string, type_bool)) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, Types.TypeArrow (Nolabel, type_string, type_bool)) in
   let count = ref 0 in
   Type_traversal.iter (fun _ -> incr count) arrow_ty;
   (* outer arrow, int, inner arrow, string, bool = 5 nodes *)
@@ -101,7 +101,7 @@ let%expect_test "iter: follows union-find links" =
   [%expect {| int |}]
 
 let%expect_test "iter: visits in pre-order (parent before children)" =
-  let arrow_ty = Types.TypeArrow (type_int, type_string) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, type_string) in
   let order = ref [] in
   Type_traversal.iter (fun ty ->
     match ty with
@@ -150,14 +150,14 @@ let%expect_test "map: transforms TypeConstructor args" =
 
 let%expect_test "map: transforms nested TypeArrow" =
   let _, ty_var = make_type_var 0 1 in
-  let arrow_ty = Types.TypeArrow (ty_var, ty_var) in
+  let arrow_ty = Types.TypeArrow (Nolabel, ty_var, ty_var) in
   let result = Type_traversal.map (fun ty ->
     match ty with
     | Types.TypeVariable _ -> type_int
     | _ -> ty
   ) arrow_ty in
   (match result with
-   | Types.TypeArrow (
+   | Types.TypeArrow (_, 
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []),
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, [])) ->
      print_endline "int -> int"
@@ -202,10 +202,10 @@ let%expect_test "map: transforms TypeRecord fields" =
   [%expect {| { x: int } |}]
 
 let%expect_test "map: identity function preserves structure" =
-  let arrow_ty = Types.TypeArrow (type_int, type_string) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, type_string) in
   let result = Type_traversal.map (fun ty -> ty) arrow_ty in
   (match result with
-   | Types.TypeArrow (
+   | Types.TypeArrow (_, 
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []),
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinString, [])) ->
      print_endline "preserved"
@@ -214,7 +214,7 @@ let%expect_test "map: identity function preserves structure" =
 
 let%expect_test "map: applies in bottom-up order" =
   (* Transform all types to int, then wrap in option at the top *)
-  let arrow_ty = Types.TypeArrow (type_int, type_string) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, type_string) in
   let order = ref [] in
   let _ = Type_traversal.map (fun ty ->
     (match ty with
@@ -238,14 +238,14 @@ let%expect_test "map: applies in bottom-up order" =
 (** {1 fold Tests} *)
 
 let%expect_test "fold: accumulates over all nodes" =
-  let arrow_ty = Types.TypeArrow (type_int, Types.TypeArrow (type_string, type_bool)) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, Types.TypeArrow (Nolabel, type_string, type_bool)) in
   let count = Type_traversal.fold (fun acc _ -> acc + 1) 0 arrow_ty in
   (* outer arrow + int + inner arrow + string + bool = 5 *)
   print_int count;
   [%expect {| 5 |}]
 
 let%expect_test "fold: visits in depth-first pre-order" =
-  let arrow_ty = Types.TypeArrow (type_int, type_string) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, type_string) in
   let order = Type_traversal.fold (fun acc ty ->
     match ty with
     | Types.TypeArrow _ -> acc @ ["arrow"]
@@ -269,7 +269,7 @@ let%expect_test "fold: handles TypeRowEmpty" =
 let%expect_test "fold: collects type variables" =
   let _, ty_var1 = make_type_var 0 1 in
   let _, ty_var2 = make_type_var 1 1 in
-  let arrow_ty = Types.TypeArrow (ty_var1, Types.TypeArrow (type_int, ty_var2)) in
+  let arrow_ty = Types.TypeArrow (Nolabel, ty_var1, Types.TypeArrow (Nolabel, type_int, ty_var2)) in
   let vars = Type_traversal.fold (fun acc ty ->
     match ty with
     | Types.TypeVariable tv -> tv.id :: acc
@@ -284,7 +284,7 @@ let%expect_test "fold: collects type variables" =
 let%expect_test "fold: accumulates type constructor count" =
   let complex_ty = Types.TypeTuple [
     type_int;
-    Types.TypeArrow (type_string, type_bool);
+    Types.TypeArrow (Nolabel, type_string, type_bool);
     Types.TypeConstructor (Types.PathLocal "option", [type_int]);
   ] in
   let constructor_count = Type_traversal.fold (fun acc ty ->
@@ -429,7 +429,7 @@ let%expect_test "iter: deeply nested type" =
   (* Build: int -> (string * bool) -> (option int) *)
   let option_int = Types.TypeConstructor (Types.PathLocal "option", [type_int]) in
   let tuple = Types.TypeTuple [type_string; type_bool] in
-  let complex = Types.TypeArrow (type_int, Types.TypeArrow (tuple, option_int)) in
+  let complex = Types.TypeArrow (Nolabel, type_int, Types.TypeArrow (Nolabel, tuple, option_int)) in
   let count = ref 0 in
   Type_traversal.iter (fun _ -> incr count) complex;
   (* outer arrow, int, inner arrow, tuple, string, bool, option, int = 8 *)
@@ -441,7 +441,7 @@ let%expect_test "map: substitution in complex type" =
   (* Build: 'a -> ('a * 'a) -> 'a option *)
   let option_a = Types.TypeConstructor (Types.PathLocal "option", [ty_var]) in
   let tuple = Types.TypeTuple [ty_var; ty_var] in
-  let complex = Types.TypeArrow (ty_var, Types.TypeArrow (tuple, option_a)) in
+  let complex = Types.TypeArrow (Nolabel, ty_var, Types.TypeArrow (Nolabel, tuple, option_a)) in
   let result = Type_traversal.map (fun ty ->
     match ty with
     | Types.TypeVariable v when v.id = tv.id -> type_int
@@ -466,9 +466,9 @@ let%expect_test "fold: compute depth of type" =
   in
   print_int (type_depth type_int);
   print_newline ();
-  print_int (type_depth (Types.TypeArrow (type_int, type_int)));
+  print_int (type_depth (Types.TypeArrow (Nolabel, type_int, type_int)));
   print_newline ();
-  print_int (type_depth (Types.TypeArrow (type_int, Types.TypeArrow (type_int, type_int))));
+  print_int (type_depth (Types.TypeArrow (Nolabel, type_int, Types.TypeArrow (Nolabel, type_int, type_int))));
   [%expect {|
     1
     2

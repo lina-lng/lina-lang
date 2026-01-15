@@ -1,0 +1,22 @@
+(* Mutually recursive polymorphic functions with GADTs *)
+
+type _ ty =
+  | TInt : int ty
+  | TBool : bool ty
+  | TPair : 'a ty * 'b ty -> ('a * 'b) ty
+
+let max a b = if a > b then a else b
+
+let rec size : type a. a ty -> int = function
+  | TInt -> 1
+  | TBool -> 1
+  | TPair (t1, t2) -> size t1 + size t2
+
+and depth : type a. a ty -> int = function
+  | TInt -> 0
+  | TBool -> 0
+  | TPair (t1, t2) -> 1 + max (depth t1) (depth t2)
+
+let ty = TPair (TInt, TPair (TBool, TInt))
+let () = print_int (size ty); print_newline ()
+let () = print_int (depth ty); print_newline ()

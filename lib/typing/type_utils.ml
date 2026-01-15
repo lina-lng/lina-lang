@@ -129,6 +129,10 @@ let rec substitute_path_in_signature ~old_path ~new_path sig_ =
       in
       if new_mty_opt == mty_opt then item
       else Module_types.SigModuleType (name, new_mty_opt)
+    | Module_types.SigExtensionConstructor _ ->
+      (* Extension constructors don't need path substitution - they reference
+         types by name which is already resolved *)
+      item
   ) sig_
 
 and substitute_path_in_module_type ~old_path ~new_path mty =
@@ -138,12 +142,20 @@ and substitute_path_in_module_type ~old_path ~new_path mty =
     if new_sig == sig_ then mty
     else Module_types.ModTypeSig new_sig
   | Module_types.ModTypeFunctor (param, result) ->
-    let new_parameter_type = substitute_path_in_module_type ~old_path ~new_path param.Module_types.parameter_type in
-    let new_result = substitute_path_in_module_type ~old_path ~new_path result in
-    if new_parameter_type == param.Module_types.parameter_type && new_result == result then mty
-    else Module_types.ModTypeFunctor (
-      { param with parameter_type = new_parameter_type },
-      new_result)
+      let new_param, param_changed = match param with
+        | Module_types.FunctorParamNamed { parameter_name; parameter_id; parameter_type } ->
+            let new_type = substitute_path_in_module_type ~old_path ~new_path parameter_type in
+            if new_type == parameter_type then (param, false)
+            else (Module_types.FunctorParamNamed {
+              parameter_name;
+              parameter_id;
+              parameter_type = new_type;
+            }, true)
+        | Module_types.FunctorParamUnit -> (param, false)
+      in
+      let new_result = substitute_path_in_module_type ~old_path ~new_path result in
+      if not param_changed && new_result == result then mty
+      else Module_types.ModTypeFunctor (new_param, new_result)
   | Module_types.ModTypeIdent path ->
     let new_path = substitute_path_prefix ~old_path ~new_path path in
     if new_path == path then mty

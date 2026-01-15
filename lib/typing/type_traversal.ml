@@ -11,11 +11,12 @@ let rec iter f ty =
   | TypeVariable _ -> ()
   | TypeConstructor (_, args) -> List.iter (iter f) args
   | TypeTuple elements -> List.iter (iter f) elements
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     iter f arg;
     iter f result
   | TypeRecord row -> iter_row f row
   | TypePolyVariant pv_row -> iter_poly_variant_row f pv_row
+  | TypePackage pkg -> List.iter (fun (_, ty) -> iter f ty) pkg.package_signature
   | TypeRowEmpty -> ()
 
 and iter_row f row =
@@ -41,12 +42,14 @@ let rec map f ty =
       TypeConstructor (path, List.map (map f) args)
     | TypeTuple elements ->
       TypeTuple (List.map (map f) elements)
-    | TypeArrow (arg, result) ->
-      TypeArrow (map f arg, map f result)
+    | TypeArrow (label, arg, result) ->
+      TypeArrow (label, map f arg, map f result)
     | TypeRecord row ->
       TypeRecord (map_row f row)
     | TypePolyVariant pv_row ->
       TypePolyVariant (map_poly_variant_row f pv_row)
+    | TypePackage pkg ->
+      TypePackage { pkg with package_signature = List.map (fun (n, ty) -> (n, map f ty)) pkg.package_signature }
     | TypeRowEmpty ->
       TypeRowEmpty
   in
@@ -71,6 +74,48 @@ and map_poly_variant_row f pv_row = {
   pv_closed = pv_row.pv_closed;
 }
 
+(** [map_raw f ty] maps [f] over type [ty] without following links.
+    Unlike [map], this preserves linked type variables as-is, which is
+    essential for scheme instantiation during GADT pattern matching.
+    When a rigid type variable is temporarily linked (for GADT refinement),
+    we still want to treat it as a type variable during instantiation. *)
+let rec map_raw f ty =
+  match ty with
+  | TypeVariable _ -> f ty
+  | TypeConstructor (path, args) ->
+    f (TypeConstructor (path, List.map (map_raw f) args))
+  | TypeTuple elements ->
+    f (TypeTuple (List.map (map_raw f) elements))
+  | TypeArrow (label, arg, result) ->
+    f (TypeArrow (label, map_raw f arg, map_raw f result))
+  | TypeRecord row ->
+    f (TypeRecord (map_row_raw f row))
+  | TypePolyVariant pv_row ->
+    f (TypePolyVariant (map_poly_variant_row_raw f pv_row))
+  | TypePackage pkg ->
+    f (TypePackage { pkg with package_signature = List.map (fun (n, ty) -> (n, map_raw f ty)) pkg.package_signature })
+  | TypeRowEmpty ->
+    f TypeRowEmpty
+
+and map_row_raw f row = {
+  row_fields = List.map (fun (name, field) ->
+    (name, match field with
+      | RowFieldPresent ty -> RowFieldPresent (map_raw f ty))
+  ) row.row_fields;
+  row_more = map_raw f row.row_more;
+}
+
+and map_poly_variant_row_raw f pv_row = {
+  pv_fields = List.map (fun (name, field) ->
+    (name, match field with
+      | PVFieldPresent (Some ty) -> PVFieldPresent (Some (map_raw f ty))
+      | PVFieldPresent None -> PVFieldPresent None
+      | PVFieldAbsent -> PVFieldAbsent)
+  ) pv_row.pv_fields;
+  pv_more = map_raw f pv_row.pv_more;
+  pv_closed = pv_row.pv_closed;
+}
+
 let rec fold f acc ty =
   let ty = representative ty in
   let acc = f acc ty in
@@ -80,11 +125,12 @@ let rec fold f acc ty =
     List.fold_left (fold f) acc args
   | TypeTuple elements ->
     List.fold_left (fold f) acc elements
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     let acc = fold f acc arg in
     fold f acc result
   | TypeRecord row -> fold_row f acc row
   | TypePolyVariant pv_row -> fold_poly_variant_row f acc pv_row
+  | TypePackage pkg -> List.fold_left (fun acc (_, ty) -> fold f acc ty) acc pkg.package_signature
   | TypeRowEmpty -> acc
 
 and fold_row f acc row =
@@ -113,11 +159,12 @@ let rec fold_with_context f ctx acc ty =
     List.fold_left (fun acc arg -> fold_with_context f ctx acc arg) acc args
   | TypeTuple elements ->
     List.fold_left (fun acc elem -> fold_with_context f ctx acc elem) acc elements
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     let acc = fold_with_context f ctx acc arg in
     fold_with_context f ctx acc result
   | TypeRecord row -> fold_row_with_context f ctx acc row
   | TypePolyVariant pv_row -> fold_poly_variant_row_with_context f ctx acc pv_row
+  | TypePackage pkg -> List.fold_left (fun acc (_, ty) -> fold_with_context f ctx acc ty) acc pkg.package_signature
   | TypeRowEmpty -> acc
 
 and fold_row_with_context f ctx acc row =

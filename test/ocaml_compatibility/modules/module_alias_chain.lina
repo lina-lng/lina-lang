@@ -1,0 +1,21 @@
+(* Module alias chain preserves type equality *)
+
+module Base = struct
+  type t = int
+  let value = 42
+end
+
+module A = Base
+module B = A
+module C = B
+
+(* All should have the same type t *)
+let x : Base.t = 1
+let y : A.t = 2
+let z : B.t = 3
+let w : C.t = 4
+
+(* Can mix them freely *)
+let sum = x + y + z + w
+
+let _ = print sum

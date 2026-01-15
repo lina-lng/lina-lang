@@ -1,0 +1,11 @@
+(* Redundant pattern after or-pattern - should warn *)
+
+type t = A | B | C
+
+let f x =
+  match x with
+  | A | B -> 1
+  | A -> 2  (* This is redundant - A already covered *)
+  | C -> 3
+
+let _ = print (f C)

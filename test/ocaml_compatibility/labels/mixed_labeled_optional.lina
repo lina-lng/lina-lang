@@ -1,0 +1,13 @@
+(* Mix of labeled and optional arguments *)
+
+let format ~prefix ?suffix base =
+  let s = prefix ^ base in
+  match suffix with
+  | Some suf -> s ^ suf
+  | None -> s
+
+let msg1 = format ~prefix:"[" "content"
+let msg2 = format ~prefix:"(" ~suffix:")" "content"
+
+let _ = print msg1
+let _ = print msg2

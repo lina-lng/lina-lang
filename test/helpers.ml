@@ -15,14 +15,16 @@ let rec strip_type_locations (t : Syntax_tree.type_expression) :
         Syntax_tree.TypeConstructor (name, List.map strip_type_locations args)
     | Syntax_tree.TypeTuple ts ->
         Syntax_tree.TypeTuple (List.map strip_type_locations ts)
-    | Syntax_tree.TypeArrow (t1, t2) ->
-        Syntax_tree.TypeArrow (strip_type_locations t1, strip_type_locations t2)
+    | Syntax_tree.TypeArrow (label, t1, t2) ->
+        Syntax_tree.TypeArrow (label, strip_type_locations t1, strip_type_locations t2)
     | Syntax_tree.TypeRecord (fields, is_open) ->
         Syntax_tree.TypeRecord (List.map strip_type_record_field_locations fields, is_open)
     | Syntax_tree.TypePolyVariant row ->
         Syntax_tree.TypePolyVariant (strip_poly_variant_row_locations row)
     | Syntax_tree.TypeForall (vars, body) ->
         Syntax_tree.TypeForall (vars, strip_type_locations body)
+    | Syntax_tree.TypePackage path ->
+        Syntax_tree.TypePackage { path with location = Location.none }
   in
   { value = desc; location = Location.none }
 
@@ -56,6 +58,8 @@ let rec strip_pattern_locations (p : Syntax_tree.pattern) : Syntax_tree.pattern 
           (name, Option.map strip_pattern_locations arg)
     | Syntax_tree.PatternAlias (p', name) ->
         Syntax_tree.PatternAlias (strip_pattern_locations p', name)
+    | Syntax_tree.PatternOr (p1, p2) ->
+        Syntax_tree.PatternOr (strip_pattern_locations p1, strip_pattern_locations p2)
     | Syntax_tree.PatternConstraint (p', ty) ->
         Syntax_tree.PatternConstraint
           (strip_pattern_locations p', strip_type_locations ty)
@@ -86,10 +90,10 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
           (name, Option.map strip_expr_locations arg)
     | Syntax_tree.ExpressionApply (f, args) ->
         Syntax_tree.ExpressionApply
-          (strip_expr_locations f, List.map strip_expr_locations args)
-    | Syntax_tree.ExpressionFunction (pats, body) ->
+          (strip_expr_locations f, List.map (fun (lbl, e) -> (lbl, strip_expr_locations e)) args)
+    | Syntax_tree.ExpressionFunction (params, body) ->
         Syntax_tree.ExpressionFunction
-          (List.map strip_pattern_locations pats, strip_expr_locations body)
+          (List.map (fun (lbl, p) -> (lbl, strip_pattern_locations p)) params, strip_expr_locations body)
     | Syntax_tree.ExpressionLet (rf, bindings, body) ->
         Syntax_tree.ExpressionLet
           (rf, List.map strip_binding_locations bindings, strip_expr_locations body)
@@ -126,7 +130,32 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
           (strip_expr_locations ref_expr, strip_expr_locations value_expr)
     | Syntax_tree.ExpressionPolyVariant (tag, arg) ->
         Syntax_tree.ExpressionPolyVariant (tag, Option.map strip_expr_locations arg)
+    | Syntax_tree.ExpressionPack (me, mt) ->
+        Syntax_tree.ExpressionPack (strip_module_expr_locations me, strip_module_type_locations mt)
+    | Syntax_tree.ExpressionLetModule (name, me, body) ->
+        Syntax_tree.ExpressionLetModule (strip_loc name, strip_module_expr_locations me, strip_expr_locations body)
     | Syntax_tree.ExpressionError _ as err -> err
+  in
+  { value = desc; location = Location.none }
+
+and strip_module_expr_locations (me : Syntax_tree.module_expression) : Syntax_tree.module_expression =
+  let desc = match me.value with
+    | Syntax_tree.ModuleStructure _ -> failwith "Module structure stripping not implemented"
+    | Syntax_tree.ModulePath path -> Syntax_tree.ModulePath { path with location = Location.none }
+    | Syntax_tree.ModuleFunctor _ -> failwith "Module functor stripping not implemented"
+    | Syntax_tree.ModuleApply _ -> failwith "Module apply stripping not implemented"
+    | Syntax_tree.ModuleConstraint _ -> failwith "Module constraint stripping not implemented"
+    | Syntax_tree.ModuleUnpack (e, mt) -> Syntax_tree.ModuleUnpack (strip_expr_locations e, strip_module_type_locations mt)
+  in
+  { value = desc; location = Location.none }
+
+and strip_module_type_locations (mt : Syntax_tree.module_type) : Syntax_tree.module_type =
+  let desc = match mt.value with
+    | Syntax_tree.ModuleTypePath path -> Syntax_tree.ModuleTypePath { path with location = Location.none }
+    | Syntax_tree.ModuleTypeSignature _ -> failwith "Module signature stripping not implemented"
+    | Syntax_tree.ModuleTypeFunctor _ -> failwith "Module functor type stripping not implemented"
+    | Syntax_tree.ModuleTypeWith _ -> failwith "Module with stripping not implemented"
+    | Syntax_tree.ModuleTypeOf _ -> failwith "Module type of stripping not implemented"
   in
   { value = desc; location = Location.none }
 
@@ -175,6 +204,7 @@ and strip_type_kind_locations (k : Syntax_tree.type_declaration_kind) :
       Syntax_tree.TypeVariant (List.map strip_constructor_locations constrs)
   | Syntax_tree.TypeAlias ty ->
       Syntax_tree.TypeAlias (strip_type_locations ty)
+  | Syntax_tree.TypeExtensible -> k
 
 and strip_constructor_locations (c : Syntax_tree.constructor_declaration) :
     Syntax_tree.constructor_declaration =
@@ -193,12 +223,14 @@ let strip_structure_item_locations (item : Syntax_tree.structure_item) :
         Syntax_tree.StructureValue (rf, List.map strip_binding_locations bindings)
     | Syntax_tree.StructureType decls ->
         Syntax_tree.StructureType (List.map strip_type_decl_locations decls)
+    | Syntax_tree.StructureTypeExtension _ -> failwith "Type extension support not yet implemented"
     (* Module items - not yet implemented in tests *)
     | Syntax_tree.StructureModule _ -> failwith "Module support not yet implemented"
     | Syntax_tree.StructureModuleType _ -> failwith "Module type support not yet implemented"
     | Syntax_tree.StructureOpen _ -> failwith "Open support not yet implemented"
     | Syntax_tree.StructureInclude _ -> failwith "Include support not yet implemented"
     | Syntax_tree.StructureExternal _ -> failwith "External support not yet implemented"
+    | Syntax_tree.StructureRecModule _ -> failwith "Recursive module support not yet implemented"
     | Syntax_tree.StructureError _ as err -> err
   in
   { value = desc; location = Location.none }

@@ -32,11 +32,11 @@ let%expect_test "substitute_type_params: simple variable replacement" =
 
 let%expect_test "substitute_type_params: nested arrow type" =
   let tv, ty_var = make_type_var 0 1 in
-  let arrow_ty = Types.TypeArrow (ty_var, ty_var) in
+  let arrow_ty = Types.TypeArrow (Nolabel, ty_var, ty_var) in
   let int_ty = Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []) in
   let result = Type_utils.substitute_type_params [tv] [int_ty] arrow_ty in
   (match result with
-   | Types.TypeArrow (
+   | Types.TypeArrow (Nolabel,
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []),
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, [])) ->
      print_endline "int -> int"
@@ -205,10 +205,10 @@ let%expect_test "substitute_path_in_type: nested in arrow" =
   let type_path = Types.PathDot (old_path, "t") in
   let m_t = Types.TypeConstructor (type_path, []) in
   let int_ty = Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []) in
-  let arrow_ty = Types.TypeArrow (m_t, int_ty) in
+  let arrow_ty = Types.TypeArrow (Nolabel, m_t, int_ty) in
   let result = Type_utils.substitute_path_in_type ~old_path ~new_path arrow_ty in
   (match result with
-   | Types.TypeArrow (
+   | Types.TypeArrow (Nolabel,
        Types.TypeConstructor (Types.PathDot (Types.PathIdent id, "t"), []),
        Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []))
      when Common.Identifier.name id = "N" ->
@@ -223,7 +223,7 @@ let%expect_test "substitute_path_in_scheme: preserves quantifiers" =
   let new_path = Types.PathIdent (Common.Identifier.create "N") in
   let type_path = Types.PathDot (old_path, "t") in
   let tv = { Types.id = 0; level = 1; link = None; weak = false; rigid = false } in
-  let body = Types.TypeArrow (
+  let body = Types.TypeArrow (Nolabel,
     Types.TypeVariable tv,
     Types.TypeConstructor (type_path, [])
   ) in
@@ -232,7 +232,7 @@ let%expect_test "substitute_path_in_scheme: preserves quantifiers" =
   print_int (List.length result.quantified_variables);
   print_newline ();
   (match result.body with
-   | Types.TypeArrow (Types.TypeVariable _,
+   | Types.TypeArrow (Nolabel, Types.TypeVariable _,
        Types.TypeConstructor (Types.PathDot (Types.PathIdent id, "t"), []))
      when Common.Identifier.name id = "N" ->
      print_endline "quantifier preserved, path updated"
@@ -266,8 +266,8 @@ let%expect_test "substitute_path_in_module_type: functor" =
   let old_path = Types.PathIdent (Common.Identifier.create "M") in
   let new_path = Types.PathIdent (Common.Identifier.create "N") in
   let parameter_id = Common.Identifier.create "X" in
-  let param = {
-    Module_types.parameter_name = "X";
+  let param = Module_types.FunctorParamNamed {
+    parameter_name = "X";
     parameter_id;
     parameter_type = Module_types.ModTypeSig [];
   } in

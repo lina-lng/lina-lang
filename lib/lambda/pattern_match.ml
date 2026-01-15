@@ -13,7 +13,7 @@ type head_constructor =
   | HCWildcard
   | HCConstant of Parsing.Syntax_tree.constant
   | HCTuple of int  (* arity *)
-  | HCConstructor of string * int  (* name, tag_index *)
+  | HCConstructor of string * int * bool  (* name, tag_index, is_extension *)
   | HCRecord of string list  (* field names *)
   | HCPolyVariant of string  (* polymorphic variant tag *)
 
@@ -81,7 +81,7 @@ let remove_at idx lst =
   before @ after
 
 (** Extract the head constructor from a typed pattern. *)
-let head_of_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor =
+let rec head_of_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor =
   let open Typing.Typed_tree in
   match pat.pattern_desc with
   | TypedPatternVariable _ -> HCWildcard
@@ -90,9 +90,16 @@ let head_of_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor =
   | TypedPatternTuple pats -> HCTuple (List.length pats)
   | TypedPatternConstructor (ctor_info, _) ->
       HCConstructor (ctor_info.Typing.Types.constructor_name,
-                     ctor_info.Typing.Types.constructor_tag_index)
+                     ctor_info.Typing.Types.constructor_tag_index,
+                     ctor_info.Typing.Types.constructor_tag_index < 0)
   | TypedPatternRecord (fields, _) ->
       HCRecord (List.map (fun f -> f.typed_pattern_field_name) fields)
+  | TypedPatternAlias (inner, _) ->
+      (* Alias pattern: head is determined by the inner pattern *)
+      head_of_pattern inner
+  | TypedPatternOr (left, _right) ->
+      (* Or-pattern: use left branch's head (both branches have same type) *)
+      head_of_pattern left
   | TypedPatternLocallyAbstract _ -> HCWildcard
   | TypedPatternPolyVariant (tag, _) -> HCPolyVariant tag
   | TypedPatternError _ -> HCWildcard
@@ -108,10 +115,12 @@ let constants_equal c1 c2 =
   | _ -> false
 
 (** Check if pattern is a wildcard (matches anything without testing). *)
-let is_wildcard (pat : Typing.Typed_tree.typed_pattern) : bool =
+let rec is_wildcard (pat : Typing.Typed_tree.typed_pattern) : bool =
   let open Typing.Typed_tree in
   match pat.pattern_desc with
   | TypedPatternVariable _ | TypedPatternWildcard | TypedPatternLocallyAbstract _ -> true
+  | TypedPatternAlias (inner, _) -> is_wildcard inner
+  | TypedPatternOr (left, right) -> is_wildcard left && is_wildcard right
   | _ -> false
 
 (* Extend an occurrence with an additional step *)
@@ -120,10 +129,16 @@ let extend_occurrence (occ : occurrence) (step : occurrence_step) : occurrence =
 
 (** Collect bindings from the pattern head only.
     Sub-patterns are added to the matrix and their bindings collected later. *)
-let collect_head_bindings (pat : Typing.Typed_tree.typed_pattern) (occ : occurrence) : (Identifier.t * occurrence) list =
+let rec collect_head_bindings (pat : Typing.Typed_tree.typed_pattern) (occ : occurrence) : (Identifier.t * occurrence) list =
   let open Typing.Typed_tree in
   match pat.pattern_desc with
   | TypedPatternVariable id -> [(id, occ)]
+  | TypedPatternAlias (inner, id) ->
+      (* Alias pattern: bind the alias name, plus any bindings from inner pattern *)
+      (id, occ) :: collect_head_bindings inner occ
+  | TypedPatternOr (left, _right) ->
+      (* Or-pattern: bindings come from left branch (both branches have same bindings) *)
+      collect_head_bindings left occ
   | _ -> []
 
 
@@ -167,7 +182,7 @@ let expand_wildcard_for_head pat head arity =
 (** Get sub-patterns when specializing.
     Wildcards expand to n wildcards based on arity.
     Concrete patterns must match the head constructor. *)
-let sub_patterns (pat : Typing.Typed_tree.typed_pattern) (head : head_constructor) (arity : int) : Typing.Typed_tree.typed_pattern list option =
+let rec sub_patterns (pat : Typing.Typed_tree.typed_pattern) (head : head_constructor) (arity : int) : Typing.Typed_tree.typed_pattern list option =
   if is_wildcard pat then
     expand_wildcard_for_head pat head arity
   else
@@ -176,7 +191,7 @@ let sub_patterns (pat : Typing.Typed_tree.typed_pattern) (head : head_constructo
     | TypedPatternTuple pats, HCTuple _ ->
         Some pats
 
-    | TypedPatternConstructor (ctor_info, arg), HCConstructor (name', _)
+    | TypedPatternConstructor (ctor_info, arg), HCConstructor (name', _, _)
       when ctor_info.Typing.Types.constructor_name = name' ->
         (match arg with Some p -> Some [p] | None -> Some [])
 
@@ -203,6 +218,17 @@ let sub_patterns (pat : Typing.Typed_tree.typed_pattern) (head : head_constructo
     | TypedPatternPolyVariant _, HCPolyVariant _ ->
         None
 
+    | TypedPatternAlias (inner, _id), _ ->
+        (* Alias pattern: specialize based on inner pattern *)
+        sub_patterns inner head arity
+
+    | TypedPatternOr (left, right), _ ->
+        (* Or-pattern: try left first, then right *)
+        begin match sub_patterns left head arity with
+        | Some _ as result -> result
+        | None -> sub_patterns right head arity
+        end
+
     | _ ->
         None
 
@@ -222,6 +248,31 @@ let sub_occurrences (occ : occurrence) (head : head_constructor) (arity : int) :
   | HCRecord fields ->
     List.map (fun name -> extend_occurrence occ (OccRecordField name)) fields
 
+(** Expand or-patterns in a pattern list into multiple pattern lists.
+    Each or-pattern doubles the number of rows. *)
+let rec _expand_or_patterns_in_list (pats : Typing.Typed_tree.typed_pattern list) : Typing.Typed_tree.typed_pattern list list =
+  match pats with
+  | [] -> [[]]
+  | pat :: rest ->
+      let rest_expanded = _expand_or_patterns_in_list rest in
+      let pat_alternatives = expand_single_or_pattern pat in
+      List.concat_map (fun alt ->
+        List.map (fun rest_row -> alt :: rest_row) rest_expanded
+      ) pat_alternatives
+
+(** Expand a single pattern's or-branches, preserving aliases. *)
+and expand_single_or_pattern (pat : Typing.Typed_tree.typed_pattern) : Typing.Typed_tree.typed_pattern list =
+  let open Typing.Typed_tree in
+  match pat.pattern_desc with
+  | TypedPatternOr (left, right) ->
+      expand_single_or_pattern left @ expand_single_or_pattern right
+  | TypedPatternAlias (inner, id) ->
+      (* Preserve alias around expanded inner patterns *)
+      List.map (fun expanded_inner ->
+        { pat with pattern_desc = TypedPatternAlias (expanded_inner, id) }
+      ) (expand_single_or_pattern inner)
+  | _ -> [pat]
+
 (* Specialize matrix for a head constructor at given column with given arity *)
 let specialize (matrix : pattern_matrix) (col : int) (head : head_constructor) (arity : int) : pattern_matrix =
   let occ = List.nth matrix.occurrences col in
@@ -233,38 +284,74 @@ let specialize (matrix : pattern_matrix) (col : int) (head : head_constructor) (
     before @ new_sub_occs @ after
   in
 
-  (* Filter and transform clauses *)
-  let new_clauses = List.filter_map (fun clause ->
+  (* Filter and transform clauses, expanding or-patterns first *)
+  let new_clauses = List.concat_map (fun clause ->
     let pat = List.nth clause.clause_patterns col in
-    match sub_patterns pat head arity with
-    | None -> None  (* Clause doesn't match this constructor *)
-    | Some sub_pats ->
-      (* Collect only head bindings - sub-pattern bindings collected when they're processed *)
-      let new_bindings = collect_head_bindings pat occ @ clause.clause_bindings in
-      (* Replace pattern column with sub-patterns (single-pass split) *)
-      let before_pats, after_pats = split_at_remove col clause.clause_patterns in
-      Some {
-        clause with
-        clause_patterns = before_pats @ sub_pats @ after_pats;
-        clause_bindings = new_bindings;
-      }
+    (* Expand or-patterns in the target column *)
+    let expanded_pats = expand_single_or_pattern pat in
+    List.filter_map (fun expanded_pat ->
+      match sub_patterns expanded_pat head arity with
+      | None -> None  (* Clause doesn't match this constructor *)
+      | Some sub_pats ->
+        (* Collect only head bindings - sub-pattern bindings collected when they're processed *)
+        let new_bindings = collect_head_bindings expanded_pat occ @ clause.clause_bindings in
+        (* Replace pattern column with sub-patterns (single-pass split) *)
+        let before_pats, after_pats = split_at_remove col clause.clause_patterns in
+        Some {
+          clause with
+          clause_patterns = before_pats @ sub_pats @ after_pats;
+          clause_bindings = new_bindings;
+        }
+    ) expanded_pats
   ) matrix.clauses in
 
   { occurrences = new_occurrences; clauses = new_clauses }
 
-(* Default matrix: keep rows where column is wildcard *)
+(** Check if a pattern contains a wildcard branch (for default matrix inclusion) *)
+let rec pattern_contains_wildcard (pat : Typing.Typed_tree.typed_pattern) : bool =
+  let open Typing.Typed_tree in
+  match pat.pattern_desc with
+  | TypedPatternVariable _ | TypedPatternWildcard | TypedPatternLocallyAbstract _ -> true
+  | TypedPatternAlias (inner, _) -> pattern_contains_wildcard inner
+  | TypedPatternOr (left, right) -> pattern_contains_wildcard left || pattern_contains_wildcard right
+  | _ -> false
+
+(** Extract the wildcard pattern from an or-pattern (for default matrix) *)
+let rec extract_wildcard_branch (pat : Typing.Typed_tree.typed_pattern) : Typing.Typed_tree.typed_pattern option =
+  let open Typing.Typed_tree in
+  match pat.pattern_desc with
+  | TypedPatternVariable _ | TypedPatternWildcard | TypedPatternLocallyAbstract _ -> Some pat
+  | TypedPatternAlias (inner, id) ->
+      begin match extract_wildcard_branch inner with
+      | Some wild_inner -> Some { pat with pattern_desc = TypedPatternAlias (wild_inner, id) }
+      | None -> None
+      end
+  | TypedPatternOr (left, right) ->
+      begin match extract_wildcard_branch left with
+      | Some _ as result -> result
+      | None -> extract_wildcard_branch right
+      end
+  | _ -> None
+
+(* Default matrix: keep rows where column is wildcard or contains a wildcard branch *)
 let default_matrix (matrix : pattern_matrix) (col : int) : pattern_matrix =
   let occ = List.nth matrix.occurrences col in
 
   (* Remove the column from occurrences (single-pass) *)
   let new_occurrences = remove_at col matrix.occurrences in
 
-  (* Keep only rows with wildcard at column *)
+  (* Keep only rows with wildcard (or wildcard branch in or-pattern) at column *)
   let new_clauses = List.filter_map (fun clause ->
     let pat = List.nth clause.clause_patterns col in
-    if is_wildcard pat then
-      (* For wildcards (variables/wildcards), collect_head_bindings captures the variable binding *)
-      let new_bindings = collect_head_bindings pat occ @ clause.clause_bindings in
+    if pattern_contains_wildcard pat then
+      (* Extract the wildcard branch if it's an or-pattern *)
+      let wildcard_pat = match extract_wildcard_branch pat with
+        | Some p -> p
+        | None -> pat  (* Shouldn't happen if pattern_contains_wildcard is true *)
+      in
+      (* Collect bindings from the wildcard pattern *)
+      let head_bindings = collect_head_bindings wildcard_pat occ in
+      let new_bindings = head_bindings @ clause.clause_bindings in
       let new_patterns = remove_at col clause.clause_patterns in
       Some { clause with
         clause_patterns = new_patterns;
@@ -294,7 +381,7 @@ let select_column (matrix : pattern_matrix) : int =
     This allows O(1) hash-based duplicate detection instead of O(n) list search. *)
 let rec head_constructor_key = function
   | HCWildcard -> "W"
-  | HCConstructor (name, _) -> "C:" ^ name
+  | HCConstructor (name, _, _) -> "C:" ^ name
   | HCPolyVariant tag -> "P:" ^ tag
   | HCConstant c -> "K:" ^ constant_to_string c
   | HCTuple arity -> "T:" ^ string_of_int arity
@@ -307,14 +394,25 @@ and constant_to_string = function
   | Parsing.Syntax_tree.ConstantBoolean b -> "b" ^ string_of_bool b
   | Parsing.Syntax_tree.ConstantUnit -> "u"
 
+(** Extract all head constructors from a pattern (handles or-patterns recursively) *)
+let rec extract_heads_from_pattern (pat : Typing.Typed_tree.typed_pattern) : head_constructor list =
+  let open Typing.Typed_tree in
+  match pat.pattern_desc with
+  | TypedPatternOr (left, right) ->
+      extract_heads_from_pattern left @ extract_heads_from_pattern right
+  | TypedPatternAlias (inner, _) ->
+      extract_heads_from_pattern inner
+  | _ ->
+      let head = head_of_pattern pat in
+      match head with
+      | HCWildcard -> []
+      | _ -> [head]
+
 (* Collect head constructors from a column *)
 let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_constructor list =
-  let heads = List.filter_map (fun clause ->
+  let heads = List.concat_map (fun clause ->
     let pat = List.nth clause.clause_patterns col in
-    let head = head_of_pattern pat in
-    match head with
-    | HCWildcard -> None
-    | _ -> Some head
+    extract_heads_from_pattern pat
   ) matrix.clauses in
   (* Remove duplicates using hash-based deduplication (O(n) instead of O(n²)) *)
   let seen = Hashtbl.create 16 in
@@ -324,25 +422,46 @@ let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_const
     else (Hashtbl.add seen key (); true)
   ) heads
 
+(** Check if a pattern (possibly nested in or-pattern/alias) has a constructor with arg *)
+let rec pattern_has_constructor_with_arg (name : string) (pat : Typing.Typed_tree.typed_pattern) : bool =
+  let open Typing.Typed_tree in
+  match pat.pattern_desc with
+  | TypedPatternConstructor (ctor_info, Some _) ->
+      ctor_info.Typing.Types.constructor_name = name
+  | TypedPatternOr (left, right) ->
+      pattern_has_constructor_with_arg name left ||
+      pattern_has_constructor_with_arg name right
+  | TypedPatternAlias (inner, _) ->
+      pattern_has_constructor_with_arg name inner
+  | _ -> false
+
+(** Check if a pattern (possibly nested in or-pattern/alias) has a poly variant with arg *)
+let rec pattern_has_polyvariant_with_arg (tag : string) (pat : Typing.Typed_tree.typed_pattern) : bool =
+  let open Typing.Typed_tree in
+  match pat.pattern_desc with
+  | TypedPatternPolyVariant (t, Some _) -> t = tag
+  | TypedPatternOr (left, right) ->
+      pattern_has_polyvariant_with_arg tag left ||
+      pattern_has_polyvariant_with_arg tag right
+  | TypedPatternAlias (inner, _) ->
+      pattern_has_polyvariant_with_arg tag inner
+  | _ -> false
+
 (* Adjust arity for constructor based on whether it has an arg in any pattern *)
 let adjust_constructor_arity (matrix : pattern_matrix) (col : int) (head : head_constructor) : int =
   match head with
-  | HCConstructor (name, _) ->
+  | HCConstructor (name, _, _) ->
     (* Check if any pattern with this constructor has an argument *)
     let has_arg = List.exists (fun clause ->
       let pat = List.nth clause.clause_patterns col in
-      match pat.pattern_desc with
-      | Typing.Typed_tree.TypedPatternConstructor (ctor_info, Some _) when ctor_info.Typing.Types.constructor_name = name -> true
-      | _ -> false
+      pattern_has_constructor_with_arg name pat
     ) matrix.clauses in
     if has_arg then 1 else 0
   | HCPolyVariant tag ->
     (* Check if any pattern with this poly variant tag has an argument *)
     let has_arg = List.exists (fun clause ->
       let pat = List.nth clause.clause_patterns col in
-      match pat.pattern_desc with
-      | Typing.Typed_tree.TypedPatternPolyVariant (t, Some _) when t = tag -> true
-      | _ -> false
+      pattern_has_polyvariant_with_arg tag pat
     ) matrix.clauses in
     if has_arg then 1 else 0
   | _ -> head_arity head
@@ -374,7 +493,7 @@ let rec compile_matrix (matrix : pattern_matrix) : decision_tree =
       }
 
   (* Recursive case: select column and compile *)
-  else
+  else begin
     let col = select_column matrix in
     let occ = List.nth matrix.occurrences col in
     let heads = collect_head_constructors matrix col in
@@ -398,6 +517,7 @@ let rec compile_matrix (matrix : pattern_matrix) : decision_tree =
       switch_cases = cases;
       switch_default = default;
     }
+  end
 
 (* Compile match arms to decision tree *)
 let compile_match (arms : Typing.Typed_tree.typed_match_arm list) : decision_tree =

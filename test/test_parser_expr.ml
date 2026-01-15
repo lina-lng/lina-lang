@@ -86,7 +86,17 @@ let%expect_test "constructor without argument" =
   print_endline (show_parsed_expr "None");
   [%expect
     {|
-    { Location.value = (Syntax_tree.ExpressionConstructor ("None", None));
+    { Location.value =
+      (Syntax_tree.ExpressionConstructor (
+         { Location.value = (Syntax_tree.Lident "None");
+           location =
+           { Location.start_pos =
+             { Location.filename = "<string>"; line = 1; column = 0; offset = 0 };
+             end_pos =
+             { Location.filename = "<string>"; line = 1; column = 4; offset = 4 }
+             }
+           },
+         None));
       location =
       { Location.start_pos =
         { Location.filename = ""; line = 0; column = 0; offset = 0 };
@@ -99,7 +109,15 @@ let%expect_test "constructor with argument" =
   [%expect
     {|
     { Location.value =
-      (Syntax_tree.ExpressionConstructor ("Some",
+      (Syntax_tree.ExpressionConstructor (
+         { Location.value = (Syntax_tree.Lident "Some");
+           location =
+           { Location.start_pos =
+             { Location.filename = "<string>"; line = 1; column = 0; offset = 0 };
+             end_pos =
+             { Location.filename = "<string>"; line = 1; column = 4; offset = 4 }
+             }
+           },
          (Some { Location.value =
                  (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantInteger 42));
                  location =
@@ -201,13 +219,14 @@ let%expect_test "simple application" =
              end_pos =
              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
            },
-         [{ Location.value = (Syntax_tree.ExpressionVariable "x");
-            location =
-            { Location.start_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 };
-              end_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-            }
+         [(Syntax_tree.Nolabel,
+           { Location.value = (Syntax_tree.ExpressionVariable "x");
+             location =
+             { Location.start_pos =
+               { Location.filename = ""; line = 0; column = 0; offset = 0 };
+               end_pos =
+               { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+             })
            ]
          ));
       location =
@@ -230,27 +249,30 @@ let%expect_test "multi-argument application" =
              end_pos =
              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
            },
-         [{ Location.value = (Syntax_tree.ExpressionVariable "x");
-            location =
-            { Location.start_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 };
-              end_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-            };
-           { Location.value = (Syntax_tree.ExpressionVariable "y");
+         [(Syntax_tree.Nolabel,
+           { Location.value = (Syntax_tree.ExpressionVariable "x");
              location =
              { Location.start_pos =
                { Location.filename = ""; line = 0; column = 0; offset = 0 };
                end_pos =
                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-             };
-           { Location.value = (Syntax_tree.ExpressionVariable "z");
-             location =
-             { Location.start_pos =
-               { Location.filename = ""; line = 0; column = 0; offset = 0 };
-               end_pos =
-               { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-             }
+             });
+           (Syntax_tree.Nolabel,
+            { Location.value = (Syntax_tree.ExpressionVariable "y");
+              location =
+              { Location.start_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                end_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+              });
+           (Syntax_tree.Nolabel,
+            { Location.value = (Syntax_tree.ExpressionVariable "z");
+              location =
+              { Location.start_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                end_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+              })
            ]
          ));
       location =
@@ -324,16 +346,17 @@ let%expect_test "let rec" =
             binding_expression =
             { Location.value =
               (Syntax_tree.ExpressionFunction (
-                 [{ Location.value = (Syntax_tree.PatternVariable "x");
-                    location =
-                    { Location.start_pos =
-                      { Location.filename = ""; line = 0; column = 0; offset = 0
-                        };
-                      end_pos =
-                      { Location.filename = ""; line = 0; column = 0; offset = 0
-                        }
-                      }
-                    }
+                 [(Syntax_tree.Nolabel,
+                   { Location.value = (Syntax_tree.PatternVariable "x");
+                     location =
+                     { Location.start_pos =
+                       { Location.filename = ""; line = 0; column = 0; offset = 0
+                         };
+                       end_pos =
+                       { Location.filename = ""; line = 0; column = 0; offset = 0
+                         }
+                       }
+                     })
                    ],
                  { Location.value =
                    (Syntax_tree.ExpressionApply (
@@ -347,16 +370,17 @@ let%expect_test "let rec" =
                             offset = 0 }
                           }
                         },
-                      [{ Location.value = (Syntax_tree.ExpressionVariable "x");
-                         location =
-                         { Location.start_pos =
-                           { Location.filename = ""; line = 0; column = 0;
-                             offset = 0 };
-                           end_pos =
-                           { Location.filename = ""; line = 0; column = 0;
-                             offset = 0 }
-                           }
-                         }
+                      [(Syntax_tree.Nolabel,
+                        { Location.value = (Syntax_tree.ExpressionVariable "x");
+                          location =
+                          { Location.start_pos =
+                            { Location.filename = ""; line = 0; column = 0;
+                              offset = 0 };
+                            end_pos =
+                            { Location.filename = ""; line = 0; column = 0;
+                              offset = 0 }
+                            }
+                          })
                         ]
                       ));
                    location =
@@ -389,14 +413,16 @@ let%expect_test "let rec" =
                   end_pos =
                   { Location.filename = ""; line = 0; column = 0; offset = 0 } }
                 },
-              [{ Location.value =
-                 (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantInteger 1));
-                 location =
-                 { Location.start_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 };
-                   end_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-                 }
+              [(Syntax_tree.Nolabel,
+                { Location.value =
+                  (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantInteger 1));
+                  location =
+                  { Location.start_pos =
+                    { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                    end_pos =
+                    { Location.filename = ""; line = 0; column = 0; offset = 0 }
+                    }
+                  })
                 ]
               ));
            location =
@@ -491,13 +517,14 @@ let%expect_test "simple function" =
     {|
     { Location.value =
       (Syntax_tree.ExpressionFunction (
-         [{ Location.value = (Syntax_tree.PatternVariable "x");
-            location =
-            { Location.start_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 };
-              end_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-            }
+         [(Syntax_tree.Nolabel,
+           { Location.value = (Syntax_tree.PatternVariable "x");
+             location =
+             { Location.start_pos =
+               { Location.filename = ""; line = 0; column = 0; offset = 0 };
+               end_pos =
+               { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+             })
            ],
          { Location.value = (Syntax_tree.ExpressionVariable "x");
            location =
@@ -520,20 +547,22 @@ let%expect_test "multi-param function" =
     {|
     { Location.value =
       (Syntax_tree.ExpressionFunction (
-         [{ Location.value = (Syntax_tree.PatternVariable "x");
-            location =
-            { Location.start_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 };
-              end_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-            };
-           { Location.value = (Syntax_tree.PatternVariable "y");
+         [(Syntax_tree.Nolabel,
+           { Location.value = (Syntax_tree.PatternVariable "x");
              location =
              { Location.start_pos =
                { Location.filename = ""; line = 0; column = 0; offset = 0 };
                end_pos =
                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-             }
+             });
+           (Syntax_tree.Nolabel,
+            { Location.value = (Syntax_tree.PatternVariable "y");
+              location =
+              { Location.start_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                end_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+              })
            ],
          { Location.value = (Syntax_tree.ExpressionVariable "x");
            location =
@@ -707,21 +736,23 @@ let%expect_test "deref in function application" =
              end_pos =
              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
            },
-         [{ Location.value =
-            (Syntax_tree.ExpressionDeref
-               { Location.value = (Syntax_tree.ExpressionVariable "x");
-                 location =
-                 { Location.start_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 };
-                   end_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-                 });
-            location =
-            { Location.start_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 };
-              end_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-            }
+         [(Syntax_tree.Nolabel,
+           { Location.value =
+             (Syntax_tree.ExpressionDeref
+                { Location.value = (Syntax_tree.ExpressionVariable "x");
+                  location =
+                  { Location.start_pos =
+                    { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                    end_pos =
+                    { Location.filename = ""; line = 0; column = 0; offset = 0 }
+                    }
+                  });
+             location =
+             { Location.start_pos =
+               { Location.filename = ""; line = 0; column = 0; offset = 0 };
+               end_pos =
+               { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+             })
            ]
          ));
       location =
@@ -744,29 +775,32 @@ let%expect_test "deref with arithmetic" =
              end_pos =
              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
            },
-         [{ Location.value =
-            (Syntax_tree.ExpressionDeref
-               { Location.value = (Syntax_tree.ExpressionVariable "x");
-                 location =
-                 { Location.start_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 };
-                   end_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-                 });
-            location =
-            { Location.start_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 };
-              end_pos =
-              { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-            };
+         [(Syntax_tree.Nolabel,
            { Location.value =
-             (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantInteger 1));
+             (Syntax_tree.ExpressionDeref
+                { Location.value = (Syntax_tree.ExpressionVariable "x");
+                  location =
+                  { Location.start_pos =
+                    { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                    end_pos =
+                    { Location.filename = ""; line = 0; column = 0; offset = 0 }
+                    }
+                  });
              location =
              { Location.start_pos =
                { Location.filename = ""; line = 0; column = 0; offset = 0 };
                end_pos =
                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-             }
+             });
+           (Syntax_tree.Nolabel,
+            { Location.value =
+              (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantInteger 1));
+              location =
+              { Location.start_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                end_pos =
+                { Location.filename = ""; line = 0; column = 0; offset = 0 } }
+              })
            ]
          ));
       location =
@@ -798,33 +832,37 @@ let%expect_test "assign with complex expression" =
                   end_pos =
                   { Location.filename = ""; line = 0; column = 0; offset = 0 } }
                 },
-              [{ Location.value =
-                 (Syntax_tree.ExpressionDeref
-                    { Location.value = (Syntax_tree.ExpressionVariable "x");
-                      location =
-                      { Location.start_pos =
-                        { Location.filename = ""; line = 0; column = 0;
-                          offset = 0 };
-                        end_pos =
-                        { Location.filename = ""; line = 0; column = 0;
-                          offset = 0 }
-                        }
-                      });
-                 location =
-                 { Location.start_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 };
-                   end_pos =
-                   { Location.filename = ""; line = 0; column = 0; offset = 0 } }
-                 };
+              [(Syntax_tree.Nolabel,
                 { Location.value =
-                  (Syntax_tree.ExpressionConstant (Syntax_tree.ConstantInteger 1));
+                  (Syntax_tree.ExpressionDeref
+                     { Location.value = (Syntax_tree.ExpressionVariable "x");
+                       location =
+                       { Location.start_pos =
+                         { Location.filename = ""; line = 0; column = 0;
+                           offset = 0 };
+                         end_pos =
+                         { Location.filename = ""; line = 0; column = 0;
+                           offset = 0 }
+                         }
+                       });
                   location =
                   { Location.start_pos =
                     { Location.filename = ""; line = 0; column = 0; offset = 0 };
                     end_pos =
                     { Location.filename = ""; line = 0; column = 0; offset = 0 }
                     }
-                  }
+                  });
+                (Syntax_tree.Nolabel,
+                 { Location.value =
+                   (Syntax_tree.ExpressionConstant
+                      (Syntax_tree.ConstantInteger 1));
+                   location =
+                   { Location.start_pos =
+                     { Location.filename = ""; line = 0; column = 0; offset = 0 };
+                     end_pos =
+                     { Location.filename = ""; line = 0; column = 0; offset = 0 }
+                     }
+                   })
                 ]
               ));
            location =

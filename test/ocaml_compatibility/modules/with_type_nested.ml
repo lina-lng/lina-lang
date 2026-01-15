@@ -1,0 +1,21 @@
+(* With-type constraint on nested module type *)
+
+module type INNER = sig
+  type t
+  val value : t
+end
+
+module type OUTER = sig
+  module Inner : INNER
+end
+
+module type OUTER_INT = OUTER with type Inner.t = int
+
+module M : OUTER_INT = struct
+  module Inner = struct
+    type t = int
+    let value = 42
+  end
+end
+
+let () = print_int M.Inner.value; print_newline ()

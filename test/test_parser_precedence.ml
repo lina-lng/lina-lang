@@ -5,7 +5,7 @@ open Parsing.Syntax_tree
 (** Extract operator name from a binary operation expression *)
 let get_binop_structure expr =
   match expr.value with
-  | ExpressionApply ({ value = ExpressionVariable op; _ }, [ left; right ]) ->
+  | ExpressionApply ({ value = ExpressionVariable op; _ }, [ (_, left); (_, right) ]) ->
       Some (op, left, right)
   | _ -> None
 

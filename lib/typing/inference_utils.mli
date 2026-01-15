@@ -171,6 +171,19 @@ type constructor_result = {
 val lookup_constructor :
   Typing_context.t -> Location.t -> string -> constructor_result
 
+(** [lookup_constructor_longident ctx loc longident] looks up a constructor by longident.
+
+    Handles both simple names like [Some] and qualified names like [M.Some].
+    Combines constructor lookup with instantiation in a single operation.
+
+    @param ctx The typing context
+    @param loc Source location for error messages
+    @param longident The constructor's longident (simple or qualified)
+    @return Constructor info with instantiated argument and result types
+    @raise Type_error if constructor is not found *)
+val lookup_constructor_longident :
+  Typing_context.t -> Location.t -> Parsing.Syntax_tree.longident -> constructor_result
+
 (** [check_private_type ctx loc ctor_info] checks that a constructor's type is not private.
 
     Private types cannot be constructed directly (but can be pattern matched).

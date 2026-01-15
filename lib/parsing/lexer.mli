@@ -34,6 +34,7 @@ type token =
   | REC                   (** [rec] keyword *)
   | IN                    (** [in] keyword *)
   | FUN                   (** [fun] keyword *)
+  | FUNCTION              (** [function] keyword for pattern-matching functions *)
   | IF                    (** [if] keyword *)
   | THEN                  (** [then] keyword *)
   | ELSE                  (** [else] keyword *)
@@ -75,6 +76,7 @@ type token =
   | PLUS                  (** [+] *)
   | MINUS                 (** [-] *)
   | SLASH                 (** [/] *)
+  | CARET                 (** [^] string concatenation *)
   | LESS                  (** [<] *)
   | GREATER               (** [>] *)
   | LESS_EQUAL            (** [<=] *)
@@ -84,7 +86,11 @@ type token =
   | REF                   (** [ref] keyword *)
   | BANG                  (** [!] dereference *)
   | COLONEQUALS           (** [:=] assignment *)
+  | COLONCOLON            (** [::] list cons *)
   | BACKTICK_TAG of string (** [`` `Tag ``] polymorphic variant constructor *)
+  | TILDE                 (** [~] labeled argument prefix *)
+  | QUESTION              (** [?] optional argument prefix *)
+  | PLUSEQUAL             (** [+=] type extension *)
   | EOF                   (** End of input *)
 [@@deriving show, eq]
 

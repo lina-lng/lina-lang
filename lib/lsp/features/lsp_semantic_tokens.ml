@@ -188,6 +188,19 @@ let rec collect_from_pattern ~is_parameter tokens (pat : Typing.Typed_tree.typed
       | None -> tokens
       end
 
+  | Typing.Typed_tree.TypedPatternAlias (inner, _id) ->
+      (* Alias pattern: collect from inner pattern, alias variable gets a token *)
+      let tokens = match make_token loc TokenVariable [ModDeclaration; ModReadonly] with
+        | Some tok -> tok :: tokens
+        | None -> tokens
+      in
+      collect_from_pattern ~is_parameter tokens inner
+
+  | Typing.Typed_tree.TypedPatternOr (left, right) ->
+      (* Or-pattern: collect from both branches *)
+      let tokens = collect_from_pattern ~is_parameter tokens left in
+      collect_from_pattern ~is_parameter tokens right
+
   | Typing.Typed_tree.TypedPatternError _ ->
       (* Error patterns don't produce semantic tokens *)
       tokens
@@ -243,13 +256,23 @@ let rec collect_from_expression tokens (expr : Typing.Typed_tree.typed_expressio
       | None -> tokens
       end
 
-  | Typing.Typed_tree.TypedExpressionApply (func, args) ->
+  | Typing.Typed_tree.TypedExpressionApply (func, labeled_args) ->
       let tokens = collect_from_expression tokens func in
-      List.fold_left collect_from_expression tokens args
+      List.fold_left (fun toks (_, e) -> collect_from_expression toks e) tokens labeled_args
 
-  | Typing.Typed_tree.TypedExpressionFunction (params, body) ->
+  | Typing.Typed_tree.TypedExpressionPartialApply { partial_func; partial_slots } ->
+      let tokens = collect_from_expression tokens partial_func in
+      List.fold_left (fun toks (_, slot) ->
+        match slot with
+        | Typing.Typed_tree.SlotFilled expr -> collect_from_expression toks expr
+        | Typing.Typed_tree.SlotNeeded _ -> toks
+      ) tokens partial_slots
+
+  | Typing.Typed_tree.TypedExpressionFunction (labeled_params, body) ->
       (* Function parameters *)
-      let tokens = List.fold_left (collect_from_pattern ~is_parameter:true) tokens params in
+      let tokens = List.fold_left (fun toks (_, p) ->
+        collect_from_pattern ~is_parameter:true toks p
+      ) tokens labeled_params in
       collect_from_expression tokens body
 
   | Typing.Typed_tree.TypedExpressionLet (_rec_flag, bindings, body) ->
@@ -330,6 +353,14 @@ let rec collect_from_expression tokens (expr : Typing.Typed_tree.typed_expressio
       | None -> tokens
       end
 
+  | Typing.Typed_tree.TypedExpressionPack _ ->
+      (* First-class module pack - not yet fully implemented *)
+      tokens
+
+  | Typing.Typed_tree.TypedExpressionLetModule _ ->
+      (* Local module binding - not yet fully implemented *)
+      tokens
+
   | Typing.Typed_tree.TypedExpressionError _ ->
       (* Error expressions don't produce semantic tokens *)
       tokens
@@ -395,6 +426,42 @@ and collect_from_structure_item tokens (item : Typing.Typed_tree.typed_structure
       | None -> tokens
       end
 
+  | Typing.Typed_tree.TypedStructureRecModule rec_bindings ->
+      (* Collect tokens from each recursive module binding *)
+      List.fold_left (fun tokens (binding : Typing.Typed_tree.typed_rec_module_binding) ->
+        let mod_name = Common.Identifier.name binding.rec_module_id in
+        let mod_loc = {
+          Common.Location.start_pos = binding.rec_module_location.start_pos;
+          end_pos = {
+            binding.rec_module_location.start_pos with
+            offset = binding.rec_module_location.start_pos.offset + String.length mod_name;
+            column = binding.rec_module_location.start_pos.column + String.length mod_name;
+          };
+        } in
+        let tokens = match make_token mod_loc TokenNamespace [ModDeclaration; ModStatic] with
+          | Some tok -> tok :: tokens
+          | None -> tokens
+        in
+        collect_from_module_expr tokens binding.rec_module_expr
+      ) tokens rec_bindings
+
+  | Typing.Typed_tree.TypedStructureTypeExtension ext ->
+      (* Type extension: highlight constructor names *)
+      List.fold_left (fun tokens ctor ->
+        let ctor_name = ctor.Typing.Types.constructor_name in
+        let ctor_loc = {
+          Common.Location.start_pos = ext.extension_location.start_pos;
+          end_pos = {
+            ext.extension_location.start_pos with
+            offset = ext.extension_location.start_pos.offset + String.length ctor_name;
+            column = ext.extension_location.start_pos.column + String.length ctor_name;
+          };
+        } in
+        match make_token ctor_loc TokenEnumMember [ModDeclaration] with
+        | Some tok -> tok :: tokens
+        | None -> tokens
+      ) tokens ext.extension_constructors
+
   | Typing.Typed_tree.TypedStructureError _ ->
       (* Error structure items don't produce semantic tokens *)
       tokens
@@ -413,6 +480,9 @@ and collect_from_module_expr tokens (mod_expr : Typing.Typed_tree.typed_module_e
       collect_from_module_expr tokens arg
   | Typing.Typed_tree.TypedModuleConstraint (inner, _mty) ->
       collect_from_module_expr tokens inner
+  | Typing.Typed_tree.TypedModuleUnpack _ ->
+      (* First-class module unpack - not yet fully implemented *)
+      tokens
 
 (** Compare tokens by position for sorting. *)
 let compare_tokens tok1 tok2 =

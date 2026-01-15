@@ -54,12 +54,15 @@ type value_description = {
 
 (** Parameter of a functor.
 
-    Represents the [X : S] part of [functor (X : S) -> ...]. *)
-type functor_parameter = {
-  parameter_name : string;               (** Name of the parameter module *)
-  parameter_id : Common.Identifier.t;    (** Unique identifier for code generation *)
-  parameter_type : module_type;          (** Required signature of the argument *)
-}
+    - Named [(X : S)]: Applicative functor, types are path-dependent on argument
+    - Unit [()]: Generative functor, types are fresh at each application *)
+type functor_parameter =
+  | FunctorParamNamed of {
+      parameter_name : string;               (** Name of the parameter module *)
+      parameter_id : Common.Identifier.t;    (** Unique identifier for code generation *)
+      parameter_type : module_type;          (** Required signature of the argument *)
+    }
+  | FunctorParamUnit  (** () - generative functor *)
 
 (** {1 Module Types} *)
 
@@ -100,6 +103,9 @@ and signature_item =
   | SigModuleType of string * module_type option
       (** [module type S = MT] - Module type declaration.
           [None] for abstract module types, [Some mt] for definitions. *)
+  | SigExtensionConstructor of Types.constructor_info
+      (** Extension constructor from [type t += Ctor] declarations.
+          Stored separately to support qualified access like [M.Ctor]. *)
 
 (** {1 Module Expressions} *)
 
@@ -190,3 +196,12 @@ val find_module_in_sig : string -> signature -> module_type option
             [Some None] if [module type name] (abstract) exists,
             [None] if no such declaration *)
 val find_module_type_in_sig : string -> signature -> module_type option option
+
+(** [find_constructor_in_sig name sig_] finds a constructor by name in a signature.
+    Searches through all type declarations in the signature for a constructor
+    with the given name.
+
+    @param name The constructor name to search for
+    @param sig_ The signature to search
+    @return [Some ctor_info] if found, [None] otherwise *)
+val find_constructor_in_sig : string -> signature -> Types.constructor_info option

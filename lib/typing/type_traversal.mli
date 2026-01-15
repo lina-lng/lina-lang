@@ -78,6 +78,18 @@ val map : (type_expression -> type_expression) -> type_expression -> type_expres
     @return The transformed row *)
 val map_row : (type_expression -> type_expression) -> row -> row
 
+(** [map_raw f ty] transforms [ty] without following union-find links.
+
+    Unlike [map], this function does NOT call [Types.representative] before
+    matching. This is essential for scheme instantiation during GADT pattern
+    matching, where rigid type variables may be temporarily linked for type
+    refinement but should still be treated as variables during instantiation.
+
+    @param f Transformation function for each type node
+    @param ty The type expression to transform
+    @return The transformed type expression *)
+val map_raw : (type_expression -> type_expression) -> type_expression -> type_expression
+
 (** {1 Folding} *)
 
 (** [fold f acc ty] folds over [ty] and all its sub-types (depth-first, pre-order).

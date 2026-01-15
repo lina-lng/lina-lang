@@ -106,8 +106,8 @@ let%expect_test "head_constructor_key: HCWildcard" =
   [%expect {| W |}]
 
 let%expect_test "head_constructor_key: HCConstructor includes name" =
-  print_endline (Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("Some", 1)));
-  print_endline (Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("None", 0)));
+  print_endline (Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("Some", 1, false)));
+  print_endline (Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("None", 0, false)));
   [%expect {|
     C:Some
     C:None |}]
@@ -181,7 +181,7 @@ let%expect_test "head_constructor_key: HCRecord empty fields" =
 let%expect_test "head_constructor_key: different constructors have different keys" =
   let keys = [
     Pattern_match.head_constructor_key Pattern_match.HCWildcard;
-    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("Foo", 0));
+    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("Foo", 0, false));
     Pattern_match.head_constructor_key (Pattern_match.HCConstant (Parsing.Syntax_tree.ConstantInteger 1));
     Pattern_match.head_constructor_key (Pattern_match.HCTuple 2);
     Pattern_match.head_constructor_key (Pattern_match.HCRecord ["x"]);
@@ -192,9 +192,9 @@ let%expect_test "head_constructor_key: different constructors have different key
 
 let%expect_test "head_constructor_key: same constructor type different values are distinct" =
   let keys = [
-    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("A", 0));
-    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("B", 0));
-    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("C", 1));
+    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("A", 0, false));
+    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("B", 0, false));
+    Pattern_match.head_constructor_key (Pattern_match.HCConstructor ("C", 1, false));
   ] in
   let unique_count = List.length (List.sort_uniq String.compare keys) in
   Printf.printf "all unique: %b" (unique_count = 3);

@@ -15,6 +15,7 @@ type t =
   | TK_REC
   | TK_IN
   | TK_FUN
+  | TK_FUNCTION
   | TK_IF
   | TK_THEN
   | TK_ELSE
@@ -79,6 +80,7 @@ type t =
   | TK_PLUS
   | TK_MINUS
   | TK_SLASH
+  | TK_CARET         (** ^ string concatenation *)
   | TK_LESS
   | TK_GREATER
   | TK_LESS_EQUAL
@@ -88,6 +90,10 @@ type t =
   | TK_REF           (** ref keyword *)
   | TK_BANG          (** ! dereference operator *)
   | TK_COLONEQUALS   (** := assignment operator *)
+  | TK_COLONCOLON    (** :: list cons operator *)
+  | TK_TILDE         (** ~ labeled argument prefix *)
+  | TK_QUESTION      (** ? optional argument prefix *)
+  | TK_PLUSEQUAL     (** += type extension *)
 
   (* Special *)
   | TK_EOF
@@ -202,7 +208,7 @@ type t =
 
 (** Check if a syntax kind is a token (as opposed to a node). *)
 let is_token = function
-  | TK_LET | TK_REC | TK_IN | TK_FUN | TK_IF | TK_THEN | TK_ELSE
+  | TK_LET | TK_REC | TK_IN | TK_FUN | TK_FUNCTION | TK_IF | TK_THEN | TK_ELSE
   | TK_TYPE | TK_OF | TK_AND | TK_AS | TK_MATCH | TK_WITH | TK_WHEN
   | TK_MODULE | TK_STRUCT | TK_END | TK_SIG | TK_FUNCTOR
   | TK_OPEN | TK_INCLUDE | TK_VAL | TK_PRIVATE | TK_CONSTRAINT | TK_EXTERNAL
@@ -211,10 +217,10 @@ let is_token = function
   | TK_LPAREN | TK_RPAREN | TK_LBRACKET | TK_RBRACKET | TK_LBRACE | TK_RBRACE
   | TK_COMMA | TK_SEMICOLON | TK_COLON | TK_DOT | TK_DOTDOT
   | TK_ARROW | TK_EQUAL | TK_BAR | TK_UNDERSCORE | TK_AT
-  | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH
+  | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH | TK_CARET
   | TK_LESS | TK_GREATER | TK_LESS_EQUAL | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL | TK_NOT_EQUAL
-  | TK_REF | TK_BANG | TK_COLONEQUALS
+  | TK_REF | TK_BANG | TK_COLONEQUALS | TK_COLONCOLON | TK_TILDE | TK_QUESTION | TK_PLUSEQUAL
   | TK_EOF
   | TK_WHITESPACE | TK_NEWLINE | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
   | _ -> false
@@ -234,7 +240,7 @@ let is_comment = function
 
 (** Check if a syntax kind is a keyword. *)
 let is_keyword = function
-  | TK_LET | TK_REC | TK_IN | TK_FUN | TK_IF | TK_THEN | TK_ELSE
+  | TK_LET | TK_REC | TK_IN | TK_FUN | TK_FUNCTION | TK_IF | TK_THEN | TK_ELSE
   | TK_TYPE | TK_OF | TK_AND | TK_AS | TK_MATCH | TK_WITH | TK_WHEN
   | TK_MODULE | TK_STRUCT | TK_END | TK_SIG | TK_FUNCTOR
   | TK_OPEN | TK_INCLUDE | TK_VAL | TK_PRIVATE | TK_CONSTRAINT | TK_EXTERNAL
@@ -249,10 +255,10 @@ let is_punctuation = function
 
 (** Check if a syntax kind is an operator. *)
 let is_operator = function
-  | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH
+  | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH | TK_CARET
   | TK_LESS | TK_GREATER | TK_LESS_EQUAL | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL | TK_NOT_EQUAL
-  | TK_BANG | TK_COLONEQUALS -> true
+  | TK_BANG | TK_COLONEQUALS | TK_COLONCOLON -> true
   | _ -> false
 
 (** Check if a syntax kind is an expression node. *)

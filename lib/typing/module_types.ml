@@ -18,12 +18,14 @@ type value_description = {
   value_location : Location.t;
 }
 
-(** Functor parameter *)
-type functor_parameter = {
-  parameter_name : string;
-  parameter_id : Common.Identifier.t;  (** Runtime identifier for this parameter *)
-  parameter_type : module_type;
-}
+(** Functor parameter: either named (applicative) or unit (generative) *)
+type functor_parameter =
+  | FunctorParamNamed of {
+      parameter_name : string;
+      parameter_id : Common.Identifier.t;  (** Runtime identifier for this parameter *)
+      parameter_type : module_type;
+    }
+  | FunctorParamUnit  (** () - generative functor, types are fresh each application *)
 
 (** Module types (signatures) *)
 and module_type =
@@ -44,6 +46,8 @@ and signature_item =
       (** module M : S *)
   | SigModuleType of string * module_type option
       (** module type S [= MT] *)
+  | SigExtensionConstructor of Types.constructor_info
+      (** Extension constructor from type t += Ctor *)
 
 (** Module expressions (typed) *)
 type module_expr =
@@ -69,8 +73,13 @@ let rec pp_module_type fmt = function
     List.iter (fun item -> Format.fprintf fmt "@,%a" pp_signature_item item) items;
     Format.fprintf fmt "@]@,end"
   | ModTypeFunctor (param, result) ->
-    Format.fprintf fmt "functor (%s : %a) -> %a"
-      param.parameter_name pp_module_type param.parameter_type pp_module_type result
+    begin match param with
+    | FunctorParamNamed { parameter_name; parameter_type; _ } ->
+      Format.fprintf fmt "functor (%s : %a) -> %a"
+        parameter_name pp_module_type parameter_type pp_module_type result
+    | FunctorParamUnit ->
+      Format.fprintf fmt "functor () -> %a" pp_module_type result
+    end
   | ModTypeIdent path ->
     Format.fprintf fmt "%s" (path_to_string path)
 
@@ -85,6 +94,8 @@ and pp_signature_item fmt = function
     Format.fprintf fmt "module type %s" name
   | SigModuleType (name, Some mty) ->
     Format.fprintf fmt "module type %s = %a" name pp_module_type mty
+  | SigExtensionConstructor ctor ->
+    Format.fprintf fmt "extension %s" ctor.Types.constructor_name
 
 let module_type_to_string mty =
   Format.asprintf "%a" pp_module_type mty
@@ -117,3 +128,18 @@ let find_module_type_in_sig name =
   find_in_sig (function
     | SigModuleType (n, mty) when n = name -> Some mty
     | _ -> None)
+
+(** Find a constructor in a signature by searching through all type declarations
+    and extension constructors. Returns the constructor_info if found. *)
+let find_constructor_in_sig name sig_ =
+  let find_in_type_decl decl =
+    match decl.Types.declaration_kind with
+    | Types.DeclarationVariant constructors ->
+      List.find_opt (fun ctor -> ctor.Types.constructor_name = name) constructors
+    | _ -> None
+  in
+  List.find_map (function
+    | SigType (_, decl) -> find_in_type_decl decl
+    | SigExtensionConstructor ctor when ctor.Types.constructor_name = name -> Some ctor
+    | _ -> None
+  ) sig_

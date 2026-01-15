@@ -1,0 +1,12 @@
+(* Alias captures GADT-refined type correctly *)
+
+type _ container =
+  | IntBox : int -> int container
+  | StrBox : string -> string container
+
+let extract_boxed : type a. a container -> a = fun c ->
+  match c with
+  | (IntBox n as box) -> n
+  | (StrBox s as box) -> s
+
+let () = print_int (extract_boxed (IntBox 42)); print_newline ()

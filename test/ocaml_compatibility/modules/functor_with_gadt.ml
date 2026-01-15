@@ -1,0 +1,29 @@
+(* Functor returning module with GADT-constrained types *)
+
+module type TYPED = sig
+  type _ t
+  val int_val : int -> int t
+  val bool_val : bool -> bool t
+  val get : 'a t -> 'a
+end
+
+module MakeTyped () : TYPED = struct
+  type _ t =
+    | Int : int -> int t
+    | Bool : bool -> bool t
+
+  let int_val n = Int n
+  let bool_val b = Bool b
+
+  let get : type a. a t -> a = function
+    | Int n -> n
+    | Bool b -> b
+end
+
+module T = MakeTyped ()
+
+let n = T.get (T.int_val 42)
+let b = T.get (T.bool_val true)
+
+let () = print_int n; print_newline ()
+let () = print_string (string_of_bool b); print_newline ()

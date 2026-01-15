@@ -1,0 +1,12 @@
+(* Optional argument can be omitted *)
+
+let describe ?prefix value =
+  match prefix with
+  | Some p -> p ^ ": " ^ value
+  | None -> value
+
+let msg1 = describe "test"
+let msg2 = describe ~prefix:"Label" "test"
+
+let _ = print msg1
+let _ = print msg2

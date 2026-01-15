@@ -35,11 +35,15 @@ let unify ctx loc ty1 ty2 =
     @return [Some path_components] if expr is a module path, [None] otherwise *)
 let rec extract_module_path env expr =
   match expr.Location.value with
-  | ExpressionConstructor (name, None) ->
-    (* Check if this is a module *)
-    begin match Environment.find_module name env with
-    | Some _ -> Some [name]
-    | None -> None
+  | ExpressionConstructor (longident, None) ->
+    (* Check if this is a module name - for simple Lident only *)
+    begin match longident.Location.value with
+    | Lident name ->
+      begin match Environment.find_module name env with
+      | Some _ -> Some [name]
+      | None -> None
+      end
+    | Ldot _ -> None (* Qualified constructors are not module paths *)
     end
   | ExpressionRecordAccess (inner, component) ->
     (* Recursively check if inner is a module path *)
@@ -144,9 +148,29 @@ let infer_record_access ~(infer_expr : expression_infer_fn) ctx loc record_expr 
             expression_location = loc;
           }, ctx)
         | None ->
-          let path_str = String.concat "." path_components in
-          Compiler_error.type_error loc
-            (Printf.sprintf "Value %s not found in module %s" field_name path_str)
+          (* Not a value - check if it's a constructor (uppercase names) *)
+          begin match Module_types.find_constructor_in_sig field_name sig_ with
+          | Some ctor_info ->
+            (* Found a constructor - instantiate and return *)
+            let level = Typing_context.current_level ctx in
+            let fresh_var () = Types.new_type_variable_at_level level in
+            let arg_type_opt, result_type = Type_utils.instantiate_constructor ~fresh_var ctor_info in
+            (* For constructors with arguments, return arrow type since we return
+               the constructor without its argument applied *)
+            let expr_type = match arg_type_opt with
+              | None -> result_type
+              | Some arg_type -> Types.TypeArrow (Types.Nolabel, arg_type, result_type)
+            in
+            ({
+              expression_desc = TypedExpressionConstructor (ctor_info, None);
+              expression_type = expr_type;
+              expression_location = loc;
+            }, ctx)
+          | None ->
+            let path_str = String.concat "." path_components in
+            Compiler_error.type_error loc
+              (Printf.sprintf "Value or constructor %s not found in module %s" field_name path_str)
+          end
         end
       end
     | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->

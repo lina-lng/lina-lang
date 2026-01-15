@@ -1,0 +1,13 @@
+(* Pattern matching on extension constructors with wildcard *)
+
+type msg = ..
+type msg += Hello | Goodbye of string
+
+let handle m =
+  match m with
+  | Hello -> "hi"
+  | Goodbye name -> "bye " ^ name
+  | _ -> "?"
+
+let _ = print (handle Hello)
+let _ = print (handle (Goodbye "friend"))

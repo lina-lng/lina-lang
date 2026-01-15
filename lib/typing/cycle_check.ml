@@ -37,6 +37,7 @@ let is_contractive_constructor env path =
       begin match decl.declaration_kind with
       | DeclarationVariant _ -> true  (* Variants are contractive *)
       | DeclarationRecord _ -> true   (* Records are contractive *)
+      | DeclarationExtensible -> true (* Extensible variants are contractive *)
       | DeclarationAbstract ->
         (* Type aliases are NOT contractive *)
         Option.is_none decl.declaration_manifest
@@ -90,7 +91,7 @@ let rec check_type ~env ~recursive_set ~visited ~contractive ~loc ty =
     List.iter (check_type ~env ~recursive_set ~visited
                  ~contractive:new_contractive ~loc) args
 
-  | TypeArrow (arg, result) ->
+  | TypeArrow (_, arg, result) ->
     (* Arrow types are NOT contractive *)
     check_type ~env ~recursive_set ~visited ~contractive ~loc arg;
     check_type ~env ~recursive_set ~visited ~contractive ~loc result
@@ -109,6 +110,12 @@ let rec check_type ~env ~recursive_set ~visited ~contractive ~loc ty =
 
   | TypeRowEmpty ->
     ()
+
+  | TypePackage pkg ->
+    (* Check all types in the package signature *)
+    List.iter (fun (_, ty) ->
+      check_type ~env ~recursive_set ~visited ~contractive:true ~loc ty
+    ) pkg.package_signature
 
 and check_row ~env ~recursive_set ~visited ~contractive ~loc row =
   List.iter (fun (_, field) ->
@@ -163,6 +170,10 @@ let check_type_definition ~env ~loc name _params kind manifest =
       check_type ~env ~recursive_set ~visited ~contractive:true ~loc field_ty
     ) fields
 
+  | DeclarationExtensible, _ ->
+    (* Extensible type: no constructors defined yet, nothing to check *)
+    ()
+
   | DeclarationAbstract, None ->
     (* Abstract type: no body to check *)
     ()
@@ -200,6 +211,9 @@ let check_mutual_recursion ~env ~loc definitions =
           check_type ~env ~recursive_set:names ~visited ~contractive:true
             ~loc field_ty
         ) fields
+      | DeclarationExtensible, _ ->
+        (* Extensible type: no constructors defined yet *)
+        ()
       | DeclarationAbstract, None ->
         ()
       end;

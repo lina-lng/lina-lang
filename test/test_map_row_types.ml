@@ -138,7 +138,7 @@ let%expect_test "map_row_types: preserves field order" =
 
 let%expect_test "map_row_types: is shallow (doesn't recurse into nested types)" =
   (* Field type is int -> string, mapping should only touch the arrow itself *)
-  let arrow_ty = Types.TypeArrow (type_int, type_string) in
+  let arrow_ty = Types.TypeArrow (Nolabel, type_int, type_string) in
   let row = {
     Types.row_fields = [("f", Types.RowFieldPresent arrow_ty)];
     row_more = Types.TypeRowEmpty;
@@ -156,7 +156,7 @@ let%expect_test "map_row_types: identity function preserves structure" =
   let row = {
     Types.row_fields = [
       ("x", Types.RowFieldPresent type_int);
-      ("y", Types.RowFieldPresent (Types.TypeArrow (type_int, type_string)));
+      ("y", Types.RowFieldPresent (Types.TypeArrow (Nolabel, type_int, type_string)));
     ];
     row_more = Types.TypeRowEmpty;
   } in
@@ -164,7 +164,7 @@ let%expect_test "map_row_types: identity function preserves structure" =
   (* Check structure is preserved *)
   let check = match result.row_fields with
     | [("x", Types.RowFieldPresent (Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, [])));
-       ("y", Types.RowFieldPresent (Types.TypeArrow (
+       ("y", Types.RowFieldPresent (Types.TypeArrow (Nolabel,
           Types.TypeConstructor (Types.PathBuiltin Types.BuiltinInt, []),
           Types.TypeConstructor (Types.PathBuiltin Types.BuiltinString, []))))] ->
       true

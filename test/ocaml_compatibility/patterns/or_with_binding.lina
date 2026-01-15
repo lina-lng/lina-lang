@@ -1,0 +1,10 @@
+(* Or-patterns: both branches bind same variable *)
+(* Expected: ACCEPT - x is bound in both branches with same type *)
+
+type result = Ok of int | Error of int
+
+let get_value = fun r ->
+  match r with
+  | Ok x | Error x -> x
+
+let _ = print (get_value (Ok 42))

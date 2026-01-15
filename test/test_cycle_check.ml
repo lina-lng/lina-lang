@@ -134,6 +134,7 @@ let%expect_test "cycle check: recursive variant is ok (guarded)" =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationVariant constructors;
     declaration_variances = [Types.Covariant];
+    declaration_injectivities = [true];
     declaration_private = false;
     declaration_constraints = [];
   } in
@@ -223,6 +224,7 @@ let%expect_test "mutual recursion: guarded mutual types are ok" =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationVariant even_ctors;
     declaration_variances = [];
+    declaration_injectivities = [];
     declaration_private = false;
     declaration_constraints = [];
   } in
@@ -233,6 +235,7 @@ let%expect_test "mutual recursion: guarded mutual types are ok" =
     declaration_manifest = None;
     declaration_kind = Types.DeclarationVariant odd_ctors;
     declaration_variances = [];
+    declaration_injectivities = [];
     declaration_private = false;
     declaration_constraints = [];
   } in

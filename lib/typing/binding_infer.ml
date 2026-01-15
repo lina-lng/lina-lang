@@ -81,6 +81,13 @@ let rec collect_pattern_bindings pattern =
     []
   | TypedPatternPolyVariant (_, Some p) ->
     collect_pattern_bindings p
+  | TypedPatternAlias (inner, id) ->
+    (* Alias pattern: collect bindings from inner pattern plus the alias itself *)
+    let inner_bindings = collect_pattern_bindings inner in
+    (Identifier.name id, id, pattern.pattern_type) :: inner_bindings
+  | TypedPatternOr (left, _right) ->
+    (* Or-pattern: both branches bind same variables, just collect from left *)
+    collect_pattern_bindings left
   | TypedPatternError _ ->
     []
 
@@ -189,6 +196,7 @@ let infer_bindings
                 Types.declaration_name = var_name;
                 declaration_parameters = [];
                 declaration_variances = [];
+                declaration_injectivities = [];
                 declaration_manifest = Some (Types.TypeVariable fresh_tv);
                 declaration_kind = Types.DeclarationAbstract;
                 declaration_private = false;
@@ -226,6 +234,23 @@ let infer_bindings
           let ctx = Typing_context.enter_level ctx in
           let typed_pat, pat_ty, ctx = Pattern_infer.infer_pattern ctx binding.binding_pattern in
           unify ctx binding.binding_location pat_ty typed_expr.expression_type;
+
+          (* Mark existential type variables as weak to prevent generalization.
+             This ensures existential types from GADT patterns don't escape via
+             let-polymorphism. *)
+          let existential_ids = Gadt.collect_existentials_from_pattern typed_pat in
+          List.iter (fun var_id ->
+            let pattern_bindings = collect_pattern_bindings typed_pat in
+            List.iter (fun (_, _, ty) ->
+              Type_traversal.iter (fun t ->
+                match t with
+                | Types.TypeVariable tv when tv.Types.id = var_id ->
+                  tv.Types.weak <- true
+                | _ -> ()
+              ) ty
+            ) pattern_bindings
+          ) existential_ids;
+
           let env = Typing_context.environment ctx in
           (* Apply value restriction: only generalize if expression is a value. *)
           let env =
@@ -309,6 +334,7 @@ let infer_bindings
                 Types.declaration_name = var_name;
                 declaration_parameters = [];
                 declaration_variances = [];
+                declaration_injectivities = [];
                 declaration_manifest = Some (TypeVariable tv);
                 declaration_kind = Types.DeclarationAbstract;
                 declaration_private = false;

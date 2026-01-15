@@ -58,6 +58,8 @@ let translate_primitive prim args =
     ExpressionBinaryOp (OpGreaterEqual, a, b)
   | Lambda.PrimitiveStringEqual, [a; b] ->
     ExpressionBinaryOp (OpEqual, a, b)
+  | Lambda.PrimitiveStringConcat, [a; b] ->
+    ExpressionBinaryOp (OpConcat, a, b)
   | Lambda.PrimitivePrint, [a] ->
     ExpressionCall (ExpressionVariable "print", [a])
   | Lambda.PrimitiveMakeBlock _, fields ->
@@ -220,13 +222,20 @@ let rec translate_expression ctx (lambda : Lambda.lambda) : expression * context
     let func_body, ctx = translate_to_statements ctx lambda in
     (ExpressionCall (ExpressionFunction ([], func_body), []), ctx)
 
-  | Lambda.LambdaConstructor (tag, None) when tag.Lambda.tag_is_nullary ->
-    (* Nullary constructor: use singleton *)
+  | Lambda.LambdaConstructor (tag, None) when tag.Lambda.tag_is_nullary && not tag.Lambda.tag_is_extension ->
+    (* Nullary constructor (non-extension): use singleton *)
     let ctx = register_singleton ctx tag.Lambda.tag_type_name tag.Lambda.tag_index in
     (ExpressionVariable (Singleton_registry.var_name tag.Lambda.tag_type_name tag.Lambda.tag_index), ctx)
 
   | Lambda.LambdaConstructor (tag, arg) ->
-    let fields = [FieldNamed ("_tag", ExpressionNumber (float_of_int tag.Lambda.tag_index))] in
+    (* Extension constructors use string tags for uniqueness *)
+    let tag_expr =
+      if tag.Lambda.tag_is_extension then
+        ExpressionString tag.Lambda.tag_name
+      else
+        ExpressionNumber (float_of_int tag.Lambda.tag_index)
+    in
+    let fields = [FieldNamed ("_tag", tag_expr)] in
     let fields, ctx = match arg with
       | None -> (fields, ctx)
       | Some arg_expr ->

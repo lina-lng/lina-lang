@@ -1,0 +1,8 @@
+(* Basic optional arguments *)
+let greet ?title name =
+  match title with
+  | Some t -> print t; print name
+  | None -> print name
+
+let _ = greet ?title:(Some "Mr.") "Smith"
+let _ = greet "Jones"

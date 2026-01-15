@@ -1,0 +1,10 @@
+(* Or-patterns: different variables in branches *)
+(* Expected: REJECT - x and y are different variable names *)
+
+type result = Ok of int | Error of int
+
+let get_value = fun r ->
+  match r with
+  | Ok x | Error y -> x
+
+let _ = print (get_value (Ok 42))

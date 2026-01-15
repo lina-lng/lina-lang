@@ -1,0 +1,17 @@
+(* Basic extensible variant test *)
+type ext = ..
+
+type ext += A
+type ext += B of int
+type ext += C of string * int
+
+let f x =
+  match x with
+  | A -> 1
+  | B n -> n
+  | C (_, n) -> n
+  | _ -> 0
+
+let _ = print (f A)
+let _ = print (f (B 42))
+let _ = print (f (C ("hello", 100)))

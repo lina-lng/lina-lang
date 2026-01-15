@@ -31,10 +31,12 @@ let has_weak_variables scheme =
     | Types.TypeVariable tv -> tv.weak
     | Types.TypeConstructor (_, args) -> List.exists check args
     | Types.TypeTuple elems -> List.exists check elems
-    | Types.TypeArrow (a, r) -> check a || check r
+    | Types.TypeArrow (_, a, r) -> check a || check r
     | Types.TypeRecord row -> check_row row
     | Types.TypePolyVariant pv_row -> check_poly_variant_row pv_row
     | Types.TypeRowEmpty -> false
+    | Types.TypePackage pkg ->
+      List.exists (fun (_, ty) -> check ty) pkg.package_signature
   and check_row row =
     List.exists (fun (_, field) ->
       match field with
@@ -200,28 +202,28 @@ let%expect_test "variance: variable in tuple is covariant" =
 
 let%expect_test "variance: variable on left of arrow is contravariant" =
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeArrow (Types.TypeVariable tv, Types.type_int) in
+  let ty = Types.TypeArrow (Nolabel, Types.TypeVariable tv, Types.type_int) in
   let variance = Value_check.check_variance tv ty in
   print_endline (variance_to_string variance);
   [%expect {| contravariant |}]
 
 let%expect_test "variance: variable on right of arrow is covariant" =
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeArrow (Types.type_int, Types.TypeVariable tv) in
+  let ty = Types.TypeArrow (Nolabel, Types.type_int, Types.TypeVariable tv) in
   let variance = Value_check.check_variance tv ty in
   print_endline (variance_to_string variance);
   [%expect {| covariant |}]
 
 let%expect_test "variance: variable on both sides of arrow is invariant" =
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeArrow (Types.TypeVariable tv, Types.TypeVariable tv) in
+  let ty = Types.TypeArrow (Nolabel, Types.TypeVariable tv, Types.TypeVariable tv) in
   let variance = Value_check.check_variance tv ty in
   print_endline (variance_to_string variance);
   [%expect {| invariant |}]
 
 let%expect_test "variance: absent variable is bivariant" =
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeArrow (Types.type_int, Types.type_string) in
+  let ty = Types.TypeArrow (Nolabel, Types.type_int, Types.type_string) in
   let variance = Value_check.check_variance tv ty in
   print_endline (variance_to_string variance);
   [%expect {| bivariant |}]
@@ -229,8 +231,8 @@ let%expect_test "variance: absent variable is bivariant" =
 let%expect_test "variance: nested contravariance flips to covariant" =
   (* ('a -> int) -> int has 'a in covariant position (double flip) *)
   let tv = make_test_type_var 0 in
-  let inner = Types.TypeArrow (Types.TypeVariable tv, Types.type_int) in
-  let ty = Types.TypeArrow (inner, Types.type_int) in
+  let inner = Types.TypeArrow (Nolabel, Types.TypeVariable tv, Types.type_int) in
+  let ty = Types.TypeArrow (Nolabel, inner, Types.type_int) in
   let variance = Value_check.check_variance tv ty in
   print_endline (variance_to_string variance);
   [%expect {| covariant |}]
@@ -261,13 +263,13 @@ let%expect_test "can_generalize_relaxed: covariant variable can be generalized" 
 
 let%expect_test "can_generalize_relaxed: contravariant variable cannot be generalized" =
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeArrow (Types.TypeVariable tv, Types.type_int) in
+  let ty = Types.TypeArrow (Nolabel, Types.TypeVariable tv, Types.type_int) in
   print_endline (if Value_check.can_generalize_relaxed tv ty then "yes" else "no");
   [%expect {| no |}]
 
 let%expect_test "can_generalize_relaxed: invariant variable cannot be generalized" =
   let tv = make_test_type_var 0 in
-  let ty = Types.TypeArrow (Types.TypeVariable tv, Types.TypeVariable tv) in
+  let ty = Types.TypeArrow (Nolabel, Types.TypeVariable tv, Types.TypeVariable tv) in
   print_endline (if Value_check.can_generalize_relaxed tv ty then "yes" else "no");
   [%expect {| no |}]
 

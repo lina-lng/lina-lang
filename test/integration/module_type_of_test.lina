@@ -1,0 +1,22 @@
+(* Test module type of *)
+
+module M = struct
+  type t = int
+  let x = 42
+  let double n = n * 2
+end
+
+(* Extract the signature of M *)
+module type S = module type of M
+
+(* Create a module matching that signature *)
+module N : S = struct
+  type t = int
+  let x = 100
+  let double n = n + n
+end
+
+let _ = print M.x
+let _ = print N.x
+let _ = print (M.double 5)
+let _ = print (N.double 5)

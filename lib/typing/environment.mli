@@ -37,8 +37,25 @@ type t
 val empty : t
 
 (** Initial environment with built-in bindings.
-    Includes [print] and other primitive operations. *)
+    Includes [print], [option] type, and other primitive operations. *)
 val initial : t
+
+(** {1 Built-in Option Type}
+
+    The option type and its constructors are built-in for optional arguments.
+    When a function has an optional parameter [?x:int], the internal type is
+    [int option]. When called with [~x:5], the argument is wrapped as [Some 5].
+    When the argument is omitted, it defaults to [None]. *)
+
+(** Type declaration for ['a option = None | Some of 'a].
+    Available in the initial environment. *)
+val option_type_declaration : Types.type_declaration
+
+(** Constructor info for [None : 'a option]. *)
+val none_constructor : Types.constructor_info
+
+(** Constructor info for [Some : 'a -> 'a option]. *)
+val some_constructor : Types.constructor_info
 
 (** {1 Value Bindings} *)
 
@@ -58,6 +75,15 @@ val add_value : string -> Common.Identifier.t -> Types.type_scheme -> Common.Loc
     @param env The environment to search
     @return [Some binding] if found, [None] otherwise *)
 val find_value : string -> t -> value_binding option
+
+(** [get_value_bindings env] returns all value bindings as a list.
+
+    Returns [(name, identifier, scheme)] tuples for all bound values.
+    Used for comparing environments in or-patterns.
+
+    @param env The environment to extract bindings from
+    @return List of (name, identifier, type scheme) triples *)
+val get_value_bindings : t -> (string * Common.Identifier.t * Types.type_scheme) list
 
 (** {1 Type Declarations} *)
 
@@ -112,6 +138,18 @@ val find_constructor : string -> t -> Types.constructor_info option
     @param env The environment to search
     @return [Some ctors] for variant types, [None] for abstract/non-existent *)
 val find_type_constructors : string -> t -> Types.constructor_info list option
+
+(** [find_constructor_by_path path_strings ctor_name env] looks up a constructor
+    through a module path.
+
+    For example, [find_constructor_by_path ["M"; "N"] "Some" env] looks for
+    constructor [Some] in module [M.N].
+
+    @param path_strings Module path components (empty for unqualified names)
+    @param ctor_name The constructor name
+    @param env The environment to search
+    @return [Some info] if found, [None] otherwise *)
+val find_constructor_by_path : string list -> string -> t -> Types.constructor_info option
 
 (** {1 Module Bindings} *)
 

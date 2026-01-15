@@ -1,0 +1,29 @@
+(* Signature subtyping with covariant/contravariant components *)
+
+module type READER = sig
+  type t
+  val read : t -> int
+end
+
+module type WRITER = sig
+  type t
+  val write : int -> t -> t
+end
+
+module type READWRITER = sig
+  type t
+  val read : t -> int
+  val write : int -> t -> t
+end
+
+(* READWRITER is a subtype of both READER and WRITER *)
+module RW : READWRITER = struct
+  type t = int list
+  let read = function [] -> 0 | x :: _ -> x
+  let write x xs = x :: xs
+end
+
+module R : READER = RW
+module W : WRITER = RW
+
+let _ = print (R.read [5; 6; 7])

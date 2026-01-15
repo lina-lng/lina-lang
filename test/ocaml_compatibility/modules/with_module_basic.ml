@@ -1,0 +1,24 @@
+(* Test with-module constraints *)
+
+module type INNER = sig
+  type t
+  val x : t
+end
+
+module type S = sig
+  module M : INNER
+end
+
+module MyM = struct
+  type t = int
+  let x = 42
+end
+
+module type S_WITH_M = S with module M = MyM
+
+module Impl : S_WITH_M = struct
+  module M = MyM
+end
+
+let result = Impl.M.x
+let () = print_int result; print_newline ()

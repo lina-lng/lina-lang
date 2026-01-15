@@ -1,0 +1,12 @@
+(* Nested polymorphic recursion with GADT *)
+
+type _ nested =
+  | Nil : 'a nested
+  | Cons : 'a * ('a * 'a) nested -> 'a nested
+
+let rec length : type a. a nested -> int = function
+  | Nil -> 0
+  | Cons (_, rest) -> 1 + length rest
+
+let test = Cons (1, Cons ((2, 3), Nil))
+let _ = print (length test)

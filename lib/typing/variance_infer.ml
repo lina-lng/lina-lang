@@ -72,7 +72,7 @@ let rec infer_variance_in_type
       None
       elements
 
-  | TypeArrow (arg_type, result_type) ->
+  | TypeArrow (_, arg_type, result_type) ->
     (* Argument is contravariant, result is covariant *)
     let arg_variance =
       infer_variance_in_type param_id (Variance.flip context_variance) arg_type
@@ -94,6 +94,18 @@ let rec infer_variance_in_type
 
   | TypeRowEmpty ->
     None
+
+  | TypePackage pkg ->
+    (* Check variance in all type constraints of the package *)
+    List.fold_left
+      (fun accumulated (_, ty) ->
+        let ty_variance = infer_variance_in_type param_id context_variance ty in
+        match accumulated, ty_variance with
+        | None, v -> v
+        | v, None -> v
+        | Some v1, Some v2 -> Some (Variance.combine v1 v2))
+      None
+      pkg.package_signature
 
 (** Check variance in a row type (for records). *)
 and infer_variance_in_row
@@ -202,6 +214,10 @@ let infer_declaration_variances
       (* If the parameter doesn't appear, it's bivariant (phantom type) *)
       Option.value variance_from_fields ~default:Bivariant
     ) params
+
+  | DeclarationExtensible ->
+    (* Extensible types: parameters are covariant (like variants) *)
+    List.map (fun _ -> Covariant) params
 
 (** Merge explicit variance annotations with inferred variances.
 
