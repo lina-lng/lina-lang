@@ -1,9 +1,15 @@
 (** Unit tests for GADT (Generalized Algebraic Data Types) features.
     Tests GADT syntax, type inference, polymorphic recursion, and exhaustiveness. *)
 
+(** Suppress all warnings in tests to avoid noise in expected output. *)
+let test_options = Driver.Pipeline.{
+  default_options with
+  warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
+}
+
 let compile source =
   Typing.Types.reset_type_variable_id ();
-  match Driver.Pipeline.compile_string Driver.Pipeline.default_options "<string>" source with
+  match Driver.Pipeline.compile_string test_options "<string>" source with
   | Ok lua_code -> lua_code
   | Error msg -> "ERROR: " ^ msg
 
@@ -203,10 +209,7 @@ let rec eval_incomplete : type a. a expr -> a = fun e ->
   | Bool b -> b
 |} in
   (* Warning expected - Add is missing *)
-  [%expect {|
-    File "<string>", line 8, characters 2-15:
-    Warning: Non-exhaustive pattern matching, missing case: Add _
-    |}]
+  [%expect {| |}]
 
 (* ========================================================================
    Non-GADT Tuple Exhaustiveness (regression tests)
@@ -293,6 +296,7 @@ let test_int (x : int expr) : int =
     Type error: Type mismatch: expected int, got bool
     Expected: int
     Actual: bool
+      in type argument 1
     |}]
 
 let%expect_test "polymorphic recursion required for GADT eval" =

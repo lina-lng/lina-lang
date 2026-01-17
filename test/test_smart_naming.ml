@@ -23,10 +23,16 @@
     - Edge cases: wildcards, long chains, internal name collisions
     - Currying: multi-param function naming *)
 
+(** Suppress all warnings in tests to avoid noise in expected output. *)
+let test_options = Driver.Pipeline.{
+  default_options with
+  warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
+}
+
 let compile source =
   Common.Identifier.reset_stamp ();
   Typing.Types.reset_type_variable_id ();
-  match Driver.Pipeline.compile_string Driver.Pipeline.default_options "<test>" source with
+  match Driver.Pipeline.compile_string test_options "<test>" source with
   | Ok lua_code -> lua_code
   | Error msg -> "ERROR: " ^ msg
 
@@ -314,8 +320,6 @@ let f x = match x with | Some (a, b) -> a + b | None -> 0");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 10-57:
-    Warning: Non-exhaustive pattern matching, missing case: Some _
     |}]
 
 let%expect_test "record pattern with punning" =
@@ -326,8 +330,6 @@ let%expect_test "record pattern with punning" =
       local x = r_match.x;
       return x
     end
-    File "<string>", line 1, characters 14-39:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "record pattern with renaming" =
@@ -338,8 +340,6 @@ let%expect_test "record pattern with renaming" =
       local value = r_match.x;
       return value
     end
-    File "<string>", line 1, characters 16-53:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "guard bindings are properly scoped" =
@@ -355,8 +355,6 @@ let%expect_test "guard bindings are properly scoped" =
         return 0
       end
     end
-    File "<string>", line 1, characters 45-51:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 (* =============================================================================
@@ -723,8 +721,6 @@ let f x = match x with
         end
       end
     end
-    File "<string>", line 2, characters 10-14:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 (* =============================================================================

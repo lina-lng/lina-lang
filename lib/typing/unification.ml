@@ -4,15 +4,72 @@ open Types
 (** String set for efficient label membership testing *)
 module StringSet = Set.Make(String)
 
+(** Partition two lists of labeled fields into merged labels and remaining fields.
+    Returns (all_labels, fields_only_in_first, fields_only_in_second). *)
+let partition_row_fields fields1 fields2 =
+  let labels1 = List.map fst fields1 in
+  let labels2 = List.map fst fields2 in
+  let all_labels = List.sort_uniq String.compare (labels1 @ labels2) in
+  let set1 = StringSet.of_list labels1 in
+  let set2 = StringSet.of_list labels2 in
+  let remaining1 = List.filter (fun (label, _) -> not (StringSet.mem label set2)) fields1 in
+  let remaining2 = List.filter (fun (label, _) -> not (StringSet.mem label set1)) fields2 in
+  (all_labels, remaining1, remaining2)
+
+(** Unification trace element - shows the path of comparisons that led to an error. *)
+type trace_element =
+  | TraceDiff of { expected : type_expression; actual : type_expression }
+  | TraceRecordField of string
+  | TraceTupleElement of int
+  | TraceFunctionArg
+  | TraceFunctionResult
+  | TraceConstructorArg of int
+  | TracePolyVariantTag of string
+
+let trace_element_to_string = function
+  | TraceDiff { expected; actual } ->
+    Printf.sprintf "comparing %s with %s"
+      (type_expression_to_string expected)
+      (type_expression_to_string actual)
+  | TraceRecordField name -> Printf.sprintf "in record field '%s'" name
+  | TraceTupleElement idx -> Printf.sprintf "in tuple element %d" (idx + 1)
+  | TraceFunctionArg -> "in function argument"
+  | TraceFunctionResult -> "in function result"
+  | TraceConstructorArg idx -> Printf.sprintf "in type argument %d" (idx + 1)
+  | TracePolyVariantTag tag -> Printf.sprintf "in polymorphic variant `%s" tag
+
 exception Unification_error of {
   expected : type_expression;
   actual : type_expression;
   location : Location.t;
   message : string;
+  trace : trace_element list;
 }
 
+(** Current unification trace - thread-local storage for trace elements. *)
+let current_trace : trace_element list ref = ref []
+
 let unification_error location expected actual message =
-  raise (Unification_error { expected; actual; location; message })
+  let trace = !current_trace in
+  current_trace := [];
+  raise (Unification_error { expected; actual; location; message; trace })
+
+let with_trace_element elem f =
+  current_trace := elem :: !current_trace;
+  try
+    let result = f () in
+    current_trace := List.tl !current_trace;
+    result
+  with e ->
+    (* Don't clear trace on error - it's captured in unification_error *)
+    raise e
+
+(** Format unification trace for error messages. *)
+let format_trace trace =
+  if trace = [] then ""
+  else
+    let trace_strs = List.rev_map trace_element_to_string trace in
+    "\n  " ^ String.concat "\n  " trace_strs
 
 (** Type expansion: expand type aliases to their definitions *)
 
@@ -22,10 +79,18 @@ type type_lookup = path -> type_declaration option
 (** Set of paths, used for cycle detection during type alias expansion *)
 module PathSet = Set.Make(struct
   type t = path
-  let compare = compare  (* Use structural comparison for paths *)
+  let compare = compare
 end)
 
 exception Cyclic_type_alias of path
+
+(** Map a function over items and collect results, tracking whether any changed.
+    Returns (mapped_items, any_expanded). *)
+let map_expand_collect expand_fn items =
+  let results = List.map expand_fn items in
+  let expanded_items = List.map fst results in
+  let any_expanded = List.exists snd results in
+  (expanded_items, any_expanded)
 
 (* Expand a type by following aliases. Returns (expanded_ty, did_expand).
    The 'visiting' parameter tracks paths being expanded to detect cycles. *)
@@ -46,12 +111,10 @@ let rec expand_type_aux ~type_lookup visiting ty =
       end
     | _ ->
       (* Not an alias - recursively expand type arguments *)
-      let results = List.map (expand_type_aux ~type_lookup visiting) args in
-      let any_expanded = List.exists snd results in
-      if any_expanded then
-        (TypeConstructor (path, List.map fst results), true)
-      else
-        (ty, false)
+      let expanded_args, any_expanded =
+        map_expand_collect (expand_type_aux ~type_lookup visiting) args in
+      if any_expanded then (TypeConstructor (path, expanded_args), true)
+      else (ty, false)
     end
   | TypeArrow (_, arg, result) ->
     let (arg', arg_exp) = expand_type_aux ~type_lookup visiting arg in
@@ -61,12 +124,10 @@ let rec expand_type_aux ~type_lookup visiting ty =
     else
       (ty, false)
   | TypeTuple elements ->
-    let results = List.map (expand_type_aux ~type_lookup visiting) elements in
-    let any_expanded = List.exists snd results in
-    if any_expanded then
-      (TypeTuple (List.map fst results), true)
-    else
-      (ty, false)
+    let expanded_elems, any_expanded =
+      map_expand_collect (expand_type_aux ~type_lookup visiting) elements in
+    if any_expanded then (TypeTuple expanded_elems, true)
+    else (ty, false)
   | TypeRecord row ->
     let (row', expanded) = expand_row_aux ~type_lookup visiting row in
     if expanded then (TypeRecord row', true) else (ty, false)
@@ -299,11 +360,15 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
 
   | TypeConstructor (path1, args1), TypeConstructor (path2, args2) ->
     if path_equal path1 path2 then begin
-      (* Same type constructor - unify arguments *)
+      (* Same type constructor - unify arguments with trace *)
       if List.length args1 <> List.length args2 then
         unification_error location ty1 ty2
           "Type constructor arity mismatch";
-      List.iter2 (unify_full ~type_lookup ~fresh_type_var location) args1 args2
+      List.iteri (fun idx (arg1, arg2) ->
+        with_trace_element (TraceConstructorArg idx) (fun () ->
+          unify_full ~type_lookup ~fresh_type_var location arg1 arg2
+        )
+      ) (List.combine args1 args2)
     end else begin
       (* Different constructors - try expanding aliases *)
       try
@@ -327,11 +392,19 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
       unification_error location ty1 ty2
         (Printf.sprintf "Tuple size mismatch: expected %d elements, got %d"
           (List.length elems1) (List.length elems2));
-    List.iter2 (unify_full ~type_lookup ~fresh_type_var location) elems1 elems2
+    List.iteri (fun idx (e1, e2) ->
+      with_trace_element (TraceTupleElement idx) (fun () ->
+        unify_full ~type_lookup ~fresh_type_var location e1 e2
+      )
+    ) (List.combine elems1 elems2)
 
   | TypeArrow (_, arg1, res1), TypeArrow (_, arg2, res2) ->
-    unify_full ~type_lookup ~fresh_type_var location arg1 arg2;
-    unify_full ~type_lookup ~fresh_type_var location res1 res2
+    with_trace_element TraceFunctionArg (fun () ->
+      unify_full ~type_lookup ~fresh_type_var location arg1 arg2
+    );
+    with_trace_element TraceFunctionResult (fun () ->
+      unify_full ~type_lookup ~fresh_type_var location res1 res2
+    )
 
   | TypeRecord row1, TypeRecord row2 ->
     unify_rows_full ~type_lookup ~fresh_type_var location row1 row2
@@ -365,14 +438,26 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
   | _ ->
     unification_error location ty1 ty2 (type_mismatch_message ty1 ty2)
 
-(* Row unification using Leijen's row rewriting algorithm *)
-and unify_rows_full ~type_lookup ~fresh_type_var location row1 row2 =
-  (* Collect all labels from both rows *)
-  let labels1 = List.map fst row1.row_fields in
-  let labels2 = List.map fst row2.row_fields in
-  let all_labels = List.sort_uniq compare (labels1 @ labels2) in
+(** Unify remaining row fields after matching common labels/tags.
+    The make_row_type callback constructs the appropriate row type (record or poly variant). *)
+and unify_remaining_row_fields ~type_lookup ~fresh_type_var location
+    ~make_row_type ~more1 ~more2 remaining1 remaining2 =
+  match remaining1, remaining2 with
+  | [], [] ->
+    unify_full ~type_lookup ~fresh_type_var location more1 more2
+  | _, [] when remaining1 <> [] ->
+    unify_full ~type_lookup ~fresh_type_var location more2 (make_row_type remaining1 more1)
+  | [], _ when remaining2 <> [] ->
+    unify_full ~type_lookup ~fresh_type_var location more1 (make_row_type remaining2 more2)
+  | _, _ ->
+    let fresh_more = fresh_type_var () in
+    unify_full ~type_lookup ~fresh_type_var location more1 (make_row_type remaining2 fresh_more);
+    unify_full ~type_lookup ~fresh_type_var location more2 (make_row_type remaining1 fresh_more)
 
-  (* For each label, find field in both rows and unify *)
+and unify_rows_full ~type_lookup ~fresh_type_var location row1 row2 =
+  let all_labels, remaining1, remaining2 =
+    partition_row_fields row1.row_fields row2.row_fields in
+
   List.iter (fun label ->
     let field1 = List.assoc_opt label row1.row_fields in
     let field2 = List.assoc_opt label row2.row_fields in
@@ -380,36 +465,16 @@ and unify_rows_full ~type_lookup ~fresh_type_var location row1 row2 =
     | Some (RowFieldPresent ty1), Some (RowFieldPresent ty2) ->
       unify_full ~type_lookup ~fresh_type_var location ty1 ty2
     | Some (RowFieldPresent ty), None ->
-      (* Label in row1 but not row2 - unify row2.row_more to include it *)
       unify_row_with_field_full ~type_lookup ~fresh_type_var location row2.row_more label ty
     | None, Some (RowFieldPresent ty) ->
-      (* Label in row2 but not row1 - unify row1.row_more to include it *)
       unify_row_with_field_full ~type_lookup ~fresh_type_var location row1.row_more label ty
-    | None, None ->
-      ()  (* Should not happen if we built all_labels correctly *)
+    | None, None -> ()
   ) all_labels;
 
-  (* Unify the remaining row tails using sets for O(n log n) instead of O(n²) *)
-  let labels1_set = StringSet.of_list labels1 in
-  let labels2_set = StringSet.of_list labels2 in
-  let remaining1 = List.filter (fun (l, _) -> not (StringSet.mem l labels2_set)) row1.row_fields in
-  let remaining2 = List.filter (fun (l, _) -> not (StringSet.mem l labels1_set)) row2.row_fields in
-
-  match remaining1, remaining2 with
-  | [], [] ->
-    (* All fields matched, unify tails *)
-    unify_full ~type_lookup ~fresh_type_var location row1.row_more row2.row_more
-  | _, [] when remaining1 <> [] ->
-    (* row1 has extra fields, unify row2.row_more with a record containing them *)
-    unify_full ~type_lookup ~fresh_type_var location row2.row_more (TypeRecord { row_fields = remaining1; row_more = row1.row_more })
-  | [], _ when remaining2 <> [] ->
-    (* row2 has extra fields, unify row1.row_more with a record containing them *)
-    unify_full ~type_lookup ~fresh_type_var location row1.row_more (TypeRecord { row_fields = remaining2; row_more = row2.row_more })
-  | _, _ ->
-    (* Both have extra fields - create fresh row variable and unify both tails *)
-    let fresh_more = fresh_type_var () in
-    unify_full ~type_lookup ~fresh_type_var location row1.row_more (TypeRecord { row_fields = remaining2; row_more = fresh_more });
-    unify_full ~type_lookup ~fresh_type_var location row2.row_more (TypeRecord { row_fields = remaining1; row_more = fresh_more })
+  let make_record fields more = TypeRecord { row_fields = fields; row_more = more } in
+  unify_remaining_row_fields ~type_lookup ~fresh_type_var location
+    ~make_row_type:make_record ~more1:row1.row_more ~more2:row2.row_more
+    remaining1 remaining2
 
 (* Unify a row tail with a field that should be present *)
 and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more label field_ty =
@@ -440,21 +505,15 @@ and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more lab
       (TypeRecord { row_fields = [(label, RowFieldPresent field_ty)]; row_more = TypeRowEmpty })
       "Expected row type"
 
-(* Polymorphic variant row unification.
-   Similar to record row unification but handles presence/absence of tags. *)
 and unify_poly_variant_rows_full ~type_lookup ~fresh_type_var location pv_row1 pv_row2 =
-  (* Collect all tags from both rows *)
-  let tags1 = List.map fst pv_row1.pv_fields in
-  let tags2 = List.map fst pv_row2.pv_fields in
-  let all_tags = List.sort_uniq compare (tags1 @ tags2) in
+  let all_tags, remaining1, remaining2 =
+    partition_row_fields pv_row1.pv_fields pv_row2.pv_fields in
 
-  (* For each tag, find field in both rows and unify *)
   List.iter (fun tag ->
     let field1 = List.assoc_opt tag pv_row1.pv_fields in
     let field2 = List.assoc_opt tag pv_row2.pv_fields in
     match field1, field2 with
     | Some (PVFieldPresent arg1), Some (PVFieldPresent arg2) ->
-      (* Both present - unify argument types if any *)
       begin match arg1, arg2 with
       | Some ty1, Some ty2 ->
         unify_full ~type_lookup ~fresh_type_var location ty1 ty2
@@ -464,71 +523,40 @@ and unify_poly_variant_rows_full ~type_lookup ~fresh_type_var location pv_row1 p
           (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
           (Printf.sprintf "Tag `%s arity mismatch" tag)
       end
-    | Some PVFieldAbsent, Some PVFieldAbsent ->
-      (* Both absent - OK *)
-      ()
+    | Some PVFieldAbsent, Some PVFieldAbsent -> ()
     | Some (PVFieldPresent _), Some PVFieldAbsent
     | Some PVFieldAbsent, Some (PVFieldPresent _) ->
-      (* One present, one absent - error *)
       unification_error location
         (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
         (Printf.sprintf "Tag `%s presence conflict" tag)
     | Some (PVFieldPresent arg_ty), None ->
-      (* Tag in row1 but not row2 - extend row2's more *)
       unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location
         pv_row2.pv_more tag (PVFieldPresent arg_ty)
     | None, Some (PVFieldPresent arg_ty) ->
-      (* Tag in row2 but not row1 - extend row1's more *)
       unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location
         pv_row1.pv_more tag (PVFieldPresent arg_ty)
-    | Some PVFieldAbsent, None | None, Some PVFieldAbsent ->
-      (* Absent tags don't need to be propagated to the other row *)
-      ()
-    | None, None ->
-      ()  (* Should not happen *)
+    | Some PVFieldAbsent, None | None, Some PVFieldAbsent -> ()
+    | None, None -> ()
   ) all_tags;
 
-  (* Unify the row tails *)
-  let tags1_set = StringSet.of_list tags1 in
-  let tags2_set = StringSet.of_list tags2 in
-  let remaining1 = List.filter (fun (t, _) -> not (StringSet.mem t tags2_set)) pv_row1.pv_fields in
-  let remaining2 = List.filter (fun (t, _) -> not (StringSet.mem t tags1_set)) pv_row2.pv_fields in
+  let make_pv_with_closed closed fields more =
+    TypePolyVariant { pv_fields = fields; pv_more = more; pv_closed = closed }
+  in
+  let make_pv1 = make_pv_with_closed pv_row1.pv_closed in
+  let make_pv2 = make_pv_with_closed pv_row2.pv_closed in
 
   match remaining1, remaining2 with
   | [], [] ->
-    (* All tags matched, unify tails *)
     unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more pv_row2.pv_more
   | _, [] when remaining1 <> [] ->
-    (* pv_row1 has extra tags, unify pv_row2.pv_more with a poly variant containing them *)
-    let new_pv = TypePolyVariant {
-      pv_fields = remaining1;
-      pv_more = pv_row1.pv_more;
-      pv_closed = pv_row1.pv_closed;
-    } in
-    unify_full ~type_lookup ~fresh_type_var location pv_row2.pv_more new_pv
+    unify_full ~type_lookup ~fresh_type_var location pv_row2.pv_more (make_pv1 remaining1 pv_row1.pv_more)
   | [], _ when remaining2 <> [] ->
-    (* pv_row2 has extra tags, unify pv_row1.pv_more with a poly variant containing them *)
-    let new_pv = TypePolyVariant {
-      pv_fields = remaining2;
-      pv_more = pv_row2.pv_more;
-      pv_closed = pv_row2.pv_closed;
-    } in
-    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more new_pv
+    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more (make_pv2 remaining2 pv_row2.pv_more)
   | _, _ ->
-    (* Both have extra tags - create fresh row variable and unify both tails *)
     let fresh_more = fresh_type_var () in
-    let new_pv1 = TypePolyVariant {
-      pv_fields = remaining2;
-      pv_more = fresh_more;
-      pv_closed = false;
-    } in
-    let new_pv2 = TypePolyVariant {
-      pv_fields = remaining1;
-      pv_more = fresh_more;
-      pv_closed = false;
-    } in
-    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more new_pv1;
-    unify_full ~type_lookup ~fresh_type_var location pv_row2.pv_more new_pv2
+    let make_open = make_pv_with_closed false in
+    unify_full ~type_lookup ~fresh_type_var location pv_row1.pv_more (make_open remaining2 fresh_more);
+    unify_full ~type_lookup ~fresh_type_var location pv_row2.pv_more (make_open remaining1 fresh_more)
 
 (* Unify a poly variant row tail with a tag that should be present *)
 and unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location row_more tag field =

@@ -2,7 +2,7 @@ type options = {
   dump_ast : bool;
   dump_typed : bool;
   dump_lambda : bool;
-  warning_config : Warning_config.t;
+  warning_config : Common.Warning_config.t;
 }
 
 val default_options : options

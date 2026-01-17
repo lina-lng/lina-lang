@@ -1,6 +1,12 @@
+(** Suppress all warnings in tests to avoid noise in expected output. *)
+let test_options = Driver.Pipeline.{
+  default_options with
+  warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
+}
+
 let compile source =
   Typing.Types.reset_type_variable_id ();
-  match Driver.Pipeline.compile_string Driver.Pipeline.default_options "<test>" source with
+  match Driver.Pipeline.compile_string test_options "<test>" source with
   | Ok lua_code -> lua_code
   | Error msg -> "ERROR: " ^ msg
 

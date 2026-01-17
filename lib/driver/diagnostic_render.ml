@@ -117,6 +117,18 @@ module Human = struct
         loc.start_pos.line
         loc.start_pos.column
 
+  let render_context_line terminal gutter_width line_num line_content =
+    let use_color = terminal.use_color in
+    let line_num_str = string_of_int line_num in
+    let line_num_padded =
+      String.make (gutter_width - String.length line_num_str - 1) ' ' ^ line_num_str
+    in
+    let pipe = if terminal.use_unicode then "|" else "|" in
+    Printf.sprintf "%s %s %s"
+      (Color.line_number use_color line_num_padded)
+      (Color.line_number use_color pipe)
+      line_content
+
   let render_source_line terminal sources (label : Compiler_error.label) =
     let loc = label.label_span in
     if Location.is_none loc then []
@@ -131,6 +143,15 @@ module Human = struct
       in
 
       let pipe = if terminal.use_unicode then "|" else "|" in
+
+      (* Add context line before if available *)
+      let context_before =
+        if line_num > 1 then
+          match get_line sources ~path:loc.start_pos.filename ~line:(line_num - 1) with
+          | Some content -> [render_context_line terminal gutter_width (line_num - 1) content]
+          | None -> []
+        else []
+      in
 
       match get_line sources ~path:loc.start_pos.filename ~line:line_num with
       | None ->
@@ -156,7 +177,7 @@ module Human = struct
             Color.info use_color underline
         in
 
-        let lines = [
+        let main_lines = [
           Printf.sprintf "%s %s"
             gutter_padding
             (Color.line_number use_color pipe);
@@ -171,24 +192,56 @@ module Human = struct
             colored_underline;
         ] in
 
-        match label.label_message with
-        | None -> lines
-        | Some msg ->
-          lines @ [
-            Printf.sprintf "%s %s %s%s"
-              gutter_padding
-              (Color.line_number use_color pipe)
-              underline_padding
-              (Color.error use_color msg)
-          ]
+        let with_message = match label.label_message with
+          | None -> main_lines
+          | Some msg ->
+            main_lines @ [
+              Printf.sprintf "%s %s %s%s"
+                gutter_padding
+                (Color.line_number use_color pipe)
+                underline_padding
+                (Color.error use_color msg)
+            ]
+        in
+
+        context_before @ with_message
 
   let render_note terminal note =
     let use_color = terminal.use_color in
     Printf.sprintf "%s: %s" (Color.note_label use_color "note") note
 
-  let render_hint terminal hint =
+  let render_suggestion terminal sources (sugg : Compiler_error.suggestion) =
     let use_color = terminal.use_color in
-    Printf.sprintf "%s: %s" (Color.hint use_color "hint") hint
+    let lines = [
+      Printf.sprintf "%s: %s" (Color.hint use_color "help") sugg.suggestion_message
+    ] in
+
+    (* Show the replacement if it's machine-applicable *)
+    if sugg.applicability = Compiler_error.MachineApplicable &&
+       sugg.replacement <> "" &&
+       not (Location.is_none sugg.suggestion_span) then
+      let loc = sugg.suggestion_span in
+      match get_line sources ~path:loc.start_pos.filename ~line:loc.start_pos.line with
+      | Some original_line ->
+        let start_col = max 0 (loc.start_pos.column - 1) in
+        let end_col =
+          if loc.start_pos.line = loc.end_pos.line then loc.end_pos.column - 1
+          else String.length original_line
+        in
+        let before = String.sub original_line 0 start_col in
+        let after =
+          if end_col < String.length original_line then
+            String.sub original_line end_col (String.length original_line - end_col)
+          else ""
+        in
+        let suggested_line = before ^ sugg.replacement ^ after in
+        lines @ [
+          Printf.sprintf "     %s %s"
+            (Color.line_number use_color "|")
+            (Color.info use_color suggested_line)
+        ]
+      | None -> lines
+    else lines
 
   let render terminal sources (diag : Compiler_error.diagnostic) =
     let buf = Buffer.create 256 in
@@ -219,10 +272,10 @@ module Human = struct
       add_line (render_note terminal note)
     ) diag.notes;
 
-    (* Suggestions as hints *)
-    List.iter (fun (sugg : Compiler_error.suggestion) ->
+    (* Suggestions with fix preview *)
+    List.iter (fun sugg ->
       add_line "";
-      add_line (render_hint terminal sugg.suggestion_message)
+      List.iter add_line (render_suggestion terminal sources sugg)
     ) diag.suggestions;
 
     Buffer.contents buf

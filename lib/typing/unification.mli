@@ -19,15 +19,39 @@
 
 open Common
 
+(** {1 Trace Types} *)
+
+(** Unification trace element - shows the path of comparisons that led to an error.
+    This helps users understand nested type mismatches like:
+    - "in tuple element 1"
+    - "in function argument"
+    - "in record field 'name'" *)
+type trace_element =
+  | TraceDiff of { expected : Types.type_expression; actual : Types.type_expression }
+  | TraceRecordField of string
+  | TraceTupleElement of int
+  | TraceFunctionArg
+  | TraceFunctionResult
+  | TraceConstructorArg of int
+  | TracePolyVariantTag of string
+
+(** Convert a trace element to a human-readable string. *)
+val trace_element_to_string : trace_element -> string
+
+(** Format a complete trace for error messages. *)
+val format_trace : trace_element list -> string
+
 (** {1 Errors} *)
 
 (** Raised when unification fails.
-    Contains both types and a human-readable message. *)
+    Contains both types, a human-readable message, and a trace showing
+    the path of type comparisons that led to the error. *)
 exception Unification_error of {
   expected : Types.type_expression;
   actual : Types.type_expression;
   location : Location.t;
   message : string;
+  trace : trace_element list;
 }
 
 (** {1 Configuration} *)

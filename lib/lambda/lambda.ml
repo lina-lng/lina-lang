@@ -80,6 +80,14 @@ and switch_case = {
   switch_body : lambda;
 }
 
+(** Categorized switch cases for decision tree translation. *)
+type categorized_switch_cases = {
+  constant_cases : (Parsing.Syntax_tree.constant * Pattern_match.decision_tree) list;
+  constructor_cases : ((string * int * bool) * Pattern_match.decision_tree) list;
+  poly_variant_cases : (string * Pattern_match.decision_tree) list;
+  fallback_cases : (Pattern_match.head_constructor * Pattern_match.decision_tree) list;
+}
+
 (** Get the binding name for a module binding.
     This is the name used for the module field in generated code. *)
 let module_binding_name (binding : module_binding) : string =
@@ -216,43 +224,47 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
     build_switch_if_chain ~config ~translate_tree target typed_cases default
   in
 
-  let constant_switch_cases, constructor_switch_cases, poly_variant_switch_cases, fallback_cases =
-    List.fold_left (fun (constants, constructors, poly_variants, fallbacks) (head, tree) ->
-      match head with
-      | Pattern_match.HCConstant c ->
-          ((c, tree) :: constants, constructors, poly_variants, fallbacks)
-      | Pattern_match.HCConstructor (name, tag_index, is_extension) ->
-          (constants, ((name, tag_index, is_extension), tree) :: constructors, poly_variants, fallbacks)
-      | Pattern_match.HCPolyVariant tag ->
-          (constants, constructors, (tag, tree) :: poly_variants, fallbacks)
-      | _ ->
-          (constants, constructors, poly_variants, (head, tree) :: fallbacks)
-    ) ([], [], [], []) cases
-  in
+  let empty_categorized = {
+    constant_cases = [];
+    constructor_cases = [];
+    poly_variant_cases = [];
+    fallback_cases = [];
+  } in
+
+  let categorized = List.fold_left (fun acc (head, tree) ->
+    match head with
+    | Pattern_match.HCConstant c ->
+      { acc with constant_cases = (c, tree) :: acc.constant_cases }
+    | Pattern_match.HCConstructor (name, tag_index, is_extension) ->
+      { acc with constructor_cases = ((name, tag_index, is_extension), tree) :: acc.constructor_cases }
+    | Pattern_match.HCPolyVariant tag ->
+      { acc with poly_variant_cases = (tag, tree) :: acc.poly_variant_cases }
+    | _ ->
+      { acc with fallback_cases = (head, tree) :: acc.fallback_cases }
+  ) empty_categorized cases in
 
   let has_only_constructors =
-    constructor_switch_cases <> [] &&
-    constant_switch_cases = [] &&
-    poly_variant_switch_cases = []
+    categorized.constructor_cases <> [] &&
+    categorized.constant_cases = [] &&
+    categorized.poly_variant_cases = []
   in
   let has_only_poly_variants =
-    poly_variant_switch_cases <> [] &&
-    constant_switch_cases = [] &&
-    constructor_switch_cases = []
+    categorized.poly_variant_cases <> [] &&
+    categorized.constant_cases = [] &&
+    categorized.constructor_cases = []
   in
-  let has_constants = constant_switch_cases <> [] in
 
   if has_only_constructors then
-    translate_dt_constructor_switch target constructor_switch_cases default translate_tree
+    translate_dt_constructor_switch target categorized.constructor_cases default translate_tree
 
   else if has_only_poly_variants then
-    simple_if_chain poly_variant_switch_config poly_variant_switch_cases
+    simple_if_chain poly_variant_switch_config categorized.poly_variant_cases
 
-  else if has_constants then
-    simple_if_chain constant_switch_config constant_switch_cases
+  else if categorized.constant_cases <> [] then
+    simple_if_chain constant_switch_config categorized.constant_cases
 
   else
-    match fallback_cases, default with
+    match categorized.fallback_cases, default with
     | [(_, tree)], _ -> translate_tree tree
     | [], Some default_tree -> translate_tree default_tree
     | _, _ -> translate_tree Pattern_match.DTFail
@@ -619,7 +631,6 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
 
   | TypedExpressionApply (func_expr, labeled_arg_exprs) ->
     let func = translate_expression func_expr in
-    (* Extract expressions from labeled pairs - Lua doesn't have labeled args *)
     let args = List.map (fun (_, e) -> translate_expression e) labeled_arg_exprs in
     begin match func with
     | LambdaVariable id ->
@@ -651,7 +662,6 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     LambdaFunction (param_ids, LambdaApply (func, all_args))
 
   | TypedExpressionFunction (labeled_param_patterns, body_expr) ->
-      (* Extract patterns from labeled pairs - Lua doesn't have labeled args *)
       let runtime_patterns = List.filter_map (fun (_, p : _ * typed_pattern) ->
         match p.pattern_desc with
         | TypedPatternLocallyAbstract _ -> None

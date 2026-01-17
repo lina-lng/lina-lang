@@ -984,9 +984,13 @@ and infer_structure_tolerant ctx structure =
       | Common.Compiler_error.Error compiler_err ->
           (* Record error and continue with current ctx *)
           (items, ctx, Inference_utils.CompilerError compiler_err :: errors)
-      | Unification.Unification_error { expected; actual; location; message } ->
-          (* Record error and continue with current ctx *)
-          let err_details : Inference_utils.unification_error_details = { expected; actual; location; message } in
+      | Unification.Unification_error { expected; actual; location; message; trace } ->
+          (* Record error and continue with current ctx - include trace in message *)
+          let message_with_trace =
+            if trace = [] then message
+            else message ^ Unification.format_trace trace
+          in
+          let err_details : Inference_utils.unification_error_details = { expected; actual; location; message = message_with_trace } in
           (items, ctx, Inference_utils.UnificationError err_details :: errors)
     ) ([], ctx, []) structure
   in

@@ -1,7 +1,3 @@
-(** Warning configuration system implementation. *)
-
-open Common
-
 type level =
   | Allow
   | Warn
@@ -18,10 +14,15 @@ type t = {
   default_level : level;
 }
 
-let default = {
-  levels = CodeMap.empty;
-  default_level = Warn;
-}
+let make_preset strict_mode_level =
+  let base = { levels = CodeMap.empty; default_level = Warn } in
+  List.fold_left
+    (fun cfg code -> { cfg with levels = CodeMap.add code strict_mode_level cfg.levels })
+    base
+    Error_code.strict_mode_codes
+
+(** Strict mode is the default: unused code warnings are errors. *)
+let default = make_preset Deny
 
 let set_level config code level =
   { config with levels = CodeMap.add code level config.levels }
@@ -41,7 +42,6 @@ let disable_all config = set_all_warnings config Allow
 
 let warn_error_all config = set_all_warnings config Deny
 
-(** Map of warning names to codes for command-line parsing. *)
 let warning_names = [
   ("unused", Error_code.w_unused_variable);
   ("unused-variable", Error_code.w_unused_variable);
@@ -49,6 +49,20 @@ let warning_names = [
   ("redundant", Error_code.w_redundant_pattern);
   ("redundant-pattern", Error_code.w_redundant_pattern);
   ("shadowing", Error_code.w_shadowing);
+
+  ("unused-function", Error_code.w_unused_function);
+  ("unused-parameter", Error_code.w_unused_parameter);
+  ("unused-module", Error_code.w_unused_module);
+  ("unused-open", Error_code.w_unused_open);
+  ("unused-type", Error_code.w_unused_type);
+  ("unused-constructor", Error_code.w_unused_constructor);
+  ("unused-field", Error_code.w_unused_field);
+  ("unused-rec", Error_code.w_unused_rec);
+  ("dead-code", Error_code.w_dead_code);
+
+  ("weak-type", Error_code.w_weak_type_variable);
+  ("deprecated", Error_code.w_deprecated);
+  ("complexity", Error_code.w_complexity);
 ]
 
 let find_warning_by_name name =
@@ -131,3 +145,17 @@ let is_fatal config code =
   match get_level config code with
   | Allow | Warn | Deny -> false
   | Forbid -> true
+
+let severity_for config code =
+  if is_error config code then Compiler_error.Error
+  else Compiler_error.Warning
+
+let relaxed = make_preset Warn
+
+(** Apply relaxed mode to a configuration.
+    Sets all strict-mode codes (unused detection, etc.) to Warn level. *)
+let apply_relaxed config =
+  List.fold_left
+    (fun cfg code -> set_level cfg code Warn)
+    config
+    Error_code.strict_mode_codes

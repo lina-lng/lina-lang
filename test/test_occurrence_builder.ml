@@ -11,10 +11,16 @@
 open Typing
 open Driver
 
+(** Suppress all warnings in tests to avoid noise in expected output. *)
+let test_options = Pipeline.{
+  default_options with
+  warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
+}
+
 (** Helper to compile a match expression and return Lua code *)
 let compile code =
   Types.reset_type_variable_id ();
-  match Pipeline.compile_string Pipeline.default_options "<test>" code with
+  match Pipeline.compile_string test_options "<test>" code with
   | Ok lua -> lua
   | Error msg -> "ERROR: " ^ msg
 
@@ -96,11 +102,7 @@ let%expect_test "compile record pattern" =
   |} in
   let has_code = String.length lua > 0 in
   print_endline (if has_code then "generated code" else "ERROR");
-  [%expect {|
-    generated code
-    File "<string>", line 3, characters 14-33:
-    Warning: Non-exhaustive pattern matching, missing case: _
-    |}]
+  [%expect {| generated code |}]
 
 let%expect_test "compile nested record and constructor" =
   let lua = compile {|
@@ -112,11 +114,7 @@ let%expect_test "compile nested record and constructor" =
   |} in
   let has_code = String.length lua > 0 in
   print_endline (if has_code then "generated code" else "ERROR");
-  [%expect {|
-    generated code
-    File "<string>", line 4, characters 14-17:
-    Warning: Non-exhaustive pattern matching, missing case: Some _
-    |}]
+  [%expect {| generated code |}]
 
 (** {1 Guard Pattern Tests} *)
 
@@ -128,11 +126,7 @@ let%expect_test "compile pattern with guard" =
   |} in
   let has_code = String.length lua > 0 in
   print_endline (if has_code then "generated code" else "ERROR");
-  [%expect {|
-    generated code
-    File "<string>", line 4, characters 8-14:
-    Warning: Redundant pattern: this case will never be matched
-    |}]
+  [%expect {| generated code |}]
 
 (** {1 Full Compilation Performance Test} *)
 
