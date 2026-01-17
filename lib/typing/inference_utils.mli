@@ -94,6 +94,17 @@ val check_constructor_arity :
     @raise Type_error if module type is a functor or abstract *)
 val ensure_module_accessible : Location.t -> Module_types.module_type -> unit
 
+(** [error_cannot_access_in_module_type loc mty action] raises a type error for
+    attempting an action on a non-signature module type.
+
+    @param loc Source location for error reporting
+    @param mty The module type (must be functor or abstract, not signature)
+    @param action Description of the action (e.g., "access module", "apply constraint")
+    @raise Type_error always
+    @raise Internal_error if called with a signature *)
+val error_cannot_access_in_module_type :
+  Location.t -> Module_types.module_type -> string -> 'a
+
 (** {1 Value Restriction and Generalization} *)
 
 (** [compute_binding_scheme ~level typed_expr ty] computes a type scheme for a binding
@@ -268,6 +279,21 @@ type expression_infer_expected_fn =
   Parsing.Syntax_tree.expression ->
   Typed_tree.typed_expression * Typing_context.t
 
+(** {1 GADT Existential Escape Checking} *)
+
+(** [check_existential_escape_or_error loc patterns result_type] checks that no
+    existential type variables from patterns escape through the result type.
+
+    Existential type variables introduced by GADT patterns in function parameters
+    or let bindings cannot appear in the function/expression's result type.
+
+    @param loc Source location for error messages
+    @param patterns List of typed patterns that may introduce existentials
+    @param result_type The type to check for escaping existentials
+    @raise Type_error if an existential would escape *)
+val check_existential_escape_or_error :
+  Location.t -> Typed_tree.typed_pattern list -> Types.type_expression -> unit
+
 (** {1 Error Helpers} *)
 
 (** [error_unbound_variable loc name] raises a type error for unbound variable.
@@ -305,7 +331,13 @@ val error_unbound_type : Location.t -> string -> 'a
     @raise Type_error always *)
 val error_unbound_module_type : Location.t -> string -> 'a
 
-(** {1 Label Formatting} *)
+(** {1 Label Conversion and Formatting} *)
+
+(** [convert_syntax_label label] converts a syntax label to a type system label.
+
+    @param label The syntax label from parsing
+    @return The corresponding [Types.arg_label] *)
+val convert_syntax_label : Parsing.Syntax_tree.arg_label -> Types.arg_label
 
 (** [format_arg_label label] formats an argument label for error messages.
 

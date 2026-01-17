@@ -9,17 +9,11 @@ open Doc
 
 let format_trivia_piece (piece : Green_tree.trivia_piece) : doc =
   match piece.trivia_kind with
-  | Syntax_kind.TK_WHITESPACE ->
-      (* Normalize horizontal whitespace to a single space *)
-      text " "
-  | Syntax_kind.TK_NEWLINE ->
-      (* Use literalline to preserve newlines without automatic indentation *)
-      literalline
+  | Syntax_kind.TK_WHITESPACE -> text " "
+  | Syntax_kind.TK_NEWLINE -> literalline
   | Syntax_kind.TK_LINE_COMMENT ->
-      (* Line comments include the -- prefix *)
       text piece.trivia_text
   | Syntax_kind.TK_BLOCK_COMMENT ->
-      (* Block comments may span multiple lines *)
       let lines = String.split_on_char '\n' piece.trivia_text in
       (match lines with
        | [] -> empty
@@ -33,9 +27,7 @@ let format_trivia_piece (piece : Green_tree.trivia_piece) : doc =
 
 let format_leading_trivia_piece (piece : Green_tree.trivia_piece) : doc =
   match piece.trivia_kind with
-  | Syntax_kind.TK_WHITESPACE ->
-      (* Skip leading whitespace - indentation is handled by the Doc system *)
-      empty
+  | Syntax_kind.TK_WHITESPACE -> empty  (* Doc system handles indentation *)
   | _ -> format_trivia_piece piece
 
 let format_leading_trivia (trivia : Green_tree.trivia_piece list) : doc =
@@ -45,19 +37,16 @@ let format_trailing_trivia (trivia : Green_tree.trivia_piece list) : doc =
   match trivia with
   | [] -> empty
   | _ ->
-      (* Only use line_suffix for line comments (they must stay at end of line).
-         Block comments should be emitted inline to preserve position. *)
+      let formatted = concat_list (List.map format_trivia_piece trivia) in
+
       let has_line_comment =
         List.exists
-          (fun (piece : Green_tree.trivia_piece) ->
-            match piece.trivia_kind with
-            | Syntax_kind.TK_LINE_COMMENT -> true
-            | _ -> false)
+          (fun piece -> Syntax_kind.equal piece.Green_tree.trivia_kind Syntax_kind.TK_LINE_COMMENT)
           trivia
       in
-      if has_line_comment then
-        line_suffix (concat_list (List.map format_trivia_piece trivia))
-      else concat_list (List.map format_trivia_piece trivia)
+
+      if has_line_comment then line_suffix formatted
+      else formatted
 
 (** {1 Token Formatting} *)
 
@@ -159,6 +148,14 @@ let format_node_list_sep ~sep formatter nodes =
   match nodes with
   | [] -> empty
   | _ -> format_separated sep (List.map formatter nodes)
+
+let format_with_prefix prefix formatter = function
+  | Some value -> prefix ^^ formatter value
+  | None -> empty
+
+let format_surrounded ~before ~after formatter = function
+  | Some value -> before ^^ formatter value ^^ after
+  | None -> empty
 
 (** {1 Required Accessor Combinators}
 

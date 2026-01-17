@@ -21,7 +21,8 @@ open Typed_tree
 let infer_module_expression_ref :
     (Typing_context.t -> module_expression -> Typed_tree.typed_module_expression * Typing_context.t) ref =
   ref (fun _ctx _mexpr ->
-    failwith "infer_module_expression not initialized - Structure_infer must set this")
+    Compiler_error.internal_error
+      "infer_module_expression not initialized - Structure_infer must set this")
 
 (** Unify types using context's environment for alias expansion. *)
 let unify = Inference_utils.unify
@@ -67,14 +68,19 @@ and longident_to_path (lid : Parsing.Syntax_tree.longident) : Types.path =
   | Parsing.Syntax_tree.Ldot (prefix, name) ->
     Types.PathDot (longident_to_path prefix, name)
 
-(** Extract up to [max_count] parameter labels from a function type.
+(** Extract parameter labels from a function type.
     Returns a list of (label, param_type) pairs and the remaining result type.
-    This limits extraction to avoid treating nested function returns as parameters. *)
-let rec extract_arrow_params_limited max_count ty =
-  if max_count <= 0 then ([], ty)
-  else match Types.representative ty with
+
+    @param max_count Optional limit on parameters to extract. If None, extracts all.
+                     Used to avoid treating nested function returns as parameters. *)
+let rec extract_arrow_params ?max_count ty =
+  match max_count with
+  | Some 0 -> ([], ty)
+  | _ ->
+    match Types.representative ty with
     | Types.TypeArrow (label, param_ty, result_ty) ->
-      let rest_params, final_result = extract_arrow_params_limited (max_count - 1) result_ty in
+      let next_count = Option.map (fun n -> n - 1) max_count in
+      let rest_params, final_result = extract_arrow_params ?max_count:next_count result_ty in
       ((label, param_ty) :: rest_params, final_result)
     | _ -> ([], ty)
 
@@ -86,9 +92,20 @@ let labels_match l1 l2 =
   | Types.Nolabel, Types.Nolabel -> true
   | Types.Labelled s1, Types.Labelled s2 -> s1 = s2
   | Types.Optional s1, Types.Optional s2 -> s1 = s2
-  | Types.Labelled s1, Types.Optional s2 -> s1 = s2  (* ~x can fill ?x *)
-  | Types.Optional s1, Types.Labelled s2 -> s1 = s2  (* ?x can fill ~x *)
+  | Types.Labelled s1, Types.Optional s2 -> s1 = s2
+  | Types.Optional s1, Types.Labelled s2 -> s1 = s2
   | _ -> false
+
+(** Find and remove an argument matching the given label from a list.
+    Returns [(found_opt, remaining_args)] where [found_opt] is the matching arg if any. *)
+let rec find_and_remove_labeled_arg label args =
+  match args with
+  | [] -> (None, [])
+  | (arg_label, arg) :: rest ->
+      if labels_match label arg_label then (Some (arg_label, arg), rest)
+      else
+        let found, remaining = find_and_remove_labeled_arg label rest in
+        (found, (arg_label, arg) :: remaining)
 
 (** {2 Optional Argument Wrapping}
 
@@ -116,6 +133,19 @@ let make_none_arg loc inner_ty =
     expression_location = loc;
   }
 
+(** Result of resolving a slot in function application. *)
+type resolved_slot =
+  | SlotResolved of Typed_tree.typed_expression
+  | SlotPending of Types.type_expression
+
+(** Resolve a slot to either a filled argument or a pending type.
+    Handles wrapping for optional parameters. *)
+let resolve_slot loc = function
+  | `Filled arg -> SlotResolved arg
+  | `FilledWrapped arg -> SlotResolved (wrap_in_some arg)
+  | `OptionalDefault inner_ty -> SlotResolved (make_none_arg loc inner_ty)
+  | `Needed ty -> SlotPending ty
+
 (** Reorder arguments to match the expected parameter order.
     Returns (matched_args, unused_args) where:
     - matched_args: slots in parameter order
@@ -133,56 +163,39 @@ let make_none_arg loc inner_ty =
     - Unlabeled params match unlabeled args in order
     - Optional params without args get default None *)
 let reorder_arguments expected_params provided_args =
-  (* Find and remove an argument matching the given label from a list.
-     Returns (found_opt, remaining_args) where found_opt is the matching arg if any. *)
-  let rec find_and_remove_arg label args =
-    match args with
-    | [] -> (None, [])
-    | (arg_label, arg) :: rest ->
-      if labels_match label arg_label then
-        (Some (arg_label, arg), rest)
-      else
-        let found, remaining = find_and_remove_arg label rest in
-        (found, (arg_label, arg) :: remaining)
+  let unlabeled_args, labeled_args =
+    List.partition (fun (l, _) -> match l with Types.Nolabel -> true | _ -> false) provided_args
   in
 
-  (* Split provided args into unlabeled and labeled *)
-  let unlabeled_args, labeled_args = List.partition (fun (l, _) ->
-    match l with Types.Nolabel -> true | _ -> false
-  ) provided_args in
-
-  (* Match a single parameter to a slot, consuming from argument pools.
-     Returns (slot, remaining_unlabeled, remaining_labeled). *)
   let match_param_to_slot (param_label, param_ty) unlabeled labeled =
     match param_label with
     | Types.Nolabel ->
-      begin match unlabeled with
-      | [] -> ((param_label, `Needed param_ty), unlabeled, labeled)
-      | (_, arg) :: rest -> ((param_label, `Filled arg), rest, labeled)
-      end
+        begin match unlabeled with
+        | [] -> ((param_label, `Needed param_ty), unlabeled, labeled)
+        | (_, arg) :: rest -> ((param_label, `Filled arg), rest, labeled)
+        end
 
     | Types.Labelled _ ->
-      let found, remaining_labeled = find_and_remove_arg param_label labeled in
-      begin match found with
-      | Some (_, arg) -> ((param_label, `Filled arg), unlabeled, remaining_labeled)
-      | None -> ((param_label, `Needed param_ty), unlabeled, remaining_labeled)
-      end
+        let found, remaining = find_and_remove_labeled_arg param_label labeled in
+        begin match found with
+        | Some (_, arg) -> ((param_label, `Filled arg), unlabeled, remaining)
+        | None -> ((param_label, `Needed param_ty), unlabeled, remaining)
+        end
 
     | Types.Optional _ ->
-      let found, remaining_labeled = find_and_remove_arg param_label labeled in
-      begin match found with
-      | Some (arg_label, arg) ->
-        let slot = match arg_label with
-          | Types.Labelled _ -> (param_label, `FilledWrapped arg)
-          | _ -> (param_label, `Filled arg)
-        in
-        (slot, unlabeled, remaining_labeled)
-      | None ->
-        ((param_label, `OptionalDefault param_ty), unlabeled, remaining_labeled)
-      end
+        let found, remaining = find_and_remove_labeled_arg param_label labeled in
+        begin match found with
+        | Some (arg_label, arg) ->
+            let slot = match arg_label with
+              | Types.Labelled _ -> (param_label, `FilledWrapped arg)
+              | _ -> (param_label, `Filled arg)
+            in
+            (slot, unlabeled, remaining)
+        | None ->
+            ((param_label, `OptionalDefault param_ty), unlabeled, remaining)
+        end
   in
 
-  (* Process all parameters, threading the argument pools through *)
   let slots_rev, remaining_unlabeled, remaining_labeled =
     List.fold_left (fun (slots, unlabeled, labeled) param ->
       let slot, unlabeled', labeled' = match_param_to_slot param unlabeled labeled in
@@ -221,6 +234,70 @@ let check_module_type_escape module_id ty =
     Function application with type-directed argument reordering.
     Handles labeled/optional arguments and partial application. *)
 
+(** Validate that there are no unused arguments after reordering.
+    Raises an appropriate type error if unused arguments are present. *)
+let validate_unused_arguments loc unused_args =
+  if unused_args = [] then ()
+  else
+    let unused_unlabeled =
+      List.filter (fun (l, _) -> match l with Types.Nolabel -> true | _ -> false) unused_args
+    in
+    let unused_labeled =
+      List.filter (fun (l, _) -> match l with Types.Nolabel -> false | _ -> true) unused_args
+    in
+
+    if unused_unlabeled <> [] then
+      Compiler_error.type_error loc
+        (Printf.sprintf "This function is applied to too many arguments (%d extra)"
+          (List.length unused_unlabeled))
+    else
+      let unused_names = List.map (fun (label, _) ->
+        Inference_utils.format_arg_label label
+      ) unused_labeled in
+      Compiler_error.type_error loc
+        (Printf.sprintf "This function has no parameter with label %s"
+          (String.concat ", " unused_names))
+
+(** Build a full application expression from filled slots. *)
+let build_full_application loc typed_func slots base_result_ty =
+  let ordered_args = List.map (fun (label, slot) ->
+    match resolve_slot loc slot with
+    | SlotResolved arg -> (label, arg)
+    | SlotPending _ ->
+        Compiler_error.internal_error "Pending slot in full application"
+  ) slots in
+
+  {
+    Typed_tree.expression_desc = Typed_tree.TypedExpressionApply (typed_func, ordered_args);
+    expression_type = base_result_ty;
+    expression_location = loc;
+  }
+
+(** Build a partial application expression from slots with unfilled params. *)
+let build_partial_application loc typed_func slots base_result_ty =
+  let typed_slots = List.map (fun (label, slot) ->
+    match resolve_slot loc slot with
+    | SlotResolved arg -> (label, Typed_tree.SlotFilled arg)
+    | SlotPending ty -> (label, Typed_tree.SlotNeeded ty)
+  ) slots in
+
+  let result_ty =
+    List.fold_right (fun (label, slot) acc ->
+      match resolve_slot loc slot with
+      | SlotPending param_ty -> Types.TypeArrow (label, param_ty, acc)
+      | SlotResolved _ -> acc
+    ) slots base_result_ty
+  in
+
+  {
+    Typed_tree.expression_desc = Typed_tree.TypedExpressionPartialApply {
+      partial_func = typed_func;
+      partial_slots = typed_slots;
+    };
+    expression_type = result_ty;
+    expression_location = loc;
+  }
+
 (** Infer type for function application.
     Handles labeled arguments, optional argument defaulting, and partial application.
 
@@ -233,27 +310,20 @@ let check_module_type_escape module_id ty =
 let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
   let typed_func, ctx = infer_expr ctx func_expr in
 
-  (* Infer types for all provided arguments *)
   let typed_labeled_args, ctx =
     List.fold_left (fun (acc, ctx) (label, arg_expr) ->
       let typed_arg, ctx = infer_expr ctx arg_expr in
-      let types_label = match label with
-        | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
-        | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
-        | Parsing.Syntax_tree.Optional s -> Types.Optional s
-      in
+      let types_label = Inference_utils.convert_syntax_label label in
       ((types_label, typed_arg) :: acc, ctx)
     ) ([], ctx) labeled_arg_exprs
   in
   let typed_labeled_args = List.rev typed_labeled_args in
   let num_provided_args = List.length typed_labeled_args in
 
-  (* Check if any argument has a label - affects param extraction strategy *)
   let has_labeled_arg = List.exists (fun (label, _) ->
     match label with Types.Nolabel -> false | _ -> true
   ) typed_labeled_args in
 
-  (* Check if function type has optional parameters that might need defaulting *)
   let rec has_optional_param ty =
     match Types.representative ty with
     | Types.TypeArrow (Types.Optional _, _, _) -> true
@@ -262,21 +332,11 @@ let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
   in
   let func_has_optional = has_optional_param typed_func.expression_type in
 
-  (* Extract expected parameters from function type.
-     - With labeled args or optional params: extract ALL params (for matching)
-     - Otherwise: extract only as many as we have arguments *)
   let expected_params, base_result_ty =
     if has_labeled_arg || func_has_optional then
-      let rec extract_all_arrow_params ty =
-        match Types.representative ty with
-        | Types.TypeArrow (label, param_ty, result_ty) ->
-          let rest_params, final_result = extract_all_arrow_params result_ty in
-          ((label, param_ty) :: rest_params, final_result)
-        | _ -> ([], ty)
-      in
-      extract_all_arrow_params typed_func.expression_type
+      extract_arrow_params typed_func.expression_type
     else
-      extract_arrow_params_limited num_provided_args typed_func.expression_type
+      extract_arrow_params ~max_count:num_provided_args typed_func.expression_type
   in
 
   if expected_params = [] then begin
@@ -295,33 +355,10 @@ let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
     }, ctx)
   end
   else begin
-    (* Match arguments to parameters *)
     let slots, unused_args = reorder_arguments expected_params typed_labeled_args in
 
-    (* Check for unused arguments *)
-    if unused_args <> [] then begin
-      let unused_unlabeled = List.filter (fun (l, _) ->
-        match l with Types.Nolabel -> true | _ -> false
-      ) unused_args in
-      let unused_labeled = List.filter (fun (l, _) ->
-        match l with Types.Nolabel -> false | _ -> true
-      ) unused_args in
+    validate_unused_arguments loc unused_args;
 
-      if unused_unlabeled <> [] then
-        Compiler_error.type_error loc
-          (Printf.sprintf "This function is applied to too many arguments (%d extra)"
-            (List.length unused_unlabeled))
-      else begin
-        let unused_names = List.map (fun (label, _) ->
-          Inference_utils.format_arg_label label
-        ) unused_labeled in
-        Compiler_error.type_error loc
-          (Printf.sprintf "This function has no parameter with label %s"
-            (String.concat ", " unused_names))
-      end
-    end;
-
-    (* Unify filled slots with expected parameter types *)
     List.iter2 (fun (_, param_ty) (_, slot) ->
       match slot with
       | `Filled arg -> unify_fn ctx loc param_ty arg.Typed_tree.expression_type
@@ -329,56 +366,17 @@ let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
       | `OptionalDefault _ | `Needed _ -> ()
     ) expected_params slots;
 
-    (* Check if all slots are filled *)
     let all_filled = List.for_all (fun (_, slot) ->
       match slot with
       | `Filled _ | `FilledWrapped _ | `OptionalDefault _ -> true
       | `Needed _ -> false
     ) slots in
 
-    if all_filled then begin
-      (* Full application *)
-      let ordered_args = List.map (fun (label, slot) ->
-        match slot with
-        | `Filled arg -> (label, arg)
-        | `FilledWrapped arg -> (label, wrap_in_some arg)
-        | `OptionalDefault inner_ty -> (label, make_none_arg loc inner_ty)
-        | `Needed _ -> failwith "impossible: all slots filled"
-      ) slots in
-
-      ({
-        Typed_tree.expression_desc = Typed_tree.TypedExpressionApply (typed_func, ordered_args);
-        expression_type = base_result_ty;
-        expression_location = loc;
-      }, ctx)
-    end
-    else begin
-      (* Partial application *)
-      let typed_slots = List.map (fun (label, slot) ->
-        match slot with
-        | `Filled arg -> (label, Typed_tree.SlotFilled arg)
-        | `FilledWrapped arg -> (label, Typed_tree.SlotFilled (wrap_in_some arg))
-        | `OptionalDefault inner_ty -> (label, Typed_tree.SlotFilled (make_none_arg loc inner_ty))
-        | `Needed ty -> (label, Typed_tree.SlotNeeded ty)
-      ) slots in
-
-      let result_ty =
-        List.fold_right (fun (label, slot) acc ->
-          match slot with
-          | `Needed param_ty -> Types.TypeArrow (label, param_ty, acc)
-          | `Filled _ | `FilledWrapped _ | `OptionalDefault _ -> acc
-        ) slots base_result_ty
-      in
-
-      ({
-        Typed_tree.expression_desc = Typed_tree.TypedExpressionPartialApply {
-          partial_func = typed_func;
-          partial_slots = typed_slots;
-        };
-        expression_type = result_ty;
-        expression_location = loc;
-      }, ctx)
-    end
+    let result_expr =
+      if all_filled then build_full_application loc typed_func slots base_result_ty
+      else build_partial_application loc typed_func slots base_result_ty
+    in
+    (result_expr, ctx)
   end
 
 (** [infer_expression ctx expr] infers the type of an expression.
@@ -457,12 +455,7 @@ and infer_expression ctx (expr : expression) =
     let typed_labeled_params, labeled_param_types, inner_ctx =
       List.fold_left (fun (pats, tys, ctx) (label, p) ->
         let pat, inner_ty, ctx = Pattern_infer.infer_pattern ctx p in
-        (* Convert Syntax_tree.arg_label to Types.arg_label *)
-        let types_label = match label with
-          | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
-          | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
-          | Parsing.Syntax_tree.Optional s -> Types.Optional s
-        in
+        let types_label = Inference_utils.convert_syntax_label label in
         (* For optional parameters:
            - The arrow type uses the inner type T (so signature is ?x:T -> ...)
            - But inside the function, the binding has type T option
@@ -470,12 +463,11 @@ and infer_expression ctx (expr : expression) =
            This matches OCaml semantics where ?x:int means x has type int option
            inside the function body, but callers see ?x:int in the signature.
 
-           We need to re-add bindings with option-wrapped type for optional params.
+           Re-add bindings with option-wrapped type for optional params.
            Pattern inference already added bindings with inner type; we shadow them. *)
-        let binding_ty, ctx, pat = match types_label with
+        let ctx, pat = match types_label with
           | Types.Optional _ ->
             let option_ty = Types.TypeConstructor (Types.PathLocal "option", [inner_ty]) in
-            (* Re-add bindings with option type (shadowing the inner type bindings) *)
             let ctx = match pat.pattern_desc with
               | Typed_tree.TypedPatternVariable id ->
                 let name = Common.Identifier.name id in
@@ -484,46 +476,32 @@ and infer_expression ctx (expr : expression) =
                   (Types.trivial_scheme option_ty)
                   pat.Typed_tree.pattern_location env in
                 Typing_context.with_environment env ctx
-              | _ ->
-                (* For non-variable patterns in optional params, keep as-is.
-                   This is rare - usually optional params are simple variables. *)
-                ctx
+              | _ -> ctx
             in
             let pat = { pat with Typed_tree.pattern_type = option_ty } in
-            (option_ty, ctx, pat)
+            (ctx, pat)
           | _ ->
-            (inner_ty, ctx, pat)
+            (ctx, pat)
         in
 
         (* Locally abstract types don't contribute to the function signature -
            they only introduce a type into scope. Filter them out when building
            the parameter type list, but keep them in typed_params for the AST. *)
         let tys = match pat.Typed_tree.pattern_desc with
-          | Typed_tree.TypedPatternLocallyAbstract _ -> tys  (* Skip - no runtime parameter *)
-          | _ ->
-            (* Arrow type uses inner_ty (not binding_ty) for optional params *)
-            (types_label, inner_ty) :: tys
+          | Typed_tree.TypedPatternLocallyAbstract _ -> tys
+          | _ -> (types_label, inner_ty) :: tys
         in
-        let _ = binding_ty in  (* suppress unused warning - used in ctx update *)
         ((types_label, pat) :: pats, tys, ctx)
       ) ([], [], ctx) labeled_param_patterns
     in
     let typed_labeled_params = List.rev typed_labeled_params in
     let labeled_param_types = List.rev labeled_param_types in
     let typed_body, _inner_ctx = infer_expression inner_ctx body_expr in
-    (* Check for existential type escape in function parameters.
-       Existential type variables introduced by GADT patterns in parameters
-       cannot appear in the function's return type. *)
-    let existential_ids = List.concat_map (fun (_, pat) ->
-      Gadt.collect_existentials_from_pattern pat
-    ) typed_labeled_params in
-    begin match Gadt.check_existential_escape existential_ids typed_body.expression_type with
-    | Some _escaped_id ->
-      Compiler_error.type_error loc
-        "This expression has a type containing an existential type variable \
-         that would escape its scope"
-    | None -> ()
-    end;
+
+    let param_patterns = List.map snd typed_labeled_params in
+    Inference_utils.check_existential_escape_or_error loc param_patterns
+      typed_body.expression_type;
+
     let ctx = Typing_context.leave_level ctx in
     let func_ty =
       List.fold_right (fun (label, param_ty) acc ->
@@ -540,18 +518,9 @@ and infer_expression ctx (expr : expression) =
     let typed_bindings, inner_ctx = infer_bindings ctx rec_flag bindings in
     let typed_body, _inner_ctx = infer_expression inner_ctx body_expr in
 
-    (* Check for existential type escape from GADT patterns in let bindings.
-       Existential types introduced by GADT patterns cannot escape their scope. *)
-    let existential_ids = List.concat_map (fun binding ->
-      Gadt.collect_existentials_from_pattern binding.Typed_tree.binding_pattern
-    ) typed_bindings in
-    begin match Gadt.check_existential_escape existential_ids typed_body.expression_type with
-    | Some _escaped_id ->
-      Compiler_error.type_error loc
-        "This expression has a type containing an existential type variable \
-         that would escape its scope"
-    | None -> ()
-    end;
+    let binding_patterns = List.map (fun b -> b.Typed_tree.binding_pattern) typed_bindings in
+    Inference_utils.check_existential_escape_or_error loc binding_patterns
+      typed_body.expression_type;
 
     ({
       expression_desc = TypedExpressionLet (rec_flag, typed_bindings, typed_body);
@@ -595,32 +564,29 @@ and infer_expression ctx (expr : expression) =
     Control_infer.infer_match ~infer_expr:infer_expression ctx loc scrutinee_expression match_arms
 
   | ExpressionModuleAccess (module_path, value_name) ->
+    let open Module_types in
     let path_modules = module_path.Location.value in
     let (base_binding, mod_binding) = Module_type_check.lookup_module_path env path_modules loc in
-    Inference_utils.ensure_module_accessible loc mod_binding.Module_types.binding_type;
-    (* Now we know it's a signature *)
-    begin match mod_binding.Module_types.binding_type with
-    | Module_types.ModTypeSig sig_ ->
-      begin match Module_types.find_value_in_sig value_name sig_ with
+
+    Inference_utils.ensure_module_accessible loc mod_binding.binding_type;
+
+    begin match mod_binding.binding_type with
+    | ModTypeSig sig_ ->
+      begin match find_value_in_sig value_name sig_ with
       | Some val_desc ->
         let ty, ctx = Typing_context.instantiate ctx val_desc.value_type in
         let internal_path = Module_type_check.module_path_to_internal_path base_binding.binding_id path_modules in
-        ({
-          expression_desc = TypedExpressionModuleAccess (internal_path, value_name);
-          expression_type = ty;
-          expression_location = loc;
-        }, ctx)
+        ({ expression_desc = TypedExpressionModuleAccess (internal_path, value_name);
+           expression_type = ty;
+           expression_location = loc }, ctx)
       | None ->
         Compiler_error.type_error loc
           (Printf.sprintf "Value %s not found in module" value_name)
       end
-    | Module_types.ModTypeFunctor _ | Module_types.ModTypeIdent _ ->
-      (* ensure_module_accessible should have raised for these cases *)
+    | ModTypeFunctor _ | ModTypeIdent _ ->
       Compiler_error.internal_error
         "Expected signature after module accessibility check"
     end
-
-  (* === Reference operations === *)
 
   | ExpressionRef inner_expr ->
     (* ref e : ref 'a when e : 'a *)
@@ -686,7 +652,6 @@ and infer_expression ctx (expr : expression) =
     let typed_end, ctx = infer_expression ctx end_expr in
     unify ctx loc typed_end.expression_type Types.type_int;
 
-    (* Add loop variable to environment as int *)
     let var_id = Identifier.create var_name in
     let var_scheme = Types.trivial_scheme Types.type_int in
     let env = Typing_context.environment ctx in
@@ -801,24 +766,20 @@ and infer_expression ctx (expr : expression) =
     *)
     let mk_loc value = { Location.value; location = loc } in
 
-    (* Create an operator variable expression *)
     let mk_op_var op_name =
-      (* Construct the parenthesized operator: ( let* ) or ( and* ) *)
+      (* Parenthesized operators: ( let* ) or ( and* ) *)
       let var_name = "( " ^ op_name ^ " )" in
       mk_loc (ExpressionVariable var_name)
     in
 
-    (* Create a function application *)
     let mk_apply fn args =
       mk_loc (ExpressionApply (fn, List.map (fun arg -> (Parsing.Syntax_tree.Nolabel, arg)) args))
     in
 
-    (* Create a function expression *)
     let mk_fun pattern body =
       mk_loc (ExpressionFunction ([(Parsing.Syntax_tree.Nolabel, pattern)], body))
     in
 
-    (* Create a tuple pattern *)
     let mk_tuple_pattern p1 p2 =
       mk_loc (PatternTuple [p1; p2])
     in
@@ -916,12 +877,7 @@ and infer_expression_with_expected ctx expected_type (expr : expression) =
       let expected_param_iter = ref expected_param_tys in
       List.fold_left (fun (pats, tys, ctx) (label, p) ->
         let pat, inferred_ty, ctx = Pattern_infer.infer_pattern ctx p in
-        (* Convert Syntax_tree.arg_label to Types.arg_label *)
-        let types_label = match label with
-          | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
-          | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
-          | Parsing.Syntax_tree.Optional s -> Types.Optional s
-        in
+        let types_label = Inference_utils.convert_syntax_label label in
         (* Skip locally abstract types for parameter matching *)
         let tys = match pat.pattern_desc with
           | TypedPatternLocallyAbstract _ -> tys

@@ -44,6 +44,16 @@ let ensure_module_accessible loc (mty : Module_types.module_type) =
   | Module_types.ModTypeIdent _ ->
     Compiler_error.type_error loc "Cannot access value in an abstract module type"
 
+let error_cannot_access_in_module_type loc mty action =
+  let kind_desc = match mty with
+    | Module_types.ModTypeFunctor _ -> "functor type"
+    | Module_types.ModTypeIdent _ -> "abstract module type"
+    | Module_types.ModTypeSig _ ->
+        Compiler_error.internal_error "error_cannot_access_in_module_type called on signature"
+  in
+  Compiler_error.type_error loc
+    (Printf.sprintf "Cannot %s in %s" action kind_desc)
+
 (** {1 Value Restriction and Generalization} *)
 
 (** Compute binding scheme with environment for proper variance checking. *)
@@ -93,6 +103,29 @@ let rec extract_typed_module_path mexpr =
     extract_typed_module_path inner_expr
   | _ -> None
 
+(** {1 GADT Existential Escape Checking} *)
+
+(** [check_existential_escape_or_error loc patterns result_type] checks that no
+    existential type variables from patterns escape through the result type.
+
+    Existential type variables introduced by GADT patterns in function parameters
+    or let bindings cannot appear in the function/expression's result type.
+
+    @param loc Source location for error messages
+    @param patterns List of typed patterns that may introduce existentials
+    @param result_type The type to check for escaping existentials
+    @raise Type_error if an existential would escape *)
+let check_existential_escape_or_error loc patterns result_type =
+  let existential_ids =
+    List.concat_map Gadt.collect_existentials_from_pattern patterns
+  in
+  match Gadt.check_existential_escape existential_ids result_type with
+  | Some _escaped_id ->
+    Compiler_error.type_error loc
+      "This expression has a type containing an existential type variable \
+       that would escape its scope"
+  | None -> ()
+
 (** {1 Error Helpers} *)
 
 (** Kind of unbound entity for error messages. *)
@@ -121,7 +154,12 @@ let error_unbound_module loc name = error_unbound UnboundModule loc name
 let error_unbound_type loc name = error_unbound UnboundType loc name
 let error_unbound_module_type loc name = error_unbound UnboundModuleType loc name
 
-(** {1 Label Formatting} *)
+(** {1 Label Conversion and Formatting} *)
+
+let convert_syntax_label = function
+  | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
+  | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
+  | Parsing.Syntax_tree.Optional s -> Types.Optional s
 
 let format_arg_label = function
   | Types.Labelled name -> "~" ^ name
@@ -181,7 +219,7 @@ let split_longident (longident : Parsing.Syntax_tree.longident) : string list * 
   in
   let all_parts = collect_path longident in
   match List.rev all_parts with
-  | [] -> failwith "empty longident"
+  | [] -> Common.Compiler_error.internal_error "split_longident received empty longident"
   | ctor_name :: path_rev -> (List.rev path_rev, ctor_name)
 
 (** [lookup_constructor_longident ctx loc longident] looks up a constructor by longident.

@@ -59,60 +59,10 @@ let rec process_type_declaration_with_params ctx type_decl type_params =
   let (declaration_kind, manifest, ctx) = match type_decl.type_kind with
     | TypeAbstract -> (DeclarationAbstract, None, ctx)
     | TypeVariant constructors ->
-      let indexed_constructors = List.mapi (fun index ctor -> (index, ctor)) constructors in
+      let type_name = type_decl.type_name.Location.value in
       let constructor_infos, ctx =
-        List.fold_left (fun (infos, ctx) (tag_index, (ctor : constructor_declaration)) ->
-          let arg_type, ctor_result_type, is_gadt, ctor_type_params, existentials, ctx =
-            match ctor.constructor_return_type with
-            | Some ret_ty_expr ->
-              let arg_ty, ret_ty, _gadt_params, ctx =
-                Type_expression_check.check_gadt_constructor ctx_with_type param_names type_params
-                  ctor.constructor_argument ret_ty_expr
-              in
-              (* For GADT constructors, collect ALL type variables from both argument
-                 and result types. This ensures each construction creates fresh instances.
-                 For example:
-                 - Show : 'a * ('a -> string) -> showable has ['a] from argument
-                 - Refl : ('a, 'a) eq has ['a] from result type *)
-              let result_vars = Type_traversal.free_type_variables ret_ty in
-              let arg_vars = match arg_ty with
-                | Some arg_ty_val -> Type_traversal.free_type_variables arg_ty_val
-                | None -> []
-              in
-
-              (* Combine all type variables, removing duplicates by ID *)
-              let result_var_ids = List.map (fun tv -> tv.Types.id) result_vars in
-              let all_type_params = result_vars @ List.filter (fun tv ->
-                not (List.mem tv.Types.id result_var_ids)
-              ) arg_vars in
-
-              (* Existentials are variables that appear in the argument but not in the result.
-                 These are introduced when pattern matching. *)
-              let existentials =
-                List.filter (fun tv -> not (List.mem tv.Types.id result_var_ids)) arg_vars
-              in
-              (arg_ty, ret_ty, true, all_type_params, existentials, ctx)
-            | None ->
-              let arg_type, ctx = match ctor.constructor_argument with
-                | Some ty_expr ->
-                  let ty, ctx = Type_expression_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
-                  (Some ty, ctx)
-                | None -> (None, ctx)
-              in
-              (arg_type, result_type, false, type_params, [], ctx)
-          in
-          let ctor_info = {
-            constructor_name = ctor.constructor_name.Location.value;
-            constructor_tag_index = tag_index;
-            constructor_type_name = type_decl.type_name.Location.value;
-            constructor_argument_type = arg_type;
-            constructor_result_type = ctor_result_type;
-            constructor_type_parameters = ctor_type_params;
-            constructor_is_gadt = is_gadt;
-            constructor_existentials = existentials;
-          } in
-          (infos @ [ctor_info], ctx)
-        ) ([], ctx) indexed_constructors
+        Constructor_check.check_constructors ctx_with_type param_names type_params
+          result_type type_name constructors
       in
       (DeclarationVariant constructor_infos, None, ctx)
     | TypeAlias ty_expr ->
@@ -244,14 +194,15 @@ and infer_structure_item ctx (item : structure_item) =
     (* First pass: collect all type names and create preliminary declarations *)
     let preliminary_decls_and_params, ctx =
       List.fold_left (fun (acc, ctx) type_decl ->
-        let type_params, ctx =
-          List.fold_left (fun (params, ctx) _ ->
+        let rev_type_params, ctx =
+          List.fold_left (fun (rev_params, ctx) _ ->
             let tv, ctx = Typing_context.new_type_variable ctx in
             match tv with
-            | TypeVariable tv -> (params @ [tv], ctx)
+            | TypeVariable tv -> (tv :: rev_params, ctx)
             | _ -> Compiler_error.internal_error "new_type_variable did not return TypeVariable"
           ) ([], ctx) type_decl.type_parameters
         in
+        let type_params = List.rev rev_type_params in
         let preliminary_declaration = {
           Types.declaration_name = type_decl.type_name.Location.value;
           declaration_parameters = type_params;
@@ -389,12 +340,10 @@ and infer_structure_item ctx (item : structure_item) =
        3. Third pass: Type-check each module implementation *)
 
     (* First pass: Create identifiers and add modules with placeholder abstract signatures *)
-    let preliminary_infos, ctx = List.fold_left (fun (infos, ctx) (binding : Parsing.Syntax_tree.rec_module_binding) ->
+    let rev_preliminary_infos, ctx = List.fold_left (fun (rev_infos, ctx) (binding : Parsing.Syntax_tree.rec_module_binding) ->
       let name = binding.rec_module_name.Location.value in
       let module_id = Identifier.create name in
 
-      (* Add with a placeholder signature so other modules can reference this one
-         during signature checking. We use an empty signature as placeholder. *)
       let placeholder_mty = Module_types.ModTypeSig [] in
       let mod_binding = Module_types.{
         binding_name = name;
@@ -406,21 +355,18 @@ and infer_structure_item ctx (item : structure_item) =
       let env = Environment.add_module name mod_binding env in
       let ctx = Typing_context.with_environment env ctx in
 
-      (infos @ [(module_id, binding)], ctx)
+      ((module_id, binding) :: rev_infos, ctx)
     ) ([], ctx) rec_bindings in
+    let preliminary_infos = List.rev rev_preliminary_infos in
 
     (* Second pass: Check all signatures and update environment with real types *)
-    let module_infos, ctx = List.fold_left (fun (infos, ctx) (module_id, (binding : Parsing.Syntax_tree.rec_module_binding)) ->
+    let rev_module_infos, ctx = List.fold_left (fun (rev_infos, ctx) (module_id, (binding : Parsing.Syntax_tree.rec_module_binding)) ->
       let name = binding.rec_module_name.Location.value in
-
-      (* Now check the declared module type - all modules are in scope *)
       let declared_mty, ctx = Module_type_check.check_module_type ctx binding.rec_module_type in
 
-      (* Strengthen the module type so type equalities work correctly *)
       let module_path = Types.PathIdent module_id in
       let strengthened_mty = Signature_match.strengthen_module_type module_path declared_mty in
 
-      (* Update the environment with the real signature *)
       let mod_binding = Module_types.{
         binding_name = name;
         binding_id = module_id;
@@ -431,18 +377,17 @@ and infer_structure_item ctx (item : structure_item) =
       let env = Environment.add_module name mod_binding env in
       let ctx = Typing_context.with_environment env ctx in
 
-      (infos @ [(module_id, binding, declared_mty, strengthened_mty)], ctx)
+      ((module_id, binding, declared_mty, strengthened_mty) :: rev_infos, ctx)
     ) ([], ctx) preliminary_infos in
+    let module_infos = List.rev rev_module_infos in
 
     (* Third pass: Type-check each module implementation *)
-    let typed_bindings, ctx = List.fold_left (fun (bindings, ctx) (module_id, (binding : Parsing.Syntax_tree.rec_module_binding), declared_mty, _strengthened_mty) ->
+    let rev_typed_bindings, ctx = List.fold_left (fun (rev_bindings, ctx) (module_id, (binding : Parsing.Syntax_tree.rec_module_binding), declared_mty, _strengthened_mty) ->
       let typed_mexpr, ctx = infer_module_expression ctx binding.rec_module_expr in
 
-      (* Match implementation against declared signature *)
       let match_ctx = make_match_context ctx in
       begin match Signature_match.match_module_type match_ctx binding.rec_module_location typed_mexpr.module_type declared_mty with
       | Ok () ->
-        (* Create constrained module expression *)
         let final_mexpr = {
           Typed_tree.module_desc = TypedModuleConstraint (typed_mexpr, declared_mty);
           module_type = declared_mty;
@@ -454,7 +399,7 @@ and infer_structure_item ctx (item : structure_item) =
           rec_module_expr = final_mexpr;
           rec_module_location = binding.rec_module_location;
         } in
-        (bindings @ [typed_binding], ctx)
+        (typed_binding :: rev_bindings, ctx)
       | Error err ->
         let name = binding.rec_module_name.Location.value in
         Compiler_error.type_error binding.rec_module_location
@@ -462,6 +407,7 @@ and infer_structure_item ctx (item : structure_item) =
             name (Signature_match.format_match_error err))
       end
     ) ([], ctx) module_infos in
+    let typed_bindings = List.rev rev_typed_bindings in
 
     let typed_item = {
       structure_item_desc = TypedStructureRecModule typed_bindings;
@@ -603,12 +549,13 @@ and infer_structure_item ctx (item : structure_item) =
 
     (* 3. Create fresh type parameters for the extension *)
     let param_names = List.map (fun (p : type_parameter) -> p.parameter_name) ext.extension_type_params in
-    let type_params, ctx = List.fold_left (fun (params, ctx) _ ->
+    let rev_type_params, ctx = List.fold_left (fun (rev_params, ctx) _ ->
       let tv, ctx = Typing_context.new_type_variable ctx in
       match tv with
-      | TypeVariable tv -> (params @ [tv], ctx)
+      | TypeVariable tv -> (tv :: rev_params, ctx)
       | _ -> Compiler_error.internal_error "new_type_variable must return TypeVariable"
     ) ([], ctx) ext.extension_type_params in
+    let type_params = List.rev rev_type_params in
 
     (* Verify parameter count matches *)
     if List.length type_params <> List.length type_decl.declaration_parameters then
@@ -626,9 +573,8 @@ and infer_structure_item ctx (item : structure_item) =
     let ctx_with_type = Typing_context.with_environment env_with_type ctx in
 
     (* 4. Process each constructor *)
-    let constructor_infos, ctx =
-      List.fold_left (fun (infos, ctx) (ctor : constructor_declaration) ->
-        (* Extension constructors use tag_index = -1 to indicate they need unique runtime tags *)
+    let rev_constructor_infos, ctx =
+      List.fold_left (fun (rev_infos, ctx) (ctor : constructor_declaration) ->
         let arg_type, ctx = match ctor.constructor_argument with
           | Some ty_expr ->
             let ty, ctx = Type_expression_check.check_type_expression_with_params ctx_with_type param_names type_params ty_expr in
@@ -638,7 +584,7 @@ and infer_structure_item ctx (item : structure_item) =
 
         let ctor_info = {
           constructor_name = ctor.constructor_name.Location.value;
-          constructor_tag_index = -1;  (* Special: extension constructor *)
+          constructor_tag_index = -1;
           constructor_type_name = type_name;
           constructor_argument_type = arg_type;
           constructor_result_type = result_type;
@@ -646,9 +592,10 @@ and infer_structure_item ctx (item : structure_item) =
           constructor_is_gadt = false;
           constructor_existentials = [];
         } in
-        (infos @ [ctor_info], ctx)
+        (ctor_info :: rev_infos, ctx)
       ) ([], ctx) ext.extension_constructors
     in
+    let constructor_infos = List.rev rev_constructor_infos in
 
     (* 5. Add constructors to environment *)
     let env = Typing_context.environment ctx in

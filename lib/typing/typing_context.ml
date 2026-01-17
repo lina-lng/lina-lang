@@ -12,8 +12,6 @@ type t = {
   level : int;
 }
 
-(* Context Creation *)
-
 let create env = {
   env;
   level = 1;
@@ -21,11 +19,7 @@ let create env = {
 
 let with_environment env ctx = { ctx with env }
 
-(* Environment Access *)
-
 let environment ctx = ctx.env
-
-(* Level Management *)
 
 let current_level ctx = ctx.level
 
@@ -35,11 +29,7 @@ let enter_level ctx =
 let leave_level ctx =
   { ctx with level = ctx.level - 1 }
 
-(* Type Variable Generation *)
-
 let fresh_type_variable_id ctx =
-  (* Use Types.fresh_type_variable_id for globally unique IDs.
-     This ensures type variables have unique IDs even across modules. *)
   let id = Types.fresh_type_variable_id () in
   (id, ctx)
 
@@ -50,6 +40,8 @@ let new_type_variable_at_level ctx level =
 
 let new_type_variable ctx =
   new_type_variable_at_level ctx ctx.level
+
+(** {2 Batch Operations} *)
 
 (** [new_type_variables ctx count] creates [count] fresh type variables.
     Returns the type_variable records (not type_expression wrappers).
@@ -73,15 +65,11 @@ let new_rigid_type_variable ctx =
   let tv = Types.TypeVariable { Types.id; level = ctx.level; link = None; weak = false; rigid = true } in
   (tv, ctx')
 
-(* Type Lookup *)
-
 let type_lookup ctx path =
   Environment.find_type_by_path path ctx.env
 
 let module_type_lookup ctx path =
   Environment.find_module_type_by_path path ctx.env
-
-(* Environment Modification Helpers *)
 
 let add_value name id scheme loc ctx =
   let env = Environment.add_value name id scheme loc ctx.env in
@@ -99,8 +87,6 @@ let add_module_type name mty_opt ctx =
   let env = Environment.add_module_type name mty_opt ctx.env in
   { ctx with env }
 
-(* Type Scheme Operations *)
-
 let generalize ctx ty =
   Type_scheme.generalize ~level:ctx.level ty
 
@@ -115,7 +101,7 @@ let instantiate ctx scheme =
       ctx_ref := ctx';
       ty
     in
-    let result = Type_scheme.instantiate ~fresh_var scheme in
-    (result, !ctx_ref)
+    let instantiated_type = Type_scheme.instantiate ~fresh_var scheme in
+    (instantiated_type, !ctx_ref)
   end
 

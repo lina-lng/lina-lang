@@ -164,14 +164,17 @@ let build_switch_if_chain (type key) ~(config : key switch_config) ~translate_tr
   in
   build cases
 
+let variant_tag_discriminant target =
+  LambdaGetRecordField (Codegen_constants.variant_tag_field, target)
+
 let constructor_switch_config : (string * int * bool) switch_config = {
-  get_discriminant = (fun target -> LambdaGetRecordField (Codegen_constants.variant_tag_field, target));
+  get_discriminant = variant_tag_discriminant;
   key_to_constant = (fun (_name, tag_index, _is_ext) -> ConstantInt tag_index);
   equality_primitive = PrimitiveIntEqual;
 }
 
 let extension_constructor_switch_config : (string * int * bool) switch_config = {
-  get_discriminant = (fun target -> LambdaGetRecordField (Codegen_constants.variant_tag_field, target));
+  get_discriminant = variant_tag_discriminant;
   key_to_constant = (fun (name, _tag_index, _is_ext) -> ConstantString name);
   equality_primitive = PrimitiveStringEqual;
 }
@@ -183,7 +186,7 @@ let constant_switch_config : Parsing.Syntax_tree.constant switch_config = {
 }
 
 let poly_variant_switch_config : string switch_config = {
-  get_discriminant = (fun target -> LambdaGetRecordField (Codegen_constants.variant_tag_field, target));
+  get_discriminant = variant_tag_discriminant;
   key_to_constant = (fun tag -> ConstantString tag);
   equality_primitive = PrimitiveStringEqual;
 }
@@ -219,36 +222,43 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
     build_switch_if_chain ~config ~translate_tree target typed_cases default
   in
 
-  let const_cases, ctor_cases, pv_cases, other_cases =
-    List.fold_left (fun (consts, ctors, pvs, others) (head, tree) ->
+  let constant_switch_cases, constructor_switch_cases, poly_variant_switch_cases, fallback_cases =
+    List.fold_left (fun (constants, constructors, poly_variants, fallbacks) (head, tree) ->
       match head with
       | Pattern_match.HCConstant c ->
-          ((c, tree) :: consts, ctors, pvs, others)
+          ((c, tree) :: constants, constructors, poly_variants, fallbacks)
       | Pattern_match.HCConstructor (name, tag_index, is_extension) ->
-          (consts, ((name, tag_index, is_extension), tree) :: ctors, pvs, others)
+          (constants, ((name, tag_index, is_extension), tree) :: constructors, poly_variants, fallbacks)
       | Pattern_match.HCPolyVariant tag ->
-          (consts, ctors, (tag, tree) :: pvs, others)
+          (constants, constructors, (tag, tree) :: poly_variants, fallbacks)
       | _ ->
-          (consts, ctors, pvs, (head, tree) :: others)
+          (constants, constructors, poly_variants, (head, tree) :: fallbacks)
     ) ([], [], [], []) cases
   in
 
-  let has_only_ctors = ctor_cases <> [] && const_cases = [] && pv_cases = [] in
-  let has_only_poly_variants = pv_cases <> [] && const_cases = [] && ctor_cases = [] in
-  let has_constants = const_cases <> [] in
+  let has_only_constructors =
+    constructor_switch_cases <> [] &&
+    constant_switch_cases = [] &&
+    poly_variant_switch_cases = []
+  in
+  let has_only_poly_variants =
+    poly_variant_switch_cases <> [] &&
+    constant_switch_cases = [] &&
+    constructor_switch_cases = []
+  in
+  let has_constants = constant_switch_cases <> [] in
 
-  if has_only_ctors then
-    translate_dt_constructor_switch target ctor_cases default translate_tree
+  if has_only_constructors then
+    translate_dt_constructor_switch target constructor_switch_cases default translate_tree
 
   else if has_only_poly_variants then
-    simple_if_chain poly_variant_switch_config pv_cases
+    simple_if_chain poly_variant_switch_config poly_variant_switch_cases
 
   else if has_constants then
-    simple_if_chain constant_switch_config const_cases
+    simple_if_chain constant_switch_config constant_switch_cases
 
   else
-    (* Fallback: wildcards or single remaining case *)
-    match other_cases, default with
+    match fallback_cases, default with
     | [(_, tree)], _ -> translate_tree tree
     | [], Some default_tree -> translate_tree default_tree
     | _, _ -> translate_tree Pattern_match.DTFail
@@ -295,8 +305,7 @@ let rec translate_pattern_binding pattern value body =
   | TypedPatternWildcard ->
       LambdaLet (Identifier.create "_", value, body)
 
-  | TypedPatternConstant _ ->
-      body
+  | TypedPatternConstant _ -> body
 
   | TypedPatternTuple patterns ->
       translate_compound_pattern Codegen_constants.tuple_temp_prefix
@@ -307,8 +316,7 @@ let rec translate_pattern_binding pattern value body =
           ) patterns)
         value body
 
-  | TypedPatternConstructor (_, arg_pattern)
-  | TypedPatternPolyVariant (_, arg_pattern) ->
+  | TypedPatternConstructor (_, arg_pattern) | TypedPatternPolyVariant (_, arg_pattern) ->
       begin match arg_pattern with
       | None -> body
       | Some inner_pattern ->
@@ -353,6 +361,23 @@ type analysis_state = {
   function_count : int;
   bindings : module_binding list;
 }
+
+let translate_opened_bindings module_lambda opened_bindings =
+  let local_bindings = List.map (fun (name, id) ->
+    `Single (id, LambdaModuleAccess (module_lambda, name))
+  ) opened_bindings in
+
+  let module_fields = List.map (fun (_name, id) ->
+    { mb_id = id; mb_value = LambdaVariable id }
+  ) opened_bindings in
+
+  (local_bindings, module_fields)
+
+let extract_binding_id ~fallback_prefix (binding : Typing.Typed_tree.typed_binding) =
+  let open Typing.Typed_tree in
+  match binding.binding_pattern.pattern_desc with
+  | TypedPatternVariable id -> id
+  | _ -> Identifier.create fallback_prefix
 
 let rec translate_module_path (path : Typing.Types.path) : lambda =
   match path with
@@ -457,20 +482,16 @@ and translate_structure_with_opens structure =
     | item :: rest ->
       match item.structure_item_desc with
       | TypedStructureValue (rec_flag, bindings) ->
-          let translated_bindings = List.filter_map (fun (binding : typed_binding) ->
-            match binding.binding_pattern.pattern_desc with
-            | TypedPatternVariable id ->
+          let translated_bindings, field_refs =
+            List.fold_right (fun (binding : typed_binding) (trans_acc, refs_acc) ->
+              match binding.binding_pattern.pattern_desc with
+              | TypedPatternVariable id ->
                 let translated = translate_expression binding.binding_expression in
-                Some (id, translated)
-            | _ -> None
-          ) bindings in
-
-          let field_refs = List.filter_map (fun (binding : typed_binding) ->
-            match binding.binding_pattern.pattern_desc with
-            | TypedPatternVariable id ->
-                Some { mb_id = id; mb_value = LambdaVariable id }
-            | _ -> None
-          ) bindings in
+                let field_ref = { mb_id = id; mb_value = LambdaVariable id } in
+                ((id, translated) :: trans_acc, field_ref :: refs_acc)
+              | _ -> (trans_acc, refs_acc)
+            ) bindings ([], [])
+          in
 
           let new_local_bindings = match rec_flag with
             | Parsing.Syntax_tree.Recursive ->
@@ -506,26 +527,14 @@ and translate_structure_with_opens structure =
 
       | TypedStructureOpen (module_path, opened_bindings) ->
           let module_lambda = translate_module_path module_path in
-          let new_locals = List.map (fun (name, id) ->
-            `Single (id, LambdaModuleAccess (module_lambda, name))
-          ) opened_bindings in
-          let new_fields = List.map (fun (_name, id) ->
-            { mb_id = id; mb_value = LambdaVariable id }
-          ) opened_bindings in
+          let new_locals, new_fields = translate_opened_bindings module_lambda opened_bindings in
           process rest (List.rev_append new_locals local_bindings) (List.rev_append new_fields module_fields)
 
       | TypedStructureInclude (mexpr, included_bindings) ->
           let translated_mexpr = translate_module_expression mexpr in
           let temp_id = Identifier.create Codegen_constants.included_module_prefix in
           let temp_binding = `Single (temp_id, translated_mexpr) in
-
-          let new_locals = List.map (fun (name, id) ->
-            `Single (id, LambdaModuleAccess (LambdaVariable temp_id, name))
-          ) included_bindings in
-          let new_fields = List.map (fun (_name, id) ->
-            { mb_id = id; mb_value = LambdaVariable id }
-          ) included_bindings in
-
+          let new_locals, new_fields = translate_opened_bindings (LambdaVariable temp_id) included_bindings in
           process rest (List.rev_append new_locals (temp_binding :: local_bindings)) (List.rev_append new_fields module_fields)
 
       | TypedStructureExternal ext ->
@@ -574,6 +583,7 @@ and translate_module_expression mexpr =
 
 and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
   let open Typing.Typed_tree in
+
   match expr.expression_desc with
   | TypedExpressionVariable (id, _def_loc) ->
     LambdaVariable id
@@ -586,26 +596,26 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     LambdaMakeBlock (0, translated)
 
   | TypedExpressionConstructor (ctor_info, arg_expr) ->
-    let is_extension = ctor_info.Typing.Types.constructor_tag_index < 0 in
+    let { Typing.Types.constructor_name; constructor_tag_index;
+          constructor_type_name; constructor_argument_type; _ } = ctor_info in
+
+    let is_extension = constructor_tag_index < 0 in
     let tag = {
-      tag_name = ctor_info.Typing.Types.constructor_name;
-      tag_index = ctor_info.Typing.Types.constructor_tag_index;
-      tag_type_name = ctor_info.Typing.Types.constructor_type_name;
-      tag_is_nullary = Option.is_none ctor_info.Typing.Types.constructor_argument_type;
+      tag_name = constructor_name;
+      tag_index = constructor_tag_index;
+      tag_type_name = constructor_type_name;
+      tag_is_nullary = Option.is_none constructor_argument_type;
       tag_is_extension = is_extension;
     } in
+
     begin match arg_expr with
     | Some arg ->
         LambdaConstructor (tag, Some (translate_expression arg))
     | None ->
-        (* Constructor without argument. If the constructor expects an argument,
-           we return a lambda that builds the constructor when called. *)
-        if Option.is_some ctor_info.Typing.Types.constructor_argument_type then
-          (* Constructor expects an argument - wrap in a lambda *)
+        if Option.is_some constructor_argument_type then
           let arg_id = Identifier.create "ctor_arg" in
           LambdaFunction ([arg_id], LambdaConstructor (tag, Some (LambdaVariable arg_id)))
         else
-          (* Nullary constructor - no argument needed *)
           LambdaConstructor (tag, None)
     end
 
@@ -624,28 +634,22 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     end
 
   | TypedExpressionPartialApply { partial_func; partial_slots } ->
-    (* Partial application: generate a wrapper function that takes remaining params
-       and calls the original function with all arguments in correct order *)
     let func = translate_expression partial_func in
 
-    (* Create identifiers for needed slots and build argument list in order *)
-    let param_counter = ref 0 in
-    let needed_ids = ref [] in
+    let _, needed_ids_rev, all_args_rev =
+      List.fold_left (fun (counter, ids, args) (_, slot) ->
+        match slot with
+        | SlotFilled expr ->
+            let arg = translate_expression expr in
+            (counter, ids, arg :: args)
+        | SlotNeeded _ ->
+            let param_id = Identifier.create (Printf.sprintf "partial_arg%d" counter) in
+            (counter + 1, param_id :: ids, LambdaVariable param_id :: args)
+      ) (0, [], []) partial_slots
+    in
 
-    let all_args = List.map (fun (_, slot) ->
-      match slot with
-      | SlotFilled expr ->
-        translate_expression expr
-      | SlotNeeded _ ->
-        let param_id = Identifier.create (Printf.sprintf "partial_arg%d" !param_counter) in
-        incr param_counter;
-        needed_ids := param_id :: !needed_ids;
-        LambdaVariable param_id
-    ) partial_slots in
-
-    let param_ids = List.rev !needed_ids in
-
-    (* Create wrapper function that captures provided args and accepts remaining *)
+    let param_ids = List.rev needed_ids_rev in
+    let all_args = List.rev all_args_rev in
     LambdaFunction (param_ids, LambdaApply (func, all_args))
 
   | TypedExpressionFunction (labeled_param_patterns, body_expr) ->
@@ -677,21 +681,19 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
       LambdaFunction (param_ids, body_with_bindings)
 
   | TypedExpressionLet (rec_flag, bindings, body_expr) ->
-    let translated_body = translate_expression body_expr in
     begin match rec_flag with
     | Parsing.Syntax_tree.Nonrecursive ->
+      let translated_body = translate_expression body_expr in
       List.fold_right (fun (binding : typed_binding) body ->
         let translated_expr = translate_expression binding.binding_expression in
         translate_pattern_binding binding.binding_pattern translated_expr body
       ) bindings translated_body
 
     | Parsing.Syntax_tree.Recursive ->
+      let translated_body = translate_expression body_expr in
       let rec_bindings =
-        List.map (fun (binding : typed_binding) ->
-          let id = match binding.binding_pattern.pattern_desc with
-            | TypedPatternVariable id -> id
-            | _ -> Identifier.create Codegen_constants.rec_prefix
-          in
+        List.map (fun binding ->
+          let id = extract_binding_id ~fallback_prefix:Codegen_constants.rec_prefix binding in
           let translated_expr = translate_expression binding.binding_expression in
           (id, translated_expr)
         ) bindings
@@ -798,22 +800,16 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
   | TypedStructureValue (rec_flag, bindings) ->
     begin match rec_flag with
     | Parsing.Syntax_tree.Nonrecursive ->
-      List.map (fun (binding : typed_binding) ->
-        let id = match binding.binding_pattern.pattern_desc with
-          | TypedPatternVariable id -> id
-          | _ -> Identifier.create Codegen_constants.top_prefix
-        in
+      List.map (fun binding ->
+        let id = extract_binding_id ~fallback_prefix:Codegen_constants.top_prefix binding in
         let translated_expr = translate_expression binding.binding_expression in
         LambdaLet (id, translated_expr, LambdaConstant ConstantUnit)
       ) bindings
 
     | Parsing.Syntax_tree.Recursive ->
       let rec_bindings =
-        List.map (fun (binding : typed_binding) ->
-          let id = match binding.binding_pattern.pattern_desc with
-            | TypedPatternVariable id -> id
-            | _ -> Identifier.create Codegen_constants.rec_prefix
-          in
+        List.map (fun binding ->
+          let id = extract_binding_id ~fallback_prefix:Codegen_constants.rec_prefix binding in
           let translated_expr = translate_expression binding.binding_expression in
           (id, translated_expr)
         ) bindings

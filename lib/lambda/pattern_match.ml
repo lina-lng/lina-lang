@@ -422,30 +422,35 @@ let collect_head_constructors (matrix : pattern_matrix) (col : int) : head_const
     else (Hashtbl.add seen key (); true)
   ) heads
 
-(** Check if a pattern (possibly nested in or-pattern/alias) has a constructor with arg *)
-let rec pattern_has_constructor_with_arg (name : string) (pat : Typing.Typed_tree.typed_pattern) : bool =
+(** Check if pattern or any branch within or-patterns/aliases satisfies predicate. *)
+let rec pattern_matches_predicate predicate (pat : Typing.Typed_tree.typed_pattern) : bool =
   let open Typing.Typed_tree in
-  match pat.pattern_desc with
-  | TypedPatternConstructor (ctor_info, Some _) ->
-      ctor_info.Typing.Types.constructor_name = name
-  | TypedPatternOr (left, right) ->
-      pattern_has_constructor_with_arg name left ||
-      pattern_has_constructor_with_arg name right
-  | TypedPatternAlias (inner, _) ->
-      pattern_has_constructor_with_arg name inner
-  | _ -> false
+  if predicate pat then true
+  else
+    match pat.pattern_desc with
+    | TypedPatternOr (left, right) ->
+        pattern_matches_predicate predicate left ||
+        pattern_matches_predicate predicate right
+    | TypedPatternAlias (inner, _) ->
+        pattern_matches_predicate predicate inner
+    | _ -> false
 
-(** Check if a pattern (possibly nested in or-pattern/alias) has a poly variant with arg *)
-let rec pattern_has_polyvariant_with_arg (tag : string) (pat : Typing.Typed_tree.typed_pattern) : bool =
-  let open Typing.Typed_tree in
-  match pat.pattern_desc with
-  | TypedPatternPolyVariant (t, Some _) -> t = tag
-  | TypedPatternOr (left, right) ->
-      pattern_has_polyvariant_with_arg tag left ||
-      pattern_has_polyvariant_with_arg tag right
-  | TypedPatternAlias (inner, _) ->
-      pattern_has_polyvariant_with_arg tag inner
-  | _ -> false
+let pattern_has_constructor_with_arg name pat =
+  pattern_matches_predicate (fun p ->
+    let open Typing.Typed_tree in
+    match p.pattern_desc with
+    | TypedPatternConstructor (ctor_info, Some _) ->
+        ctor_info.Typing.Types.constructor_name = name
+    | _ -> false
+  ) pat
+
+let pattern_has_polyvariant_with_arg tag pat =
+  pattern_matches_predicate (fun p ->
+    let open Typing.Typed_tree in
+    match p.pattern_desc with
+    | TypedPatternPolyVariant (t, Some _) -> t = tag
+    | _ -> false
+  ) pat
 
 (* Adjust arity for constructor based on whether it has an arg in any pattern *)
 let adjust_constructor_arity (matrix : pattern_matrix) (col : int) (head : head_constructor) : int =
@@ -466,46 +471,41 @@ let adjust_constructor_arity (matrix : pattern_matrix) (col : int) (head : head_
     if has_arg then 1 else 0
   | _ -> head_arity head
 
-(* Main compilation function *)
 let rec compile_matrix (matrix : pattern_matrix) : decision_tree =
-  (* Base case 1: Empty matrix - match failure *)
   if matrix.clauses = [] then
     DTFail
 
-  (* Base case 2: Empty pattern row - all patterns matched *)
   else if matrix.occurrences = [] then
     let clause = List.hd matrix.clauses in
+
     match clause.clause_guard with
     | None ->
-      DTLeaf {
-        leaf_bindings = clause.clause_bindings;
-        leaf_action = clause.clause_action;
-      }
-    | Some guard ->
-      DTGuard {
-        guard_bindings = clause.clause_bindings;
-        guard_condition = guard;
-        guard_then = DTLeaf {
+        DTLeaf {
           leaf_bindings = clause.clause_bindings;
           leaf_action = clause.clause_action;
-        };
-        guard_else = compile_matrix { matrix with clauses = List.tl matrix.clauses };
-      }
+        }
+    | Some guard ->
+        DTGuard {
+          guard_bindings = clause.clause_bindings;
+          guard_condition = guard;
+          guard_then = DTLeaf {
+            leaf_bindings = clause.clause_bindings;
+            leaf_action = clause.clause_action;
+          };
+          guard_else = compile_matrix { matrix with clauses = List.tl matrix.clauses };
+        }
 
-  (* Recursive case: select column and compile *)
   else begin
     let col = select_column matrix in
     let occ = List.nth matrix.occurrences col in
     let heads = collect_head_constructors matrix col in
 
-    (* Build switch cases for each head constructor *)
     let cases = List.map (fun head ->
       let arity = adjust_constructor_arity matrix col head in
       let specialized = specialize matrix col head arity in
       (head, compile_matrix specialized)
     ) heads in
 
-    (* Build default case *)
     let default_mat = default_matrix matrix col in
     let default =
       if default_mat.clauses = [] then None

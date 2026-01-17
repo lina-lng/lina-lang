@@ -1,0 +1,148 @@
+(* Comprehensive currying and partial application tests *)
+
+(* Test 1: Basic curried function with full application *)
+let add3 x y z = x + y + z
+let r1 = add3 1 2 3
+let _ = print r1  (* Expected: 6 *)
+
+(* Test 2: Partial application - apply one arg *)
+let add10 = add3 10
+let r2 = add10 20 30
+let _ = print r2  (* Expected: 60 *)
+
+(* Test 3: Partial application - apply two args *)
+let add10_20 = add3 10 20
+let r3 = add10_20 30
+let _ = print r3  (* Expected: 60 *)
+
+(* Test 4: Nested partial applications *)
+let f4 a b c d = a + b + c + d
+let f3 = f4 1
+let f2 = f3 2
+let f1 = f2 3
+let r4 = f1 4
+let _ = print r4  (* Expected: 10 *)
+
+(* Test 5: Function returning function, applied at once *)
+let make_adder x = fun y -> x + y
+let r5 = make_adder 5 10
+let _ = print r5  (* Expected: 15 *)
+
+(* Test 6: Higher-order function - apply *)
+let apply f x = f x
+let r6 = apply (fun x -> x + 1) 10
+let _ = print r6  (* Expected: 11 *)
+
+(* Test 7: Higher-order function - compose *)
+let compose f g x = f (g x)
+let add1 = fun x -> x + 1
+let mul2 = fun x -> x * 2
+let composed = compose add1 mul2
+let r7 = composed 5
+let _ = print r7  (* Expected: 11 - (5*2)+1 *)
+
+(* Test 8: Recursive function with multiple args *)
+let rec sum_acc acc n = if n <= 0 then acc else sum_acc (acc + n) (n - 1)
+let r8 = sum_acc 0 10
+let _ = print r8  (* Expected: 55 *)
+
+(* Test 9: Mutual recursion *)
+let rec is_even n = if n = 0 then true else is_odd (n - 1)
+and is_odd n = if n = 0 then false else is_even (n - 1)
+let r9_even = is_even 10
+let r9_odd = is_odd 10
+let _ = print r9_even  (* Expected: true *)
+let _ = print r9_odd   (* Expected: false *)
+
+(* Test 10: Curried function in a module *)
+module Math = struct
+  let add x y = x + y
+  let sub x y = x - y
+  let mul x y = x * y
+end
+
+let r10_add = Math.add 3 4
+let r10_sub = Math.sub 10 3
+let r10_mul = Math.mul 5 6
+let _ = print r10_add  (* Expected: 7 *)
+let _ = print r10_sub  (* Expected: 7 *)
+let _ = print r10_mul  (* Expected: 30 *)
+
+(* Test 11: Partial application of module function *)
+let add5 = Math.add 5
+let r11 = add5 10
+let _ = print r11  (* Expected: 15 *)
+
+(* Test 12: Map with curried function *)
+type 'a list = Nil | Cons of 'a * 'a list
+
+let rec map f l = match l with
+  | Nil -> Nil
+  | Cons (x, xs) -> Cons (f x, map f xs)
+
+let add_n n x = n + x
+let add_5 = add_n 5
+let numbers = Cons (1, Cons (2, Cons (3, Nil)))
+let mapped = map add_5 numbers
+
+let rec sum_list l = match l with
+  | Nil -> 0
+  | Cons (x, xs) -> x + sum_list xs
+
+let r12 = sum_list mapped
+let _ = print r12  (* Expected: 21 - (5+1)+(5+2)+(5+3) *)
+
+(* Test 13: Fold with curried function *)
+let rec fold f acc l = match l with
+  | Nil -> acc
+  | Cons (x, xs) -> fold f (f acc x) xs
+
+let add_to a b = a + b
+let r13 = fold add_to 0 numbers
+let _ = print r13  (* Expected: 6 *)
+
+(* Test 14: Partial fold *)
+let sum_list_v2 = fold add_to 0
+let r14 = sum_list_v2 numbers
+let _ = print r14  (* Expected: 6 *)
+
+(* Test 15: Multiple partial applications on same function *)
+let f a b c = a * b + c
+let double_plus = f 2
+let double_5_plus = double_plus 5
+let r15 = double_5_plus 3
+let _ = print r15  (* Expected: 13 - 2*5+3 *)
+
+(* Test 16: Passing partial application as argument *)
+let apply_twice f x = f (f x)
+let add_3 = add_n 3
+let r16 = apply_twice add_3 10
+let _ = print r16  (* Expected: 16 - (10+3)+3 *)
+
+(* Test 17: Returning partial application from function *)
+let make_multiplier n =
+  let mul_by x = n * x in
+  mul_by
+let times_3 = make_multiplier 3
+let r17 = times_3 7
+let _ = print r17  (* Expected: 21 *)
+
+(* Test 18: Deeply nested currying *)
+let f5 a b c d e = a + b + c + d + e
+let p1 = f5 1
+let p2 = p1 2
+let p3 = p2 3
+let p4 = p3 4
+let r18 = p4 5
+let _ = print r18  (* Expected: 15 *)
+
+(* Test 19: Currying with polymorphism *)
+let identity x = x
+let apply_id = apply identity
+let r19 = apply_id 42
+let _ = print r19  (* Expected: 42 *)
+
+(* Test 20: Eta-expansion and currying *)
+let wrapped_add x y = Math.add x y
+let r20 = wrapped_add 10 20
+let _ = print r20  (* Expected: 30 *)

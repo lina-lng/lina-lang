@@ -10,7 +10,8 @@ open Types
 let infer_module_expression_ref :
     (Typing_context.t -> module_expression -> Typed_tree.typed_module_expression * Typing_context.t) ref =
   ref (fun _ctx _mexpr ->
-    failwith "infer_module_expression not initialized - Structure_infer must set this")
+    Compiler_error.internal_error
+      "infer_module_expression not initialized - Structure_infer must set this")
 
 let module_path_to_internal_path base_id path_modules =
   match path_modules with
@@ -30,22 +31,20 @@ let find_module_in_type_or_error mod_type name loc =
           Compiler_error.type_error loc
             (Printf.sprintf "Module %s not found in signature" name)
       end
-  | Module_types.ModTypeFunctor _ ->
-      Compiler_error.type_error loc "Cannot access module inside functor type"
-  | Module_types.ModTypeIdent _ ->
-      Compiler_error.type_error loc "Cannot access module inside abstract module type"
+  | _ ->
+      Inference_utils.error_cannot_access_in_module_type loc mod_type "access module"
 
 let make_module_binding name mty =
   let id = Identifier.create name in
   Module_types.{ binding_name = name; binding_id = id; binding_type = mty; binding_alias = None }
 
 let split_last list =
-  let rec aux acc = function
-    | [] -> failwith "split_last: empty list"
-    | [x] -> (List.rev acc, x)
-    | x :: rest -> aux (x :: acc) rest
+  let rec collect_prefix prefix_rev = function
+    | [] -> Compiler_error.internal_error "split_last called with empty list"
+    | [last] -> (List.rev prefix_rev, last)
+    | x :: rest -> collect_prefix (x :: prefix_rev) rest
   in
-  aux [] list
+  collect_prefix [] list
 
 (** {2 Signature Refinement Helpers}
 
@@ -175,16 +174,13 @@ let rec check_module_type ctx (mty : module_type) =
           | None ->
             Compiler_error.type_error loc (Printf.sprintf "Module type %s not found in module" type_name)
           end
-        | Module_types.ModTypeFunctor _ ->
-          Compiler_error.type_error loc "Cannot find module type in functor"
-        | Module_types.ModTypeIdent _ ->
-          Compiler_error.type_error loc "Cannot find module type in abstract module"
+        | _ ->
+          Inference_utils.error_cannot_access_in_module_type loc final_binding.binding_type "find module type"
         end
       end
     end
 
   | ModuleTypeSignature sig_items ->
-    (* Explicit signature: sig ... end *)
     let semantic_sig, ctx = check_signature ctx sig_items in
     (Module_types.ModTypeSig semantic_sig, ctx)
 
@@ -234,9 +230,7 @@ let rec check_module_type ctx (mty : module_type) =
     end
 
   | ModuleTypeWith (base_mty, constraints) ->
-    (* Check the base module type *)
     let base, ctx = check_module_type ctx base_mty in
-    (* Apply each constraint *)
     let result, ctx =
       List.fold_left (fun (mty, ctx) constraint_ ->
         apply_with_constraint ctx mty constraint_ loc
@@ -269,10 +263,8 @@ and apply_module_constraint ctx mty path target loc =
   | Module_types.ModTypeSig sig_ ->
     let refined_sig = refine_module_in_sig ctx sig_ path target_mty loc in
     (Module_types.ModTypeSig refined_sig, ctx)
-  | Module_types.ModTypeFunctor _ ->
-    Compiler_error.type_error loc "Cannot apply with-constraint to functor type"
-  | Module_types.ModTypeIdent _ ->
-    Compiler_error.type_error loc "Cannot apply with-constraint to abstract module type"
+  | _ ->
+    Inference_utils.error_cannot_access_in_module_type loc mty "apply with-constraint"
 
 and refine_module_in_sig ctx sig_ path target_mty loc =
   match path.Location.value with
@@ -300,15 +292,16 @@ and refine_nested_module_in_sig ctx sig_ prefix mod_name target_mty loc =
   in
   dispatch_nested_path prefix mod_name loc ~refine
 
-and apply_type_constraint ctx mty path params type_expr loc =
+and apply_type_constraint_with ~refine_fn ctx mty path params type_expr loc =
   match mty with
   | Module_types.ModTypeSig sig_ ->
-    let refined_sig, ctx = refine_type_in_sig ctx sig_ path params type_expr loc in
-    (Module_types.ModTypeSig refined_sig, ctx)
-  | Module_types.ModTypeFunctor _ ->
-    Compiler_error.type_error loc "Cannot apply with-constraint to functor type"
-  | Module_types.ModTypeIdent _ ->
-    Compiler_error.type_error loc "Cannot apply with-constraint to abstract module type"
+      let refined_sig, ctx = refine_fn ctx sig_ path params type_expr loc in
+      (Module_types.ModTypeSig refined_sig, ctx)
+  | _ ->
+      Inference_utils.error_cannot_access_in_module_type loc mty "apply with-constraint"
+
+and apply_type_constraint ctx mty path params type_expr loc =
+  apply_type_constraint_with ~refine_fn:refine_type_in_sig ctx mty path params type_expr loc
 
 and refine_type_in_sig ctx sig_ path params type_expr loc =
   match path.Location.value with
@@ -345,14 +338,8 @@ and refine_type_in_nested_sig ctx sig_ prefix type_name params type_expr loc =
   dispatch_nested_path prefix type_name loc ~refine
 
 and apply_destructive_type_constraint ctx mty path params type_expr loc =
-  match mty with
-  | Module_types.ModTypeSig sig_ ->
-    let refined_sig, ctx = destructive_refine_type_in_sig ctx sig_ path params type_expr loc in
-    (Module_types.ModTypeSig refined_sig, ctx)
-  | Module_types.ModTypeFunctor _ ->
-    Compiler_error.type_error loc "Cannot apply with-constraint to functor type"
-  | Module_types.ModTypeIdent _ ->
-    Compiler_error.type_error loc "Cannot apply with-constraint to abstract module type"
+  apply_type_constraint_with ~refine_fn:destructive_refine_type_in_sig
+    ctx mty path params type_expr loc
 
 (** Two-pass algorithm: find/validate the type, then substitute and remove it. *)
 and destructive_refine_type_in_sig ctx sig_ path params type_expr loc =
@@ -418,65 +405,12 @@ and destructive_refine_type_in_nested_sig ctx sig_ prefix type_name params type_
   dispatch_nested_path prefix type_name loc ~refine
 
 and substitute_type_in_type type_name type_params replacement ty =
-  match Types.representative ty with
-  | Types.TypeVariable _ ->
-      ty
-
-  | Types.TypeConstructor (path, args) ->
-      let args' = List.map (substitute_type_in_type type_name type_params replacement) args in
-      begin match path with
-      | Types.PathLocal name when name = type_name ->
-          if List.length type_params = 0 then replacement
-          else Type_utils.substitute_type_params type_params args' replacement
-      | _ ->
-          Types.TypeConstructor (path, args')
-      end
-
-  | Types.TypeArrow (label, t1, t2) ->
-      Types.TypeArrow (
-        label,
-        substitute_type_in_type type_name type_params replacement t1,
-        substitute_type_in_type type_name type_params replacement t2
-      )
-
-  | Types.TypeTuple tys ->
-      Types.TypeTuple (List.map (substitute_type_in_type type_name type_params replacement) tys)
-
-  | Types.TypeRecord row ->
-      let new_fields = List.map (fun (name, field) ->
-        match field with
-        | Types.RowFieldPresent ty ->
-            (name, Types.RowFieldPresent (substitute_type_in_type type_name type_params replacement ty))
-      ) row.row_fields in
-      let new_more = substitute_type_in_type type_name type_params replacement row.row_more in
-
-      Types.TypeRecord { row_fields = new_fields; row_more = new_more }
-
-  | Types.TypePolyVariant pv_row ->
-      let new_fields = List.map (fun (name, field) ->
-        let new_field = match field with
-          | Types.PVFieldPresent (Some ty) ->
-              Types.PVFieldPresent (Some (substitute_type_in_type type_name type_params replacement ty))
-          | Types.PVFieldPresent None ->
-              Types.PVFieldPresent None
-          | Types.PVFieldAbsent ->
-              Types.PVFieldAbsent
-        in
-        (name, new_field)
-      ) pv_row.pv_fields in
-      let new_more = substitute_type_in_type type_name type_params replacement pv_row.pv_more in
-
-      Types.TypePolyVariant { pv_fields = new_fields; pv_more = new_more; pv_closed = pv_row.pv_closed }
-
-  | Types.TypeRowEmpty ->
-      ty
-
-  | Types.TypePackage pkg ->
-      (* Apply substitution to all types in the package signature *)
-      let new_sig = List.map (fun (name, ty) ->
-        (name, substitute_type_in_type type_name type_params replacement ty)
-      ) pkg.package_signature in
-      Types.TypePackage { pkg with package_signature = new_sig }
+  Type_traversal.map (function
+    | Types.TypeConstructor (Types.PathLocal name, args) when name = type_name ->
+        if type_params = [] then replacement
+        else Type_utils.substitute_type_params type_params args replacement
+    | t -> t
+  ) ty
 
 and substitute_type_in_module_type type_name type_params replacement mty =
   match mty with
@@ -516,17 +450,15 @@ and substitute_type_in_signature type_name type_params replacement sig_ =
   ) sig_
 
 and check_signature ctx sig_items =
-  let items, ctx =
-    List.fold_left (fun (items, ctx) item ->
+  let rev_items, ctx =
+    List.fold_left (fun (rev_items, ctx) item ->
       let item_opt, ctx = check_signature_item ctx item in
-      let items = match item_opt with
-        | Some sig_item -> items @ [sig_item]
-        | None -> items
-      in
-      (items, ctx)
+      match item_opt with
+      | Some sig_item -> (sig_item :: rev_items, ctx)
+      | None -> (rev_items, ctx)
     ) ([], ctx) sig_items
   in
-  (items, ctx)
+  (List.rev rev_items, ctx)
 
 and check_signature_item ctx item =
   let loc = item.Location.location in
@@ -545,16 +477,17 @@ and check_signature_item ctx item =
     begin match type_decls with
     | decl :: _ ->
       let name = decl.type_name.Location.value in
-      let type_params, ctx =
-        List.fold_left (fun (params, ctx) _ ->
+      let rev_type_params, ctx =
+        List.fold_left (fun (rev_params, ctx) _ ->
           let tv, ctx = Typing_context.new_type_variable ctx in
           match tv with
-          | Types.TypeVariable tv -> (params @ [tv], ctx)
+          | Types.TypeVariable tv -> (tv :: rev_params, ctx)
           | _ ->
             Common.Compiler_error.internal_error
               "new_type_variable did not return a TypeVariable"
         ) ([], ctx) decl.type_parameters
       in
+      let type_params = List.rev rev_type_params in
 
       (* Get parameter names for mapping when checking type expressions *)
       let param_names = List.map (fun (param : Parsing.Syntax_tree.type_parameter) ->
@@ -584,57 +517,9 @@ and check_signature_item ctx item =
       let (kind, manifest, ctx) = match decl.type_kind with
         | Parsing.Syntax_tree.TypeAbstract -> (Types.DeclarationAbstract, None, ctx)
         | Parsing.Syntax_tree.TypeVariant constructors ->
-          (* Process variant constructors including GADT constructors *)
-          let indexed_constructors = List.mapi (fun index ctor -> (index, ctor)) constructors in
           let constructor_infos, ctx =
-            List.fold_left (fun (infos, ctx) (tag_index, (ctor : constructor_declaration)) ->
-              let arg_type, ctor_result_type, is_gadt, ctor_type_params, existentials, ctx =
-                match ctor.constructor_return_type with
-                | Some ret_ty_expr ->
-                  (* GADT constructor with explicit return type *)
-                  let arg_ty, ret_ty, _gadt_params, ctx =
-                    Type_expression_check.check_gadt_constructor ctx_with_type param_names type_params
-                      ctor.constructor_argument ret_ty_expr
-                  in
-                  (* Collect ALL type variables from both argument and result types *)
-                  let result_vars = Type_traversal.free_type_variables ret_ty in
-                  let arg_vars = match arg_ty with
-                    | Some arg_ty_val -> Type_traversal.free_type_variables arg_ty_val
-                    | None -> []
-                  in
-
-                  let result_var_ids = List.map (fun tv -> tv.Types.id) result_vars in
-                  let all_type_params = result_vars @ List.filter (fun tv ->
-                    not (List.mem tv.Types.id result_var_ids)
-                  ) arg_vars in
-
-                  let existentials =
-                    List.filter (fun tv -> not (List.mem tv.Types.id result_var_ids)) arg_vars
-                  in
-                  (arg_ty, ret_ty, true, all_type_params, existentials, ctx)
-                | None ->
-                  (* Regular constructor without GADT return type *)
-                  let arg_type, ctx = match ctor.constructor_argument with
-                    | Some ty_expr ->
-                      let ty, ctx = Type_expression_check.check_type_expression_with_params
-                        ctx_with_type param_names type_params ty_expr in
-                      (Some ty, ctx)
-                    | None -> (None, ctx)
-                  in
-                  (arg_type, result_type, false, type_params, [], ctx)
-              in
-              let ctor_info = Types.{
-                constructor_name = ctor.constructor_name.Location.value;
-                constructor_tag_index = tag_index;
-                constructor_type_name = name;
-                constructor_argument_type = arg_type;
-                constructor_result_type = ctor_result_type;
-                constructor_type_parameters = ctor_type_params;
-                constructor_is_gadt = is_gadt;
-                constructor_existentials = existentials;
-              } in
-              (infos @ [ctor_info], ctx)
-            ) ([], ctx) indexed_constructors
+            Constructor_check.check_constructors ctx_with_type param_names type_params
+              result_type name constructors
           in
           (Types.DeclarationVariant constructor_infos, None, ctx)
         | Parsing.Syntax_tree.TypeAlias ty_expr ->

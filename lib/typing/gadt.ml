@@ -23,6 +23,21 @@ type extraction_result = {
   success : bool;             (** Whether the types could be matched *)
 }
 
+(** {1 Type Variable Filtering Helpers} *)
+
+let collect_var_ids (vars : type_variable list) : int list =
+  List.map (fun tv -> tv.id) vars
+
+let vars_not_in ~reference_ids (vars : type_variable list) : type_variable list =
+  List.filter (fun tv -> not (List.mem tv.id reference_ids)) vars
+
+let var_ids_not_in ~reference_ids (vars : type_variable list) : int list =
+  List.filter_map (fun tv ->
+    if not (List.mem tv.id reference_ids) then Some tv.id else None
+  ) vars
+
+(** {1 Type Analysis} *)
+
 (** Check if a type expression contains any rigid type variables. *)
 let rec has_rigid_variables ty =
   match representative ty with
@@ -189,6 +204,27 @@ let apply_equations_to_scheme equations scheme =
 let needs_gadt_handling constructor_info scrutinee_type =
   constructor_info.constructor_is_gadt && has_rigid_variables scrutinee_type
 
+(** Result of computing GADT constructor type parameters and existentials. *)
+type gadt_constructor_params = {
+  constructor_type_params : type_variable list;
+  existentials : type_variable list;
+}
+
+(** Compute GADT constructor type parameters and existential variables.
+
+    Type parameters are: return type vars + argument-only vars.
+    Existentials are: argument vars not appearing in return type.
+
+    @param return_type_vars Type variables appearing in the return type
+    @param argument_type_vars Type variables appearing in the argument type
+    @return Record with computed constructor_type_params and existentials *)
+let compute_gadt_constructor_params ~return_type_vars ~argument_type_vars =
+  let return_var_ids = collect_var_ids return_type_vars in
+  let argument_only_vars = vars_not_in ~reference_ids:return_var_ids argument_type_vars in
+
+  { constructor_type_params = return_type_vars @ argument_only_vars;
+    existentials = argument_only_vars }
+
 (** Check if a type contains any of the given existential type variables.
 
     @param existential_ids Set of type variable IDs that are existential
@@ -229,17 +265,10 @@ let rec collect_existentials_from_pattern (pattern : Typed_tree.typed_pattern) =
       else
         match arg_opt with
         | Some arg_pattern ->
-          (* Collect type variables from the argument pattern's type *)
           let arg_vars = Type_traversal.free_type_variables arg_pattern.pattern_type in
-          (* Collect type variables from the pattern's result type
-             (which is the instantiated constructor result type) *)
           let result_vars = Type_traversal.free_type_variables pattern.pattern_type in
-          let result_var_ids = List.map (fun tv -> tv.id) result_vars in
-          (* Existentials are in arg but not in result *)
-          List.filter_map (fun tv ->
-            if not (List.mem tv.id result_var_ids) then Some tv.id
-            else None
-          ) arg_vars
+          let result_var_ids = collect_var_ids result_vars in
+          var_ids_not_in ~reference_ids:result_var_ids arg_vars
         | None -> []
     in
     (* Also collect from nested patterns *)

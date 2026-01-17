@@ -27,7 +27,9 @@ let string_concat_type =
 let polymorphic_print_type =
   let alpha = match new_type_variable_at_level generic_level with
     | TypeVariable tv -> tv
-    | _ -> failwith "new_type_variable_at_level must return TypeVariable"
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
   in
   {
     quantified_variables = [alpha];
@@ -44,7 +46,9 @@ let bool_not_type =
 let option_type_declaration, none_constructor, some_constructor =
   let alpha = match new_type_variable_at_level generic_level with
     | TypeVariable tv -> tv
-    | _ -> failwith "new_type_variable_at_level must return TypeVariable"
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
   in
 
   let option_result_type = TypeConstructor (PathLocal "option", [TypeVariable alpha]) in

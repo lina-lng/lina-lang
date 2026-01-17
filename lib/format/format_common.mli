@@ -121,6 +121,14 @@ val format_node_list : (Red_tree.syntax_node -> doc) -> Red_tree.syntax_node lis
 val format_node_list_sep :
   sep:doc -> (Red_tree.syntax_node -> doc) -> Red_tree.syntax_node list -> doc
 
+(** Format an optional value with a prefix doc, returning empty if None.
+    [format_with_prefix (colon ^^ space) format_type (Some ty)]
+    produces [: ty], while [format_with_prefix ... None] produces empty. *)
+val format_with_prefix : doc -> ('a -> doc) -> 'a option -> doc
+
+(** Format an optional value with docs before and after, returning empty if None. *)
+val format_surrounded : before:doc -> after:doc -> ('a -> doc) -> 'a option -> doc
+
 (** {1 Required Accessor Combinators}
 
     These combinators handle the common pattern of extracting multiple

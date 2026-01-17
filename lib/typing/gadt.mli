@@ -94,6 +94,28 @@ val apply_equations_to_scheme : equation list -> type_scheme -> type_scheme
     @return true if GADT equation extraction should be performed *)
 val needs_gadt_handling : constructor_info -> type_expression -> bool
 
+(** {1 GADT Constructor Parameters} *)
+
+(** Result of computing GADT constructor type parameters and existentials. *)
+type gadt_constructor_params = {
+  constructor_type_params : type_variable list;
+  existentials : type_variable list;
+}
+
+(** [compute_gadt_constructor_params ~return_type_vars ~argument_type_vars]
+    computes constructor type parameters and existential variables.
+
+    Type parameters are: return type vars + argument-only vars.
+    Existentials are: argument vars not appearing in return type.
+
+    @param return_type_vars Type variables appearing in the return type
+    @param argument_type_vars Type variables appearing in the argument type
+    @return Record with computed constructor_type_params and existentials *)
+val compute_gadt_constructor_params :
+  return_type_vars:type_variable list ->
+  argument_type_vars:type_variable list ->
+  gadt_constructor_params
+
 (** {1 Existential Type Variables} *)
 
 (** [check_existential_escape existential_ids ty] checks if a type contains

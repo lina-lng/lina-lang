@@ -218,12 +218,7 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
   | TypeArrow (label, arg_ty, ret_ty) ->
     let arg, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars arg_ty in
     let ret, ctx, var_map = check_type_expression_impl ctx var_map ~accumulate_vars ret_ty in
-    (* Convert syntax label to type system label *)
-    let types_label = match label with
-      | Parsing.Syntax_tree.Nolabel -> Types.Nolabel
-      | Parsing.Syntax_tree.Labelled s -> Types.Labelled s
-      | Parsing.Syntax_tree.Optional s -> Types.Optional s
-    in
+    let types_label = Inference_utils.convert_syntax_label label in
     (Types.TypeArrow (types_label, arg, ret), ctx, var_map)
 
   | TypeTuple tys ->

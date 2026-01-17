@@ -8,8 +8,6 @@
 
 (** The kind of a syntax element (token or node). *)
 type t =
-  (* ===== Tokens ===== *)
-
   (* Keywords *)
   | TK_LET
   | TK_REC
@@ -113,8 +111,6 @@ type t =
   | TK_LINE_COMMENT
   | TK_BLOCK_COMMENT
 
-  (* ===== Nodes ===== *)
-
   (* Top-level *)
   | NK_SOURCE_FILE
   | NK_ERROR
@@ -215,34 +211,29 @@ type t =
   | NK_ARGUMENT_LIST
 [@@deriving show, eq]
 
+(** {1 Token Categories} *)
+
+type token_category =
+  | Keyword
+  | Punctuation
+  | Operator
+  | Literal
+  | Identifier
+  | Delimiter
+  | Trivia
+  | Special
+
+val token_category : t -> token_category
+
 (** {1 Classification} *)
 
-(** Check if a syntax kind is a token (as opposed to a node). *)
 val is_token : t -> bool
-
-(** Check if a syntax kind is a node (as opposed to a token). *)
 val is_node : t -> bool
-
-(** Check if a syntax kind is trivia (whitespace or comments). *)
 val is_trivia : t -> bool
-
-(** Check if a syntax kind is a comment (line or block). *)
 val is_comment : t -> bool
-
-(** Check if a syntax kind is a keyword. *)
 val is_keyword : t -> bool
-
-(** Check if a syntax kind is a punctuation token. *)
 val is_punctuation : t -> bool
-
-(** Check if a syntax kind is an operator. *)
 val is_operator : t -> bool
-
-(** Check if a syntax kind is an expression node. *)
 val is_expression : t -> bool
-
-(** Check if a syntax kind is a pattern node. *)
 val is_pattern : t -> bool
-
-(** Check if a syntax kind is a type node. *)
 val is_type : t -> bool

@@ -25,6 +25,26 @@ let register_singleton ctx type_name tag_index =
 let generate_singleton_preamble ctx =
   Singleton_registry.generate_preamble ctx.singletons
 
+(** {1 Context-Threaded Fold Helpers} *)
+
+(** Fold over bindings, translating each value and collecting named fields.
+    Returns the fields in correct order (reverses the accumulator).
+
+    @param translate_value Function to translate a value (typically translate_expression)
+    @param ctx Initial context
+    @param bindings List of bindings to translate
+    @param get_name Function to extract field name from a binding
+    @param get_value Function to extract value expression from a binding
+    @return Tuple of (translated fields list, updated context) *)
+let fold_to_named_fields translate_value ctx bindings ~get_name ~get_value =
+  let rev_fields, ctx =
+    List.fold_left (fun (acc, ctx) binding ->
+      let translated, ctx = translate_value ctx (get_value binding) in
+      (FieldNamed (get_name binding, translated) :: acc, ctx)
+    ) ([], ctx) bindings
+  in
+  (List.rev rev_fields, ctx)
+
 (** {1 IIFE Helpers}
 
     Immediately Invoked Function Expressions wrap statements in a function
@@ -49,46 +69,43 @@ let translate_constant = function
   | Lambda.ConstantBool b -> ExpressionBool b
   | Lambda.ConstantUnit -> ExpressionNil
 
+let binary_primitives = [
+  Lambda.PrimitiveAddInt, OpAdd;
+  Lambda.PrimitiveSubInt, OpSub;
+  Lambda.PrimitiveMulInt, OpMul;
+  Lambda.PrimitiveDivInt, OpDiv;
+  Lambda.PrimitiveIntEqual, OpEqual;
+  Lambda.PrimitiveIntNotEqual, OpNotEqual;
+  Lambda.PrimitiveIntLess, OpLess;
+  Lambda.PrimitiveIntGreater, OpGreater;
+  Lambda.PrimitiveIntLessEqual, OpLessEqual;
+  Lambda.PrimitiveIntGreaterEqual, OpGreaterEqual;
+  Lambda.PrimitiveStringEqual, OpEqual;
+  Lambda.PrimitiveStringConcat, OpConcat;
+]
+
+let unary_primitives = [
+  Lambda.PrimitiveNegInt, OpNegate;
+  Lambda.PrimitiveBoolNot, OpNot;
+]
+
 let translate_primitive prim args =
-  match prim, args with
-  | Lambda.PrimitiveAddInt, [a; b] ->
-    ExpressionBinaryOp (OpAdd, a, b)
-  | Lambda.PrimitiveSubInt, [a; b] ->
-    ExpressionBinaryOp (OpSub, a, b)
-  | Lambda.PrimitiveMulInt, [a; b] ->
-    ExpressionBinaryOp (OpMul, a, b)
-  | Lambda.PrimitiveDivInt, [a; b] ->
-    ExpressionBinaryOp (OpDiv, a, b)
-  | Lambda.PrimitiveNegInt, [a] ->
-    ExpressionUnaryOp (OpNegate, a)
-  | Lambda.PrimitiveIntEqual, [a; b] ->
-    ExpressionBinaryOp (OpEqual, a, b)
-  | Lambda.PrimitiveIntNotEqual, [a; b] ->
-    ExpressionBinaryOp (OpNotEqual, a, b)
-  | Lambda.PrimitiveIntLess, [a; b] ->
-    ExpressionBinaryOp (OpLess, a, b)
-  | Lambda.PrimitiveIntGreater, [a; b] ->
-    ExpressionBinaryOp (OpGreater, a, b)
-  | Lambda.PrimitiveIntLessEqual, [a; b] ->
-    ExpressionBinaryOp (OpLessEqual, a, b)
-  | Lambda.PrimitiveIntGreaterEqual, [a; b] ->
-    ExpressionBinaryOp (OpGreaterEqual, a, b)
-  | Lambda.PrimitiveStringEqual, [a; b] ->
-    ExpressionBinaryOp (OpEqual, a, b)
-  | Lambda.PrimitiveStringConcat, [a; b] ->
-    ExpressionBinaryOp (OpConcat, a, b)
-  | Lambda.PrimitiveBoolNot, [a] ->
-    ExpressionUnaryOp (OpNot, a)
-  | Lambda.PrimitivePrint, [a] ->
-    ExpressionCall (ExpressionVariable "print", [a])
-  | Lambda.PrimError, [msg] ->
-    ExpressionCall (ExpressionVariable "error", [msg])
-  | Lambda.PrimitiveMakeBlock _, fields ->
-    ExpressionTable (List.map (fun f -> FieldArray f) fields)
-  | Lambda.PrimitiveGetField n, [obj] ->
-    ExpressionIndex (obj, ExpressionNumber (float_of_int (n + 1)))
+  match List.assoc_opt prim binary_primitives, args with
+  | Some op, [left; right] -> ExpressionBinaryOp (op, left, right)
   | _ ->
-    ExpressionNil
+    match List.assoc_opt prim unary_primitives, args with
+    | Some op, [operand] -> ExpressionUnaryOp (op, operand)
+    | _ ->
+      match prim, args with
+      | Lambda.PrimitivePrint, [arg] ->
+          ExpressionCall (ExpressionVariable "print", [arg])
+      | Lambda.PrimError, [msg] ->
+          ExpressionCall (ExpressionVariable "error", [msg])
+      | Lambda.PrimitiveMakeBlock _, fields ->
+          ExpressionTable (List.map (fun field -> FieldArray field) fields)
+      | Lambda.PrimitiveGetField index, [obj] ->
+          ExpressionIndex (obj, ExpressionNumber (float_of_int (index + 1)))
+      | _ -> ExpressionNil
 
 (** Wrap the last argument with table.unpack() for variadic FFI calls.
 
@@ -201,40 +218,40 @@ let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list
     let constructor = ExpressionField (ExpressionVariable lua_name, "new") in
     ExpressionCall (constructor, wrapped_args)
 
-(** {1 Currying Support}
+(** {1 Currying}
 
-    OCaml-style currying: multi-parameter functions become nested single-parameter
-    functions, and multi-argument applications become chained single-argument calls.
-    This enables partial application to work correctly.
-
-    Example:
-    - Lina: [fun a b c -> body] becomes Lua: [function(a) return function(b) return function(c) body end end end]
-    - Lina: [f x y z] becomes Lua: [f(x)(y)(z)] *)
+    Lina uses curried functions for correct partial application behavior.
+    Functions are always curried: function(a) return function(b) ... end end
+    Calls are always curried: f(a)(b)(c) *)
 
 (** Build a curried function expression from parameters and body statements.
     [make_curried_function [a; b; c] body] generates:
     [function(a) return function(b) return function(c) body end end end] *)
 let make_curried_function (params : string list) (body_stmts : statement list) : expression =
-  match params with
-  | [] ->
-    (* Zero-arg function: function() body end *)
-    ExpressionFunction ([], body_stmts)
-  | [single] ->
-    (* Single-arg function: no currying needed *)
-    ExpressionFunction ([single], body_stmts)
-  | first :: rest ->
-    (* Multi-arg function: curry into nested single-arg functions *)
-    let innermost = ExpressionFunction ([List.hd (List.rev rest)], body_stmts) in
-    let middle_params = List.rev (List.tl (List.rev rest)) in
-    let nested = List.fold_right (fun param inner ->
-      ExpressionFunction ([param], [StatementReturn [inner]])
-    ) middle_params innermost in
-    ExpressionFunction ([first], [StatementReturn [nested]])
+  let rec build_nested = function
+    | [] -> ExpressionFunction ([], body_stmts)
+    | [last_param] -> ExpressionFunction ([last_param], body_stmts)
+    | param :: rest ->
+        let inner = build_nested rest in
+        ExpressionFunction ([param], [StatementReturn [inner]])
+  in
+  build_nested params
 
 (** Build a curried function call from a function expression and arguments.
     [make_curried_call f [a; b; c]] generates: [f(a)(b)(c)] *)
 let make_curried_call (func : expression) (args : expression list) : expression =
   List.fold_left (fun acc arg -> ExpressionCall (acc, [arg])) func args
+
+(** Fold over a list, translating each element and threading context.
+    Uses cons + reverse for O(n) instead of O(n²) list append. *)
+let fold_translate_ctx translate ctx items =
+  let reversed, ctx =
+    List.fold_left (fun (acc, ctx) item ->
+      let translated, ctx = translate ctx item in
+      (translated :: acc, ctx)
+    ) ([], ctx) items
+  in
+  (List.rev reversed, ctx)
 
 (** Wrap a lambda in an IIFE (Immediately Invoked Function Expression).
 
@@ -261,13 +278,11 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
   | Lambda.LambdaApply (func, args) ->
     let func_expr, ctx = translate_expression ctx func in
     let arg_exprs, ctx = translate_expression_list ctx args in
-    (* Use curried call: f(a)(b)(c) instead of f(a, b, c) *)
     (make_curried_call func_expr arg_exprs, ctx)
 
   | Lambda.LambdaFunction (params, body) ->
     let param_names = List.map mangle_identifier params in
     let body_stmts, ctx = translate_to_statements ctx body in
-    (* Use curried function: function(a) return function(b) ... end end *)
     (make_curried_function param_names body_stmts, ctx)
 
   (* Statement-form constructs: wrap in IIFE when in expression position *)
@@ -313,11 +328,9 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
     (make_variant_table tag_expr arg_expr_opt, ctx)
 
   | Lambda.LambdaMakeRecord field_bindings ->
-    let translated_fields, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
-      let translated, ctx = translate_expression ctx field_value in
-      (FieldNamed (field_name, translated) :: acc, ctx)
-    ) ([], ctx) field_bindings in
-    (ExpressionTable (List.rev translated_fields), ctx)
+    let fields, ctx = fold_to_named_fields translate_expression ctx field_bindings
+      ~get_name:fst ~get_value:snd in
+    (ExpressionTable fields, ctx)
 
   | Lambda.LambdaGetRecordField (field_name, record_expression) ->
     let translated_record, ctx = translate_expression ctx record_expression in
@@ -327,15 +340,12 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
     wrap_in_iife ctx lambda
 
   | Lambda.LambdaModule bindings ->
-    (* Module as a Lua table with named fields *)
-    let fields, ctx = List.fold_left (fun (acc, ctx) (binding : Lambda.module_binding) ->
-      let translated, ctx = translate_expression ctx binding.mb_value in
-      (FieldNamed (Lambda.module_binding_name binding, translated) :: acc, ctx)
-    ) ([], ctx) bindings in
-    (ExpressionTable (List.rev fields), ctx)
+    let fields, ctx = fold_to_named_fields translate_expression ctx bindings
+      ~get_name:Lambda.module_binding_name
+      ~get_value:(fun b -> b.Lambda.mb_value) in
+    (ExpressionTable fields, ctx)
 
   | Lambda.LambdaModuleAccess (module_expr, field_name) ->
-    (* Module access as field access: M.x *)
     let translated_module, ctx = translate_expression ctx module_expr in
     (ExpressionField (translated_module, field_name), ctx)
 
@@ -346,17 +356,13 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
     (ExpressionFunction ([param_name], body_stmts), ctx)
 
   | Lambda.LambdaFunctorApply (func_expr, arg_expr) ->
-    (* Functor application: F(X) becomes F(X) function call *)
     let translated_func, ctx = translate_expression ctx func_expr in
     let translated_arg, ctx = translate_expression ctx arg_expr in
     (ExpressionCall (translated_func, [translated_arg]), ctx)
 
   | Lambda.LambdaExternalCall (spec, args) ->
-    (* Translate arguments first *)
     let translated_args, ctx = translate_expression_list ctx args in
-    (* Generate the FFI call based on the spec *)
     let call_expr = generate_ffi_call spec translated_args in
-    (* Wrap result if @return(nullable) is specified *)
     if spec.Typing_ffi.Types.ffi_return_nullable then
       (* Generate:
          (function()
@@ -434,20 +440,12 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
     let return_nil = StatementReturn [ExpressionNil] in
     (make_iife [for_stmt; return_nil], ctx)
 
-(** Helper to translate a list of expressions.
-    Uses cons + reverse for O(n) instead of O(n²) list append. *)
 and translate_expression_list ctx exprs =
-  let reversed, ctx = List.fold_left (fun (acc, ctx) expr ->
-    let translated, ctx = translate_expression ctx expr in
-    (translated :: acc, ctx)
-  ) ([], ctx) exprs in
-  (List.rev reversed, ctx)
+  fold_translate_ctx translate_expression ctx exprs
 
-(** Translate a value and assign it to a variable, threading context *)
 and translate_value_to_assignment ctx name lambda : block * context =
   match lambda with
   | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
-    (* Nested let: float it out and then assign *)
     let inner_name = mangle_identifier inner_id in
     let inner_expr, ctx = translate_expression ctx inner_value in
     let inner_decl = StatementLocal ([inner_name], [inner_expr]) in
@@ -455,7 +453,6 @@ and translate_value_to_assignment ctx name lambda : block * context =
     (inner_decl :: rest_stmts, ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
-    (* Nested if: generate if statement with assignments *)
     let cond_expr, ctx = translate_expression ctx cond in
     let then_stmts, ctx = translate_value_to_assignment ctx name then_branch in
     let else_stmts, ctx = translate_value_to_assignment ctx name else_branch in
@@ -494,24 +491,16 @@ and translate_recursive_bindings ctx bindings =
 
 (** Dispatch table switch translation for many cases, threading context *)
 and translate_switch_as_dispatch ctx _scrutinee_name tag_access cases default =
-  (* Generate:
-     local _dispatch = {
-       [0] = function() ... end,
-       [1] = function() ... end,
-     }
-     local _handler = _dispatch[scrutinee._tag]
-     if _handler then return _handler() else <default> end
-  *)
   let dispatch_name = Codegen_constants.dispatch_table_name in
   let handler_name = Codegen_constants.dispatch_handler_name in
-  (* Use cons + reverse for O(n) instead of O(n²) list append *)
-  let dispatch_entries_rev, ctx = List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
+
+  let translate_dispatch_entry ctx (case : Lambda.switch_case) =
     let handler_body, ctx = translate_to_statements ctx case.switch_body in
     let handler = ExpressionFunction ([], handler_body) in
     let entry = FieldIndexed (ExpressionNumber (float_of_int case.switch_tag), handler) in
-    (entry :: acc, ctx)
-  ) ([], ctx) cases in
-  let dispatch_entries = List.rev dispatch_entries_rev in
+    (entry, ctx)
+  in
+  let dispatch_entries, ctx = fold_translate_ctx translate_dispatch_entry ctx cases in
   let dispatch_table = ExpressionTable dispatch_entries in
   let dispatch_decl = StatementLocal ([dispatch_name], [dispatch_table]) in
   let handler_lookup = ExpressionIndex (ExpressionVariable dispatch_name, tag_access) in
@@ -530,6 +519,46 @@ and translate_switch_as_dispatch ctx _scrutinee_name tag_access cases default =
       Some default_stmts
     )
   ], ctx)
+
+(** Translate a switch as an if-chain (for few cases) *)
+and translate_switch_as_if_chain ctx tag_access cases default =
+  let translate_case ctx (case : Lambda.switch_case) =
+    let body, ctx = translate_to_statements ctx case.switch_body in
+    let cond = ExpressionBinaryOp (OpEqual, tag_access,
+      ExpressionNumber (float_of_int case.switch_tag)) in
+    ((cond, body), ctx)
+  in
+  let branches, ctx = fold_translate_ctx translate_case ctx cases in
+
+  let default_stmts, ctx = match default with
+    | Some d ->
+      let stmts, ctx = translate_to_statements ctx d in
+      (Some stmts, ctx)
+    | None -> (None, ctx)
+  in
+  ([StatementIf (branches, default_stmts)], ctx)
+
+(** Translate a record update to statements *)
+and translate_record_update_to_statements ctx base_expression update_fields =
+  let base_expr, ctx = translate_expression ctx base_expression in
+  let result_name = Codegen_constants.record_update_result_name in
+  let key_name = Codegen_constants.pair_key_name in
+  let value_name = Codegen_constants.pair_value_name in
+
+  let copy_stmt = StatementLocal ([result_name], [ExpressionTable []]) in
+  let copy_loop = StatementForIn ([key_name; value_name],
+    [ExpressionCall (ExpressionVariable "pairs", [base_expr])],
+    [StatementAssign ([LvalueIndex (ExpressionVariable result_name, ExpressionVariable key_name)],
+                      [ExpressionVariable value_name])]) in
+
+  let rev_update_stmts, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
+    let translated, ctx = translate_expression ctx field_value in
+    (StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
+                      [translated]) :: acc, ctx)
+  ) ([], ctx) update_fields in
+  let update_stmts = List.rev rev_update_stmts in
+
+  (copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]], ctx)
 
 (** Translate a lambda to a block of statements, threading context *)
 and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
@@ -594,45 +623,15 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
     let local_stmt = StatementLocal ([temp_name], [scrutinee_expr]) in
     let tag_access = ExpressionField (ExpressionVariable temp_name, Codegen_constants.variant_tag_field) in
     let num_cases = List.length cases in
-    (* Use dispatch table for many cases, otherwise use if-chain *)
     if num_cases >= Codegen_constants.dispatch_table_threshold then
       let stmts, ctx = translate_switch_as_dispatch ctx temp_name tag_access cases default in
       (local_stmt :: stmts, ctx)
     else
-      let rev_branches, ctx =
-        List.fold_left (fun (acc, ctx) (case : Lambda.switch_case) ->
-          let body, ctx = translate_to_statements ctx case.switch_body in
-          let cond = ExpressionBinaryOp (OpEqual, tag_access,
-            ExpressionNumber (float_of_int case.switch_tag)) in
-          ((cond, body) :: acc, ctx)
-        ) ([], ctx) cases
-      in
-      let branches = List.rev rev_branches in
-      let default_stmts, ctx = match default with
-        | Some d ->
-          let stmts, ctx = translate_to_statements ctx d in
-          (Some stmts, ctx)
-        | None -> (None, ctx)
-      in
-      ([local_stmt; StatementIf (branches, default_stmts)], ctx)
+      let stmts, ctx = translate_switch_as_if_chain ctx tag_access cases default in
+      (local_stmt :: stmts, ctx)
 
   | Lambda.LambdaRecordUpdate (base_expression, update_fields) ->
-    let base_expr, ctx = translate_expression ctx base_expression in
-    let result_name = Codegen_constants.record_update_result_name in
-    let key_name = Codegen_constants.pair_key_name in
-    let value_name = Codegen_constants.pair_value_name in
-    let copy_stmt = StatementLocal ([result_name], [ExpressionTable []]) in
-    let copy_loop = StatementForIn ([key_name; value_name],
-      [ExpressionCall (ExpressionVariable "pairs", [base_expr])],
-      [StatementAssign ([LvalueIndex (ExpressionVariable result_name, ExpressionVariable key_name)],
-                        [ExpressionVariable value_name])]) in
-    let rev_update_stmts, ctx = List.fold_left (fun (acc, ctx) (field_name, field_value) ->
-      let translated, ctx = translate_expression ctx field_value in
-      (StatementAssign ([LvalueField (ExpressionVariable result_name, field_name)],
-                        [translated]) :: acc, ctx)
-    ) ([], ctx) update_fields in
-    let update_stmts = List.rev rev_update_stmts in
-    (copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]], ctx)
+    translate_record_update_to_statements ctx base_expression update_fields
 
   | _ ->
     let expr, ctx = translate_expression ctx lambda in
@@ -644,7 +643,11 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
   | Lambda.LambdaApply (func, args) ->
     let func_expr, ctx = translate_expression ctx func in
     let arg_exprs, ctx = translate_expression_list ctx args in
-    ([StatementCall (func_expr, arg_exprs)], ctx)
+    let call_expr = make_curried_call func_expr arg_exprs in
+    begin match call_expr with
+    | ExpressionCall (f, a) -> ([StatementCall (f, a)], ctx)
+    | _ -> ([StatementCall (call_expr, [])], ctx)  (* Fallback for closures *)
+    end
 
   | Lambda.LambdaPrimitive (Lambda.PrimitivePrint, args) ->
     let arg_exprs, ctx = translate_expression_list ctx args in
@@ -743,18 +746,18 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
        Note: We accumulate statements in reverse order using List.rev_append for O(n)
        complexity instead of O(n²) from repeated @ operations.
     *)
-    let rev_binding_stmts, binding_names, ctx = List.fold_left (fun (rev_stmts, names, ctx) (binding : Lambda.module_binding) ->
-      (* Use the original identifier so references between bindings work *)
+    let rev_binding_stmts, name_var_pairs, ctx = List.fold_left (fun (rev_stmts, pairs, ctx) (binding : Lambda.module_binding) ->
       let binding_var = mangle_identifier binding.mb_id in
       let inner_stmts, ctx = generate_top_level_binding ctx binding_var binding.mb_value in
-      (List.rev_append inner_stmts rev_stmts, (Lambda.module_binding_name binding, binding_var) :: names, ctx)
+      (List.rev_append inner_stmts rev_stmts, (Lambda.module_binding_name binding, binding_var) :: pairs, ctx)
     ) ([], [], ctx) bindings in
+
     let binding_stmts = List.rev rev_binding_stmts in
-    let binding_names = List.rev binding_names in
-    (* Create table with references to the local variables *)
+    let name_var_pairs = List.rev name_var_pairs in
+
     let fields = List.map (fun (name, var) ->
       FieldNamed (name, ExpressionVariable var)
-    ) binding_names in
+    ) name_var_pairs in
     let table_stmt = StatementLocal ([target_name], [ExpressionTable fields]) in
     (binding_stmts @ [table_stmt], ctx)
 

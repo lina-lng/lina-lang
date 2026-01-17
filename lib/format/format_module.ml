@@ -23,13 +23,10 @@ let format_binding node =
     ~success:(fun name eq ->
       let name_doc = format_pattern name in
       let params_doc = format_node_list format_pattern (Binding.parameters node) in
-      let ty_doc =
-        match Binding.type_annotation node with
-        | Some ty -> colon ^^ space ^^ format_type ty
-        | None -> empty
-      in
+      let ty_doc = format_with_prefix (colon ^^ space) format_type (Binding.type_annotation node) in
       let eq_doc = format_token eq in
       let body_doc = format_node_list format_expression (Binding.body_expressions node) in
+
       group
         (name_doc ^^ params_doc ^^ ty_doc ^^ eq_doc
         ^^ nest (indent_width ()) body_doc))
@@ -40,21 +37,15 @@ let rec format_value_definition node =
   match Value_definition.let_keyword node with
   | Some let_kw ->
       let let_doc = format_token let_kw in
-      let rec_doc =
-        match Value_definition.rec_keyword node with
-        | Some rec_kw -> format_token rec_kw
-        | None -> empty
-      in
+      let rec_doc = format_optional_token (Value_definition.rec_keyword node) in
       let bindings = Value_definition.bindings node in
       let bindings_doc =
         match bindings with
         | [] -> empty
         | _ ->
             let formatted = List.map format_binding bindings in
-            (* Join with ' and ' for mutual recursion *)
             format_separated (space ^^ text "and" ^^ space) formatted
       in
-      (* Trivia already includes spacing, don't add extra *)
       group (let_doc ^^ rec_doc ^^ bindings_doc)
   | None -> format_children node
 
@@ -77,11 +68,7 @@ and format_type_definition node =
 and format_type_declaration node =
   match Type_declaration.name node with
   | Some name_tok ->
-      let params_doc =
-        match Type_declaration.params node with
-        | Some params -> format_children params
-        | None -> empty
-      in
+      let params_doc = format_with_prefix empty format_children (Type_declaration.params node) in
       let name_doc = format_token name_tok in
       let body_doc =
         match Type_declaration.equals node, Type_declaration.body node with
@@ -91,7 +78,6 @@ and format_type_declaration node =
             eq_doc ^^ nest (indent_width ()) body_formatted
         | _ -> empty
       in
-      (* Trivia already includes spacing, don't add extra *)
       group (params_doc ^^ name_doc ^^ body_doc)
   | None -> format_children node
 
@@ -147,23 +133,23 @@ and format_module_definition node =
     (Module_definition.body node)
     ~fallback:(fun () -> format_children node)
     ~success:(fun mod_kw name eq body ->
-      let mod_doc = format_token mod_kw in
+      let module_keyword_doc = format_token mod_kw in
       let name_doc = format_token name in
-      let params = Module_definition.params node in
-      let params_doc =
-        match params with
+      let functor_params = Module_definition.params node in
+      let functor_params_doc =
+        match functor_params with
         | [] -> empty
-        | _ -> space ^^ format_node_list format_functor_parameter params
+        | _ -> space ^^ format_node_list format_functor_parameter functor_params
       in
-      let type_doc =
+      let type_annotation_doc =
         match Module_definition.type_annotation node with
         | Some ty -> space ^^ colon ^^ space ^^ format_module_type ty
         | None -> empty
       in
-      let eq_doc = format_token eq in
+      let equals_doc = format_token eq in
       let body_doc = format_module_expr body in
       group
-        (mod_doc ^/^ name_doc ^^ params_doc ^^ type_doc ^/^ eq_doc
+        (module_keyword_doc ^/^ name_doc ^^ functor_params_doc ^^ type_annotation_doc ^/^ equals_doc
         ^^ nest (indent_width ()) (softline ^^ body_doc)))
 
 and format_open_declaration node =
@@ -172,9 +158,9 @@ and format_open_declaration node =
     (Open_declaration.path node)
     ~fallback:(fun () -> format_children node)
     ~success:(fun open_kw path ->
-      let open_doc = format_token open_kw in
+      let open_keyword_doc = format_token open_kw in
       let path_doc = format_children path in
-      open_doc ^/^ path_doc)
+      open_keyword_doc ^/^ path_doc)
 
 and format_include_declaration node =
   with_required2
@@ -182,9 +168,9 @@ and format_include_declaration node =
     (Include_declaration.module_expr node)
     ~fallback:(fun () -> format_children node)
     ~success:(fun incl_kw mod_expr ->
-      let incl_doc = format_token incl_kw in
-      let mod_doc = format_module_expr mod_expr in
-      incl_doc ^/^ mod_doc)
+      let include_keyword_doc = format_token incl_kw in
+      let module_expr_doc = format_module_expr mod_expr in
+      include_keyword_doc ^/^ module_expr_doc)
 
 and format_external_declaration node =
   with_required2
@@ -288,10 +274,10 @@ and format_module_constraint node =
     (Module_constraint.module_type node)
     ~fallback:(fun () -> format_children node)
     ~success:(fun mod_expr mod_ty ->
-      let mod_doc = format_module_expr mod_expr in
+      let module_expr_doc = format_module_expr mod_expr in
       let colon_doc = format_token_or colon (Module_constraint.colon node) in
-      let ty_doc = format_module_type mod_ty in
-      group (mod_doc ^/^ colon_doc ^/^ ty_doc))
+      let module_type_doc = format_module_type mod_ty in
+      group (module_expr_doc ^/^ colon_doc ^/^ module_type_doc))
 
 and format_module_expr node =
   with_error_recovery node ~formatter:(fun kind _node ->

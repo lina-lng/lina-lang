@@ -83,15 +83,3 @@ val find_module_type_exn : Location.t -> string -> Environment.t -> Module_types
 (** [find_module_type_opt name env] returns the module type if found and concrete. *)
 val find_module_type_opt : string -> Environment.t -> Module_types.module_type option
 
-(** {1 Generic Combinator} *)
-
-(** [require loc ~kind find_fn key container] is the generic "find or error" pattern.
-
-    @param loc Location for error messages
-    @param kind Description of what we're looking for (e.g., "value", "module")
-    @param find_fn The lookup function returning option
-    @param key The key being looked up (for error messages)
-    @param container The container to search
-    @return The found value
-    @raise Type_error if not found *)
-val require : Location.t -> kind:string -> (string -> 'c -> 'v option) -> string -> 'c -> 'v
