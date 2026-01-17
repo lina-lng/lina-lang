@@ -19,6 +19,15 @@
 (** [is_lua_keyword name] returns [true] if [name] is a Lua reserved keyword. *)
 val is_lua_keyword : string -> bool
 
+(** [get_base_name id] returns the sanitized base name for an identifier.
+
+    This is the name without any stamp suffix, used for tracking name usage
+    in the smart naming system.
+
+    @param id The Lina identifier
+    @return The base Lua name (sanitized, with keyword prefixing) *)
+val get_base_name : Common.Identifier.t -> string
+
 (** [mangle_identifier id] converts a Lina identifier to a valid Lua identifier.
 
     Handles:

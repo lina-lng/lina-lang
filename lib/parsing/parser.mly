@@ -159,6 +159,9 @@ structure_item:
       } in
       make_located (StructureTypeExtension ext) $loc
     }
+  (* Top-level expression (e.g., let x = 1 in x, or print "hello") *)
+  | e = expression
+    { make_located (StructureExpression e) $loc }
 
 rec_flag:
   | { Nonrecursive }

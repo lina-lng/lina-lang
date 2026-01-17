@@ -1,0 +1,7 @@
+(* Top-level let-in expression: with if expression *)
+(* Expected: ACCEPT - if expressions work in let-in *)
+
+let _ =
+  let cond = true in
+  let result = if cond then 1 else 2 in
+  result

@@ -6,6 +6,8 @@ type t = {
 
 let next_stamp = ref 0
 
+let reset_stamp () = next_stamp := 0
+
 let create name =
   let stamp = !next_stamp in
   incr next_stamp;

@@ -206,6 +206,9 @@ let rec find_in_structure_item offset (item : typed_structure_item) =
         find_in_module_expression offset binding.rec_module_expr
       ) rec_bindings
 
+  | TypedStructureExpression expr ->
+      find_node_at offset expr
+
   | TypedStructureType _
   | TypedStructureModuleType _
   | TypedStructureOpen _

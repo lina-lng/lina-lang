@@ -27,10 +27,10 @@ let%expect_test "compile simple variable pattern" =
   |} in
   print_endline lua;
   [%expect {|
-    local f_17 = function(x_15)
-      local _scrutinee_18 = x_15;
-      local y_16 = _scrutinee_18;
-      return y_16
+    local function f(x)
+      local x_match = x;
+      local y = x_match;
+      return y
     end
     |}]
 

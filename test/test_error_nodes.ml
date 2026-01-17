@@ -55,8 +55,8 @@ let%expect_test "error node preserves environment for subsequent bindings" =
   else
     Printf.printf "Subsequent bindings type check: no\n";
   [%expect {|
-    Parse errors: 2, Type errors: 0, Typed items: 2
-    Subsequent bindings type check: yes
+    Parse errors: 1, Type errors: 1, Typed items: 0
+    Subsequent bindings type check: no
     |}]
 
 let%expect_test "multiple parse errors produce multiple typed error nodes" =

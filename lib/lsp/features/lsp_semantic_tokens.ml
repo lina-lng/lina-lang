@@ -472,6 +472,10 @@ and collect_from_structure_item tokens (item : Typing.Typed_tree.typed_structure
         | None -> tokens
       ) tokens ext.extension_constructors
 
+  | Typing.Typed_tree.TypedStructureExpression expr ->
+      (* Top-level expressions can have semantic tokens in subexpressions *)
+      collect_from_expression tokens expr
+
   | Typing.Typed_tree.TypedStructureError _ ->
       (* Error structure items don't produce semantic tokens *)
       tokens

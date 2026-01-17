@@ -617,6 +617,15 @@ and infer_structure_item ctx (item : structure_item) =
     } in
     (typed_item, ctx)
 
+  | StructureExpression expr ->
+    (* Top-level expression (e.g., let x = 1 in x, or print "hello") *)
+    let typed_expr, ctx = Expression_infer.infer_expression ctx expr in
+    let typed_item = {
+      structure_item_desc = TypedStructureExpression typed_expr;
+      structure_item_location = item.Location.location;
+    } in
+    (typed_item, ctx)
+
   | StructureError error_info ->
     (* Error structure items are preserved in typed tree *)
     let typed_item = {
@@ -931,6 +940,10 @@ and signature_items_of_typed_structure_item (item : typed_structure_item) : Modu
     (* Type extensions add constructors to the signature so they can be accessed
        via qualified names like M.Constructor *)
     List.map (fun ctor -> Module_types.SigExtensionConstructor ctor) ext.extension_constructors
+
+  | TypedStructureExpression _ ->
+    (* Top-level expressions don't contribute to the signature *)
+    []
 
   | TypedStructureError _ ->
     (* Error items don't contribute to the signature *)

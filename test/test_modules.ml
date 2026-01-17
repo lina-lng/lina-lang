@@ -29,8 +29,8 @@ module M = struct
 end
 |});
   [%expect{|
-    local x_15 = 42;
-    local M_16 = {x = x_15}
+    local x = 42;
+    local M = {x = x}
     |}]
 
 let%expect_test "module with multiple bindings" =
@@ -41,19 +41,20 @@ module Math = struct
 end
 |});
   [%expect{|
-    local add_19 = function(x_17)
-      return function(y_18)
-      return x_17 + y_18
-    end
+    local add = function(x)
+      return function(y)
+        return x + y
+      end
     end;
-    local sub_22 = function(x_20)
-      return function(y_21)
-      return x_20 - y_21
-    end
+
+    local sub = function(x_1)
+      return function(y_1)
+        return x_1 - y_1
+      end
     end;
-    local add_19 = add_19;
-    local sub_22 = sub_22;
-    local Math_23 = {add = add_19, sub = sub_22}
+    local add = add;
+    local sub = sub;
+    local Math = {add = add, sub = sub}
     |}]
 
 let%expect_test "module value access" =
@@ -64,9 +65,9 @@ end
 let y = M.x
 |});
   [%expect{|
-    local x_24 = 42;
-    local M_25 = {x = x_24};
-    local y_26 = M_25.x
+    local x = 42;
+    local M = {x = x};
+    local y = M.x
     |}]
 
 let%expect_test "module function access and call" =
@@ -90,9 +91,9 @@ module Outer = struct
 end
 |});
   [%expect{|
-    local x_33 = 42;
-    local Inner_34 = {x = x_33};
-    local Outer_35 = {Inner = Inner_34}
+    local x = 42;
+    local Inner = {x = x};
+    local Outer = {Inner = Inner}
     |}]
 
 let%expect_test "nested module access" =
@@ -119,9 +120,9 @@ end = struct
 end
 |});
   [%expect{|
-    local x_42 = 42;
-    local hidden_43 = 99;
-    local M_44 = {x = x_42, hidden = hidden_43}
+    local x = 42;
+    local hidden = 99;
+    local M = {x = x, hidden = hidden}
     |}]
 
 let%expect_test "signature hides value" =
@@ -135,10 +136,10 @@ end
 let y = M.x
 |});
   [%expect{|
-    local x_45 = 42;
-    local hidden_46 = 99;
-    local M_47 = {x = x_45, hidden = hidden_46};
-    local y_48 = M_47.x
+    local x = 42;
+    local hidden = 99;
+    local M = {x = x, hidden = hidden};
+    local y = M.x
     |}]
 
 let%expect_test "signature mismatch - missing value" =
@@ -176,8 +177,8 @@ module MakeDouble = functor (X : sig val x : int end) -> struct
 end
 |});
   [%expect{|
-    local MakeDouble_58 = function(X_56)
-      return {doubled = X_56.x + X_56.x}
+    local MakeDouble = function(X)
+      return {doubled = X.x + X.x}
     end
     |}]
 
@@ -248,12 +249,12 @@ open M
 let z = x + y
 |});
   [%expect{|
-    local x_88 = 10;
-    local y_89 = 20;
-    local M_90 = {x = x_88, y = y_89};
-    local x_91 = M_90.x;
-    local y_92 = M_90.y;
-    local z_93 = x_91 + y_92
+    local x = 10;
+    local y = 20;
+    local M = {x = x, y = y};
+    local x_1 = M.x;
+    local y_1 = M.y;
+    local z = x_1 + y_1
     |}]
 
 let%expect_test "open module - runtime" =
@@ -486,8 +487,8 @@ module Empty = struct end
 let _ = print 1
 |});
   [%expect{|
-    local Empty_186 = {};
-    local _top_187 = print(1)
+    local Empty = {};
+    local top = print(1)
     |}]
 
 let%expect_test "single value module" =
@@ -1000,17 +1001,16 @@ let f (x : t) = match x with
   | B n -> n
 |});
   [%expect{|
-    local f_354 = function(x_352)
-      local _scrutinee_355 = x_352;
-      if _scrutinee_355._tag == 1 then
-        local n_353 = _scrutinee_355._0;
-        return n_353
+    local function f(x)
+      local x_match = x;
+      local matched = x_match;
+      if matched._tag == 1 then
+        local n = x_match._0;
+        return n
+      elseif matched._tag == 0 then
+        return 0
       else
-        if _scrutinee_355._tag == 0 then
-          return 0
-        else
-          return error("Match failure")
-        end
+        return error("Match failure")
       end
     end
     |}]
@@ -1035,8 +1035,8 @@ let%expect_test "locally abstract type parses" =
 let f (type a) (x : a) = x
 |});
   [%expect{|
-    local f_364 = function(x_363)
-      return x_363
+    local function f(x)
+      return x
     end
     |}]
 
@@ -1046,10 +1046,10 @@ let%expect_test "locally abstract type introduces scoped type" =
 let f (type a) (x : a) (y : a) = (x, y)
 |});
   [%expect{|
-    local f_368 = function(x_366)
-      return function(y_367)
-      return {x_366, y_367}
-    end
+    local f = function(x)
+      return function(y)
+        return {x, y}
+      end
     end
     |}]
 
@@ -1058,10 +1058,10 @@ let%expect_test "locally abstract type with multiple type params" =
 let f (type a) (type b) (x : a) (y : b) = (x, y)
 |});
   [%expect{|
-    local f_373 = function(x_371)
-      return function(y_372)
-      return {x_371, y_372}
-    end
+    local f = function(x)
+      return function(y)
+        return {x, y}
+      end
     end
     |}]
 
@@ -1073,3 +1073,128 @@ let result = f 42
 let _ = print result
 |});
   [%expect{| 42 |}]
+
+(* ==================== Module Codegen Unit Tests ==================== *)
+
+let%expect_test "module generates table literal" =
+  print_endline (compile {|
+module M = struct
+  let x = 1
+end
+|});
+  [%expect{|
+    local x = 1;
+    local M = {x = x}
+    |}]
+
+let%expect_test "module access generates field access" =
+  print_endline (compile {|
+module M = struct
+  let x = 42
+end
+let y = M.x
+|});
+  [%expect{|
+    local x = 42;
+    local M = {x = x};
+    local y = M.x
+    |}]
+
+let%expect_test "functor generates function" =
+  print_endline (compile {|
+module F = functor (X : sig val n : int end) -> struct
+  let doubled = X.n + X.n
+end
+|});
+  [%expect{|
+    local F = function(X)
+      return {doubled = X.n + X.n}
+    end
+    |}]
+
+let%expect_test "functor apply generates call" =
+  print_endline (compile {|
+module F = functor (X : sig val n : int end) -> struct
+  let doubled = X.n + X.n
+end
+module Input = struct
+  let n = 21
+end
+module Result = F(Input)
+|});
+  [%expect{|
+    local F = function(X)
+      return {doubled = X.n + X.n}
+    end;
+    local n = 21;
+    local Input = {n = n};
+    local Result = F(Input)
+    |}]
+
+let%expect_test "module binding order preserved" =
+  print_endline (compile {|
+module M = struct
+  let a = 10
+  let b = a + 5
+  let c = b * 2
+end
+|});
+  [%expect{|
+    local a = 10;
+    local b = a + 5;
+    local c = b * 2;
+    local M = {a = a, b = b, c = c}
+    |}]
+
+let%expect_test "module with function generates curried function" =
+  print_endline (compile {|
+module M = struct
+  let add x y = x + y
+end
+|});
+  [%expect{|
+    local add = function(x)
+      return function(y)
+        return x + y
+      end
+    end;
+    local M = {add = add}
+    |}]
+
+let%expect_test "nested module generates nested tables" =
+  print_endline (compile {|
+module Outer = struct
+  module Inner = struct
+    let value = 100
+  end
+end
+|});
+  [%expect{|
+    local value = 100;
+    local Inner = {value = value};
+    local Outer = {Inner = Inner}
+    |}]
+
+let%expect_test "module expression evaluates bindings in order" =
+  print_endline (compile_and_run {|
+module M = struct
+  let f x = x + 1
+  let applied = f 41
+end
+let _ = print M.applied
+|});
+  [%expect{| 42 |}]
+
+let%expect_test "functor application with inline module" =
+  print_endline (compile {|
+module F = functor (X : sig val n : int end) -> struct
+  let result = X.n * 2
+end
+module R = F(struct let n = 5 end)
+|});
+  [%expect{|
+    local F = function(X)
+      return {result = X.n * 2}
+    end;
+    local R = F({n = 5})
+    |}]

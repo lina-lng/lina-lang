@@ -225,3 +225,19 @@
  (modules test_gadts)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Lua printer tests
+(library
+ (name test_lua_printer)
+ (libraries lua)
+ (modules test_lua_printer)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Smart variable naming tests
+(library
+ (name test_smart_naming)
+ (libraries parsing typing lambda lua driver common)
+ (modules test_smart_naming)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

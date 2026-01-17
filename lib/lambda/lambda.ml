@@ -167,12 +167,6 @@ let build_switch_if_chain (type key) ~(config : key switch_config) ~translate_tr
 let variant_tag_discriminant target =
   LambdaGetRecordField (Codegen_constants.variant_tag_field, target)
 
-let constructor_switch_config : (string * int * bool) switch_config = {
-  get_discriminant = variant_tag_discriminant;
-  key_to_constant = (fun (_name, tag_index, _is_ext) -> ConstantInt tag_index);
-  equality_primitive = PrimitiveIntEqual;
-}
-
 let extension_constructor_switch_config : (string * int * bool) switch_config = {
   get_discriminant = variant_tag_discriminant;
   key_to_constant = (fun (name, _tag_index, _is_ext) -> ConstantString name);
@@ -264,9 +258,6 @@ and translate_dt_switch scrutinee occ cases default translate_expr =
     | _, _ -> translate_tree Pattern_match.DTFail
 
 and translate_dt_constructor_switch target cases default translate_tree =
-  let num_cases = List.length cases in
-
-  (* Check if any case is an extension constructor *)
   let has_extension = List.exists (fun ((_name, _tag_index, is_ext), _tree) -> is_ext) cases in
 
   if has_extension then
@@ -274,17 +265,13 @@ and translate_dt_constructor_switch target cases default translate_tree =
     build_switch_if_chain ~config:extension_constructor_switch_config ~translate_tree target cases default
 
   else begin
-    (* Regular constructors use numeric tags *)
-    (* Use LambdaSwitch for many cases (enables dispatch table in codegen) *)
-    if num_cases >= Codegen_constants.dispatch_table_threshold then
-      let switch_cases = List.map (fun ((_name, tag_index, _is_ext), tree) ->
-        { switch_tag = tag_index; switch_body = translate_tree tree }
-      ) cases in
-      let switch_default = Option.map translate_tree default in
-      LambdaSwitch (target, switch_cases, switch_default)
-
-    else
-      build_switch_if_chain ~config:constructor_switch_config ~translate_tree target cases default
+    (* Regular constructors use numeric tags - always use LambdaSwitch.
+       Codegen will choose between dispatch table (many cases) or flat if-elseif (few cases). *)
+    let switch_cases = List.map (fun ((_name, tag_index, _is_ext), tree) ->
+      { switch_tag = tag_index; switch_body = translate_tree tree }
+    ) cases in
+    let switch_default = Option.map translate_tree default in
+    LambdaSwitch (target, switch_cases, switch_default)
   end
 
 (** Bind compound pattern components via a temp variable.
@@ -452,6 +439,10 @@ and analyze_and_collect_structure structure =
         (* Type extensions don't generate runtime code *)
         state
 
+    | TypedStructureExpression _ ->
+        (* Top-level expressions don't define anything, just need to be evaluated *)
+        state
+
     | TypedStructureError _ ->
         state
   in
@@ -546,6 +537,13 @@ and translate_structure_with_opens structure =
       | TypedStructureTypeExtension _ ->
           (* Type extensions don't generate runtime code *)
           process rest local_bindings module_fields
+
+      | TypedStructureExpression expr ->
+          (* Top-level expression - bind to a dummy variable for side effects *)
+          let dummy_id = Common.Identifier.create "_top_expr" in
+          let translated = translate_expression expr in
+          let new_local = `Single (dummy_id, translated) in
+          process rest (new_local :: local_bindings) module_fields
 
       | TypedStructureError _ ->
           process rest local_bindings module_fields
@@ -734,7 +732,14 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
 
   | TypedExpressionMatch (scrutinee_expression, match_arms) ->
     let translated_scrutinee = translate_expression scrutinee_expression in
-    let scrutinee_id = Identifier.create Codegen_constants.scrutinee_prefix in
+
+    (* Derive scrutinee name from matched expression when possible *)
+    let scrutinee_name = match scrutinee_expression.expression_desc with
+      | TypedExpressionVariable (id, _) -> Identifier.name id ^ "_match"
+      | _ -> Codegen_constants.scrutinee_prefix
+    in
+    let scrutinee_id = Identifier.create scrutinee_name in
+
     let decision_tree = Pattern_match.compile_match match_arms in
     let match_body = translate_decision_tree
       (LambdaVariable scrutinee_id)
@@ -854,6 +859,12 @@ let translate_structure_item (item : Typing.Typed_tree.typed_structure_item) : l
   | TypedStructureTypeExtension _ ->
     (* Type extensions don't generate runtime code - constructors are used in expressions *)
     []
+
+  | TypedStructureExpression expr ->
+    (* Top-level expression - bind result to a dummy variable for side effects *)
+    let dummy_id = Common.Identifier.create "top" in
+    let translated = translate_expression expr in
+    [LambdaLet (dummy_id, translated, LambdaConstant ConstantUnit)]
 
   | TypedStructureError _ ->
     []

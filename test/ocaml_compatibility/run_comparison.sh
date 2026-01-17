@@ -138,6 +138,7 @@ CATEGORIES=(
     "labels"
     "locally_abstract_types"
     "level_propagation"
+    "toplevel_expressions"
     "error_cases"
 )
 

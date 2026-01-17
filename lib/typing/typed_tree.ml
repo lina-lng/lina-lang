@@ -159,6 +159,8 @@ and typed_structure_item_desc =
   | TypedStructureExternal of typed_external  (** FFI external declaration *)
   | TypedStructureTypeExtension of typed_type_extension
       (** Type extension: [type t += Constructor of ty] *)
+  | TypedStructureExpression of typed_expression
+      (** Top-level expression: [let x = 1 in x + 2] or [print "hello"] *)
   | TypedStructureError of Parsing.Syntax_tree.error_info
       (** Error recovery placeholder for invalid top-level syntax *)
 

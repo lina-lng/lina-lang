@@ -29,6 +29,12 @@ type t = private {
 
 (** {1 Creation} *)
 
+(** [reset_stamp ()] resets the global stamp counter to zero.
+
+    This is primarily useful for testing to ensure deterministic output.
+    Should not be used in production code as it can cause stamp collisions. *)
+val reset_stamp : unit -> unit
+
 (** [create name] creates a fresh identifier with a new unique stamp.
 
     Each call returns an identifier with a different stamp, even for

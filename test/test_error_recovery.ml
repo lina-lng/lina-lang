@@ -73,8 +73,8 @@ let%expect_test "valid code after error - current limitation" =
   else
     Printf.printf "Recovered valid code: no\n";
   [%expect {|
-    Items: 3, Errors: 3, Valid: 0
-    Recovered valid code: no
+    Items: 3, Errors: 1, Valid: 2
+    Recovered valid code: yes
     |}]
 
 let%expect_test "type declaration parses correctly" =
@@ -139,21 +139,21 @@ let%expect_test "cascading errors: mixed valid and invalid bindings" =
     "let a = 1\nlet b = \nlet c = 3\nlet d = \nlet e = 5" in
   Printf.printf "Items: %d, Errors: %d, Valid: %d, Error nodes: %d\n"
     (List.length ast) (List.length errors) (count_valid ast) (count_errors ast);
-  [%expect {| Items: 3, Errors: 3, Valid: 0, Error nodes: 3 |}]
+  [%expect {| Items: 3, Errors: 2, Valid: 1, Error nodes: 2 |}]
 
 let%expect_test "cascading errors: error in nested expression" =
   let ast, errors = Parse.structure_from_string_tolerant
     "let x = if then 1 else 2\nlet y = 42" in
   Printf.printf "Items: %d, Errors: %d\n"
     (List.length ast) (List.length errors);
-  [%expect {| Items: 2, Errors: 2 |}]
+  [%expect {| Items: 2, Errors: 1 |}]
 
 let%expect_test "cascading errors: recovery after type declaration" =
   let ast, errors = Parse.structure_from_string_tolerant
     "type t = \nlet x = 42" in
   Printf.printf "Items: %d, Errors: %d, Valid: %d\n"
     (List.length ast) (List.length errors) (count_valid ast);
-  [%expect {| Items: 2, Errors: 2, Valid: 0 |}]
+  [%expect {| Items: 2, Errors: 1, Valid: 1 |}]
 
 let%expect_test "cascading errors: multiple syntax errors in one item" =
   let ast, errors = Parse.structure_from_string_tolerant

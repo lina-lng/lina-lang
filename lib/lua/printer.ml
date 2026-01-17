@@ -68,7 +68,7 @@ let print_separated buf ~sep ~print items =
 
 (** {1 Buffer-Based Printing Functions} *)
 
-let rec print_expression_prec_to_buf buf prec expr =
+let rec print_expression_prec_to_buf buf level prec expr =
   match expr with
   | ExpressionNil ->
     Buffer.add_string buf "nil"
@@ -89,98 +89,100 @@ let rec print_expression_prec_to_buf buf prec expr =
     Buffer.add_string buf name
   | ExpressionTable fields ->
     Buffer.add_char buf '{';
-    print_table_fields_to_buf buf fields;
+    print_table_fields_to_buf buf level fields;
     Buffer.add_char buf '}'
   | ExpressionIndex (obj, idx) ->
-    print_expression_prec_to_buf buf 100 obj;
+    print_expression_prec_to_buf buf level 100 obj;
     Buffer.add_char buf '[';
-    print_expression_to_buf buf idx;
+    print_expression_to_buf buf level idx;
     Buffer.add_char buf ']'
   | ExpressionField (obj, field) ->
-    print_expression_prec_to_buf buf 100 obj;
+    print_expression_prec_to_buf buf level 100 obj;
     Buffer.add_char buf '.';
     Buffer.add_string buf field
   | ExpressionCall (func, args) ->
     begin match func with
     | ExpressionFunction _ ->
       Buffer.add_char buf '(';
-      print_expression_prec_to_buf buf 0 func;
+      print_expression_prec_to_buf buf level 0 func;
       Buffer.add_char buf ')'
     | _ ->
-      print_expression_prec_to_buf buf 100 func
+      print_expression_prec_to_buf buf level 100 func
     end;
     Buffer.add_char buf '(';
-    print_expressions_to_buf buf args;
+    print_expressions_to_buf buf level args;
     Buffer.add_char buf ')'
   | ExpressionMethodCall (obj, method_name, args) ->
-    print_expression_prec_to_buf buf 100 obj;
+    print_expression_prec_to_buf buf level 100 obj;
     Buffer.add_char buf ':';
     Buffer.add_string buf method_name;
     Buffer.add_char buf '(';
-    print_expressions_to_buf buf args;
+    print_expressions_to_buf buf level args;
     Buffer.add_char buf ')'
   | ExpressionBinaryOp (op, left, right) ->
     let op_prec = operator_precedence op in
     let needs_parens = op_prec < prec in
     if needs_parens then Buffer.add_char buf '(';
-    print_expression_prec_to_buf buf op_prec left;
+    print_expression_prec_to_buf buf level op_prec left;
     Buffer.add_char buf ' ';
     Buffer.add_string buf (binary_operator_to_string op);
     Buffer.add_char buf ' ';
-    print_expression_prec_to_buf buf (op_prec + 1) right;
+    print_expression_prec_to_buf buf level (op_prec + 1) right;
     if needs_parens then Buffer.add_char buf ')'
   | ExpressionUnaryOp (op, operand) ->
     Buffer.add_string buf (unary_operator_to_string op);
-    print_expression_prec_to_buf buf 90 operand
+    print_expression_prec_to_buf buf level 90 operand
   | ExpressionFunction (params, body) ->
     Buffer.add_string buf "function(";
     print_string_list_to_buf buf params;
     Buffer.add_string buf ")\n";
-    print_block_to_buf buf 1 body;
-    Buffer.add_string buf "\nend"
+    print_block_to_buf buf (level + 1) body;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
 
-and print_expression_to_buf buf expr =
-  print_expression_prec_to_buf buf 0 expr
+and print_expression_to_buf buf level expr =
+  print_expression_prec_to_buf buf level 0 expr
 
-and print_expressions_to_buf buf exprs =
-  print_separated buf ~sep:", " ~print:print_expression_to_buf exprs
+and print_expressions_to_buf buf level exprs =
+  print_separated buf ~sep:", " ~print:(fun buf expr -> print_expression_to_buf buf level expr) exprs
 
 and print_string_list_to_buf buf strings =
   print_separated buf ~sep:", " ~print:Buffer.add_string strings
 
-and print_table_fields_to_buf buf fields =
-  print_separated buf ~sep:", " ~print:print_table_field_to_buf fields
+and print_table_fields_to_buf buf level fields =
+  print_separated buf ~sep:", " ~print:(fun buf field -> print_table_field_to_buf buf level field) fields
 
-and print_table_field_to_buf buf field =
+and print_table_field_to_buf buf level field =
   match field with
   | FieldArray expr ->
-    print_expression_to_buf buf expr
+    print_expression_to_buf buf level expr
   | FieldNamed (name, expr) ->
     Buffer.add_string buf name;
     Buffer.add_string buf " = ";
-    print_expression_to_buf buf expr
+    print_expression_to_buf buf level expr
   | FieldIndexed (key, value) ->
     Buffer.add_char buf '[';
-    print_expression_to_buf buf key;
+    print_expression_to_buf buf level key;
     Buffer.add_string buf "] = ";
-    print_expression_to_buf buf value
+    print_expression_to_buf buf level value
 
-and print_lvalue_to_buf buf lvalue =
+and print_lvalue_to_buf buf level lvalue =
   match lvalue with
   | LvalueVariable name ->
     Buffer.add_string buf name
   | LvalueIndex (obj, idx) ->
-    print_expression_to_buf buf obj;
+    print_expression_to_buf buf level obj;
     Buffer.add_char buf '[';
-    print_expression_to_buf buf idx;
+    print_expression_to_buf buf level idx;
     Buffer.add_char buf ']'
   | LvalueField (obj, field) ->
-    print_expression_to_buf buf obj;
+    print_expression_to_buf buf level obj;
     Buffer.add_char buf '.';
     Buffer.add_string buf field
 
-and print_lvalues_to_buf buf lvalues =
-  print_separated buf ~sep:", " ~print:print_lvalue_to_buf lvalues
+and print_lvalues_to_buf buf level lvalues =
+  print_separated buf ~sep:", " ~print:(fun buf lv -> print_lvalue_to_buf buf level lv) lvalues
 
 and print_statement_to_buf buf level stmt =
   add_indent buf level;
@@ -192,22 +194,22 @@ and print_statement_to_buf buf level stmt =
     Buffer.add_string buf "local ";
     print_string_list_to_buf buf names;
     Buffer.add_string buf " = ";
-    print_expressions_to_buf buf values
+    print_expressions_to_buf buf level values
   | StatementAssign (lvalues, values) ->
-    print_lvalues_to_buf buf lvalues;
+    print_lvalues_to_buf buf level lvalues;
     Buffer.add_string buf " = ";
-    print_expressions_to_buf buf values
+    print_expressions_to_buf buf level values
   | StatementCall (func, args) ->
     begin match func with
     | ExpressionFunction _ ->
       Buffer.add_char buf '(';
-      print_expression_to_buf buf func;
+      print_expression_to_buf buf level func;
       Buffer.add_char buf ')'
     | _ ->
-      print_expression_to_buf buf func
+      print_expression_to_buf buf level func
     end;
     Buffer.add_char buf '(';
-    print_expressions_to_buf buf args;
+    print_expressions_to_buf buf level args;
     Buffer.add_char buf ')'
   | StatementIf (branches, else_block) ->
     print_if_branches_to_buf buf level branches;
@@ -224,7 +226,7 @@ and print_statement_to_buf buf level stmt =
     Buffer.add_string buf "end"
   | StatementWhile (cond, block) ->
     Buffer.add_string buf "while ";
-    print_expression_to_buf buf cond;
+    print_expression_to_buf buf level cond;
     Buffer.add_string buf " do\n";
     print_block_to_buf buf (level + 1) block;
     Buffer.add_char buf '\n';
@@ -234,13 +236,13 @@ and print_statement_to_buf buf level stmt =
     Buffer.add_string buf "for ";
     Buffer.add_string buf var;
     Buffer.add_string buf " = ";
-    print_expression_to_buf buf start_expr;
+    print_expression_to_buf buf level start_expr;
     Buffer.add_string buf ", ";
-    print_expression_to_buf buf end_expr;
+    print_expression_to_buf buf level end_expr;
     (match step_opt with
      | Some step ->
        Buffer.add_string buf ", ";
-       print_expression_to_buf buf step
+       print_expression_to_buf buf level step
      | None -> ());
     Buffer.add_string buf " do\n";
     print_block_to_buf buf (level + 1) block;
@@ -251,7 +253,7 @@ and print_statement_to_buf buf level stmt =
     Buffer.add_string buf "for ";
     print_string_list_to_buf buf names;
     Buffer.add_string buf " in ";
-    print_expressions_to_buf buf iterator_expressions;
+    print_expressions_to_buf buf level iterator_expressions;
     Buffer.add_string buf " do\n";
     print_block_to_buf buf (level + 1) block;
     Buffer.add_char buf '\n';
@@ -261,7 +263,7 @@ and print_statement_to_buf buf level stmt =
     Buffer.add_string buf "return"
   | StatementReturn exprs ->
     Buffer.add_string buf "return ";
-    print_expressions_to_buf buf exprs
+    print_expressions_to_buf buf level exprs
   | StatementBreak ->
     Buffer.add_string buf "break"
   | StatementDo block ->
@@ -296,30 +298,55 @@ and print_if_branches_to_buf buf level branches =
   | [] -> ()
   | (cond, block) :: rest ->
     Buffer.add_string buf "if ";
-    print_expression_to_buf buf cond;
+    print_expression_to_buf buf level cond;
     Buffer.add_string buf " then\n";
     print_block_to_buf buf (level + 1) block;
     List.iter (fun (cond, block) ->
       Buffer.add_char buf '\n';
       add_indent buf level;
       Buffer.add_string buf "elseif ";
-      print_expression_to_buf buf cond;
+      print_expression_to_buf buf level cond;
       Buffer.add_string buf " then\n";
       print_block_to_buf buf (level + 1) block
     ) rest
 
+(** Check if a statement defines a function (for blank line insertion). *)
+and is_function_definition stmt =
+  match stmt with
+  | StatementLocalFunction _ | StatementFunction _ -> true
+  | StatementLocal (_, [ExpressionFunction _]) -> true
+  | StatementAssign ([LvalueVariable _], [ExpressionFunction _]) -> true
+  | _ -> false
+
 and print_block_to_buf buf level stmts =
   let print_stmt buf stmt = print_statement_to_buf buf level stmt in
-  (* Use semicolon separator to avoid Lua's ambiguous parsing of
-     "expr\n(..." as a function call. Without semicolons, "print(x)\n(function()...end)()"
-     would be parsed as "print(x)(function()...end)()" calling nil. *)
-  print_separated buf ~sep:";\n" ~print:print_stmt stmts
+
+  (* Print statements with appropriate separators:
+     - Blank line between function definitions for readability
+     - Semicolon between statement and IIFE/expression-starting to avoid Lua ambiguity *)
+  match stmts with
+  | [] -> ()
+  | first :: rest ->
+    print_stmt buf first;
+    let rec print_rest prev remaining =
+      match remaining with
+      | [] -> ()
+      | next :: tail ->
+        let needs_blank_line = is_function_definition prev && is_function_definition next in
+        if needs_blank_line then
+          Buffer.add_string buf ";\n\n"
+        else
+          Buffer.add_string buf ";\n";
+        print_stmt buf next;
+        print_rest next tail
+    in
+    print_rest first rest
 
 (** {1 Public API} *)
 
 let print_expression expr =
   let buf = Buffer.create 256 in
-  print_expression_prec_to_buf buf 0 expr;
+  print_expression_prec_to_buf buf 0 0 expr;
   Buffer.contents buf
 
 let print_statement stmt =

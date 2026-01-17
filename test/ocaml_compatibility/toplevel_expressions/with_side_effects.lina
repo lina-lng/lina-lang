@@ -1,0 +1,6 @@
+(* Top-level let-in expression: with side effects *)
+(* Expected: ACCEPT - side effects are executed *)
+
+let x = print 1 in
+let y = print 2 in
+print 3

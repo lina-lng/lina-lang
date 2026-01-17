@@ -57,6 +57,9 @@ and extract_from_item defined referenced (item : Parsing.Syntax_tree.structure_i
   | StructureTypeExtension ext ->
     (* Type extensions may reference other modules via the type path *)
     extract_from_longident referenced ext.extension_type_name
+  | StructureExpression expr ->
+    (* Top-level expressions may reference modules *)
+    extract_from_expr referenced expr
   | StructureError _ ->
     (* Error nodes don't reference other modules *)
     ()

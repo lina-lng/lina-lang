@@ -298,6 +298,8 @@ and structure_item_desc =
   | StructureOpen of module_path
   | StructureInclude of module_expression
   | StructureExternal of external_declaration
+  | StructureExpression of expression
+      (** Top-level expression: [let x = 1 in x + 2] or [print "hello"] *)
   | StructureError of error_info
       (** Error recovery placeholder for invalid top-level syntax *)
 

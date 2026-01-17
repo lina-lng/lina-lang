@@ -1,9 +1,6 @@
 open Common
 open Lua_ast
 
-(** Re-export identifier mangling for external use *)
-let mangle_identifier = Identifier_mangle.mangle_identifier
-
 (** {1 Code Generation Context}
 
     The context tracks state accumulated during code generation,
@@ -12,18 +9,51 @@ let mangle_identifier = Identifier_mangle.mangle_identifier
 (** Code generation context, threaded through translation functions. *)
 type context = {
   singletons : Singleton_registry.t;  (** Registered nullary constructor singletons *)
+  used_names : (string, int) Hashtbl.t;  (** Tracks base name usage counts *)
+  name_cache : (int, string) Hashtbl.t;  (** Maps identifier stamps to Lua names *)
 }
 
-(** Create an empty context *)
-let empty_context = { singletons = Singleton_registry.empty }
+(** Create a fresh empty context with new hashtables. *)
+let make_empty_context () = {
+  singletons = Singleton_registry.empty;
+  used_names = Hashtbl.create 64;
+  name_cache = Hashtbl.create 128;
+}
 
 (** Register a singleton in the context *)
 let register_singleton ctx type_name tag_index =
-  { singletons = Singleton_registry.register ctx.singletons type_name tag_index }
+  { ctx with singletons = Singleton_registry.register ctx.singletons type_name tag_index }
 
 (** Generate singleton preamble from context *)
 let generate_singleton_preamble ctx =
   Singleton_registry.generate_preamble ctx.singletons
+
+(** Generate a readable name for an identifier, only adding suffix when needed.
+
+    Uses the context to track which base names are already in use.
+    First occurrence of a name uses it as-is, subsequent occurrences get _1, _2, etc.
+
+    Results are cached by identifier stamp, so the same identifier always
+    produces the same Lua name (required for variable references to work).
+
+    Note: This mutates the context's hashtables for efficiency.
+    The context is threaded through translation, so this is safe. *)
+let mangle_identifier_smart ctx (id : Common.Identifier.t) : Lua_ast.identifier =
+  let stamp = Common.Identifier.stamp id in
+
+  (* Check cache first for consistent naming of the same identifier *)
+  match Hashtbl.find_opt ctx.name_cache stamp with
+  | Some cached_name -> cached_name
+  | None ->
+    let base_name = Identifier_mangle.get_base_name id in
+    let count = Hashtbl.find_opt ctx.used_names base_name |> Option.value ~default:0 in
+    Hashtbl.replace ctx.used_names base_name (count + 1);
+    let lua_name =
+      if count = 0 then base_name
+      else Printf.sprintf "%s_%d" base_name count
+    in
+    Hashtbl.add ctx.name_cache stamp lua_name;
+    lua_name
 
 (** {1 Context-Threaded Fold Helpers} *)
 
@@ -270,7 +300,7 @@ let rec wrap_in_iife ctx lambda =
 and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
   match lambda with
   | Lambda.LambdaVariable id ->
-    (ExpressionVariable (mangle_identifier id), ctx)
+    (ExpressionVariable (mangle_identifier_smart ctx id), ctx)
 
   | Lambda.LambdaConstant const ->
     (translate_constant const, ctx)
@@ -281,7 +311,7 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
     (make_curried_call func_expr arg_exprs, ctx)
 
   | Lambda.LambdaFunction (params, body) ->
-    let param_names = List.map mangle_identifier params in
+    let param_names = List.map (mangle_identifier_smart ctx) params in
     let body_stmts, ctx = translate_to_statements ctx body in
     (make_curried_function param_names body_stmts, ctx)
 
@@ -351,7 +381,7 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
 
   | Lambda.LambdaFunctor (param_id, body) ->
     (* Functor as a function: functor (X : S) -> ME becomes function(X) return ME end *)
-    let param_name = mangle_identifier param_id in
+    let param_name = mangle_identifier_smart ctx param_id in
     let body_stmts, ctx = translate_to_statements ctx body in
     (ExpressionFunction ([param_name], body_stmts), ctx)
 
@@ -428,7 +458,7 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
 
   | Lambda.LambdaFor (var_id, start_expr, end_expr, direction, body) ->
     (* for i = start to/downto end do body done *)
-    let var_name = mangle_identifier var_id in
+    let var_name = mangle_identifier_smart ctx var_id in
     let start_lua, ctx = translate_expression ctx start_expr in
     let end_lua, ctx = translate_expression ctx end_expr in
     let body_stmts, ctx = translate_to_effect ctx body in
@@ -446,7 +476,7 @@ and translate_expression_list ctx exprs =
 and translate_value_to_assignment ctx name lambda : block * context =
   match lambda with
   | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
-    let inner_name = mangle_identifier inner_id in
+    let inner_name = mangle_identifier_smart ctx inner_id in
     let inner_expr, ctx = translate_expression ctx inner_value in
     let inner_decl = StatementLocal ([inner_name], [inner_expr]) in
     let rest_stmts, ctx = translate_value_to_assignment ctx name inner_body in
@@ -476,12 +506,12 @@ and translate_value_to_assignment ctx name lambda : block * context =
     @param bindings List of (identifier, lambda) pairs
     @return Tuple of (forward_decl, assignments, updated_context) *)
 and translate_recursive_bindings ctx bindings =
-  let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
+  let names = List.map (fun (id, _) -> mangle_identifier_smart ctx id) bindings in
   let forward_decl = StatementLocal (names, []) in
 
   let rev_assignments, ctx =
     List.fold_left (fun (acc, ctx) (id, value) ->
-      let name = mangle_identifier id in
+      let name = mangle_identifier_smart ctx id in
       let value_expr, ctx = translate_expression ctx value in
       (StatementAssign ([LvalueVariable name], [value_expr]) :: acc, ctx)
     ) ([], ctx) bindings
@@ -520,7 +550,7 @@ and translate_switch_as_dispatch ctx _scrutinee_name tag_access cases default =
     )
   ], ctx)
 
-(** Translate a switch as an if-chain (for few cases) *)
+(** Translate a switch as a flat if-elseif chain (for few cases) *)
 and translate_switch_as_if_chain ctx tag_access cases default =
   let translate_case ctx (case : Lambda.switch_case) =
     let body, ctx = translate_to_statements ctx case.switch_body in
@@ -531,10 +561,14 @@ and translate_switch_as_if_chain ctx tag_access cases default =
   let branches, ctx = fold_translate_ctx translate_case ctx cases in
 
   let default_stmts, ctx = match default with
-    | Some d ->
-      let stmts, ctx = translate_to_statements ctx d in
+    | Some default_body ->
+      let stmts, ctx = translate_to_statements ctx default_body in
       (Some stmts, ctx)
-    | None -> (None, ctx)
+    | None ->
+      (* No default: generate error call as fallback *)
+      let error_stmts = [StatementReturn [ExpressionCall (ExpressionVariable "error",
+        [ExpressionString "Match failure"])]] in
+      (Some error_stmts, ctx)
   in
   ([StatementIf (branches, default_stmts)], ctx)
 
@@ -576,7 +610,7 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
       (* Transform if-in-value to avoid IIFE:
          let id = if c then e1 else e2 in body
          becomes: local id; if c then id = e1 else id = e2 end; body *)
-      let name = mangle_identifier id in
+      let name = mangle_identifier_smart ctx id in
       let decl = StatementLocal ([name], []) in
       let cond_expr, ctx = translate_expression ctx cond in
       let then_stmts, ctx = translate_value_to_assignment ctx name then_branch in
@@ -594,7 +628,7 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
       (first_stmts @ rest, ctx)
 
     | _ ->
-      let name = mangle_identifier id in
+      let name = mangle_identifier_smart ctx id in
       let value_expr, ctx = translate_expression ctx value in
       let local_stmt = StatementLocal ([name], [value_expr]) in
       let rest, ctx = translate_to_statements ctx body in
@@ -607,10 +641,23 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
     (forward_decl :: assignments @ rest, ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
-    let cond_expr, ctx = translate_expression ctx cond in
-    let then_stmts, ctx = translate_to_statements ctx then_branch in
-    let else_stmts, ctx = translate_to_statements ctx else_branch in
-    ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
+    (* Float let bindings out of condition to avoid IIFEs.
+       if (let x = v in cond) then ... becomes: local x = v; if cond then ... *)
+    begin match cond with
+    | Lambda.LambdaLet (id, value, inner_cond) ->
+      let name = mangle_identifier_smart ctx id in
+      let value_expr, ctx = translate_expression ctx value in
+      let local_stmt = StatementLocal ([name], [value_expr]) in
+      let rest, ctx = translate_to_statements ctx
+        (Lambda.LambdaIfThenElse (inner_cond, then_branch, else_branch)) in
+      (local_stmt :: rest, ctx)
+
+    | _ ->
+      let cond_expr, ctx = translate_expression ctx cond in
+      let then_stmts, ctx = translate_to_statements ctx then_branch in
+      let else_stmts, ctx = translate_to_statements ctx else_branch in
+      ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
+    end
 
   | Lambda.LambdaSequence (first, second) ->
     let first_stmts, ctx = translate_to_effect ctx first in
@@ -663,7 +710,7 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
     (first_stmts @ second_stmts, ctx)
 
   | Lambda.LambdaLet (id, value, body) ->
-    let name = mangle_identifier id in
+    let name = mangle_identifier_smart ctx id in
     let value_expr, ctx = translate_expression ctx value in
     let rest, ctx = translate_to_effect ctx body in
     (StatementLocal ([name], [value_expr]) :: rest, ctx)
@@ -681,11 +728,22 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
     ([StatementAssign ([lvalue], [value_lua])], ctx)
 
   | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
-    (* if c then e1 else e2 as statement (for effect context) *)
-    let cond_expr, ctx = translate_expression ctx cond in
-    let then_stmts, ctx = translate_to_effect ctx then_branch in
-    let else_stmts, ctx = translate_to_effect ctx else_branch in
-    ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
+    (* Float let bindings out of condition to avoid IIFEs *)
+    begin match cond with
+    | Lambda.LambdaLet (id, value, inner_cond) ->
+      let name = mangle_identifier_smart ctx id in
+      let value_expr, ctx = translate_expression ctx value in
+      let local_stmt = StatementLocal ([name], [value_expr]) in
+      let rest, ctx = translate_to_effect ctx
+        (Lambda.LambdaIfThenElse (inner_cond, then_branch, else_branch)) in
+      (local_stmt :: rest, ctx)
+
+    | _ ->
+      let cond_expr, ctx = translate_expression ctx cond in
+      let then_stmts, ctx = translate_to_effect ctx then_branch in
+      let else_stmts, ctx = translate_to_effect ctx else_branch in
+      ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
+    end
 
   | _ ->
     let expr, ctx = translate_expression ctx lambda in
@@ -697,10 +755,16 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
 let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambda.lambda)
     : block * context =
   match value with
-  | Lambda.LambdaFunction (params, body) ->
-    let param_names = List.map mangle_identifier params in
+  | Lambda.LambdaFunction ([param], body) ->
+    (* Single-param function: use local function f(x) syntax *)
+    let param_name = mangle_identifier_smart ctx param in
     let body_stmts, ctx = translate_to_statements ctx body in
-    (* Generate curried function: local f = function(a) return function(b) ... end end *)
+    ([StatementLocalFunction (target_name, [param_name], body_stmts)], ctx)
+
+  | Lambda.LambdaFunction (params, body) ->
+    let param_names = List.map (mangle_identifier_smart ctx) params in
+    let body_stmts, ctx = translate_to_statements ctx body in
+    (* Multi-param: curried function local f = function(a) return function(b) ... end end *)
     let curried_fn = make_curried_function param_names body_stmts in
     ([StatementLocal ([target_name], [curried_fn])], ctx)
 
@@ -708,7 +772,7 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
     (* Float nested let out:
        let target = (let inner = v in e)
        becomes: let inner = v; let target = e *)
-    let inner_name = mangle_identifier inner_id in
+    let inner_name = mangle_identifier_smart ctx inner_id in
     let inner_stmts, ctx = generate_top_level_binding ctx inner_name inner_value in
     let rest_stmts, ctx = generate_top_level_binding ctx target_name inner_body in
     (inner_stmts @ rest_stmts, ctx)
@@ -747,7 +811,7 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
        complexity instead of O(n²) from repeated @ operations.
     *)
     let rev_binding_stmts, name_var_pairs, ctx = List.fold_left (fun (rev_stmts, pairs, ctx) (binding : Lambda.module_binding) ->
-      let binding_var = mangle_identifier binding.mb_id in
+      let binding_var = mangle_identifier_smart ctx binding.mb_id in
       let inner_stmts, ctx = generate_top_level_binding ctx binding_var binding.mb_value in
       (List.rev_append inner_stmts rev_stmts, (Lambda.module_binding_name binding, binding_var) :: pairs, ctx)
     ) ([], [], ctx) bindings in
@@ -769,18 +833,18 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
 let generate_top_level ctx (lambda : Lambda.lambda) : block * context =
   match lambda with
   | Lambda.LambdaLet (identifier, value, Lambda.LambdaConstant Lambda.ConstantUnit) ->
-    let target_name = mangle_identifier identifier in
+    let target_name = mangle_identifier_smart ctx identifier in
     generate_top_level_binding ctx target_name value
 
   | Lambda.LambdaLetRecursive (bindings, Lambda.LambdaConstant Lambda.ConstantUnit) ->
-    let names = List.map (fun (id, _) -> mangle_identifier id) bindings in
+    let names = List.map (fun (id, _) -> mangle_identifier_smart ctx id) bindings in
     let forward_decl = StatementLocal (names, []) in
     let rev_function_defs, ctx =
       List.fold_left (fun (acc, ctx) (id, value) ->
-        let name = mangle_identifier id in
+        let name = mangle_identifier_smart ctx id in
         match value with
         | Lambda.LambdaFunction (params, body) ->
-          let param_names = List.map mangle_identifier params in
+          let param_names = List.map (mangle_identifier_smart ctx) params in
           let body_stmts, ctx = translate_to_statements ctx body in
           (* Generate curried function for recursive bindings *)
           let curried_fn = make_curried_function param_names body_stmts in
@@ -813,7 +877,7 @@ let generate lambdas =
     List.fold_left (fun (rev_acc, ctx) lambda ->
       let stmts, ctx = generate_top_level ctx lambda in
       (List.rev_append stmts rev_acc, ctx)
-    ) ([], empty_context) lambdas
+    ) ([], make_empty_context ()) lambdas
   in
   let body = List.rev rev_body in
   let preamble = generate_singleton_preamble final_ctx in

@@ -52,10 +52,15 @@ let sanitize_name name =
   else if result.[0] >= '0' && result.[0] <= '9' then "_" ^ result
   else result
 
-let mangle_identifier (id : Identifier.t) : Lua_ast.identifier =
+(** Get the base name for an identifier (sanitized, with keyword handling, no stamp).
+    Used by smart name generation to track name usage. *)
+let get_base_name (id : Identifier.t) : string =
   let name = Identifier.name id in
-  let stamp = Identifier.stamp id in
   let sanitized = sanitize_name name in
-  let base_name = if is_lua_keyword sanitized then "_" ^ sanitized else sanitized in
+  if is_lua_keyword sanitized then "_" ^ sanitized else sanitized
+
+let mangle_identifier (id : Identifier.t) : Lua_ast.identifier =
+  let base_name = get_base_name id in
+  let stamp = Identifier.stamp id in
   if stamp = 0 then base_name
   else Printf.sprintf "%s_%d" base_name stamp

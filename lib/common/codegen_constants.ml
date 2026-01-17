@@ -28,19 +28,19 @@ let dispatch_table_threshold = 4
 
 (* Generated Identifier Prefixes *)
 
-let scrutinee_prefix = "_scrutinee"
-let tuple_temp_prefix = "_tuple"
-let constructor_temp_prefix = "_ctor"
-let record_temp_prefix = "_record"
-let included_module_prefix = "_included"
-let param_prefix = "_param"
-let rec_prefix = "_rec"
-let top_prefix = "_top"
-let include_prefix = "_include"
+let scrutinee_prefix = "matched"
+let tuple_temp_prefix = "tuple"
+let constructor_temp_prefix = "ctor"
+let record_temp_prefix = "record"
+let included_module_prefix = "included"
+let param_prefix = "param"
+let rec_prefix = "rec"
+let top_prefix = "top"
+let include_prefix = "include"
 
 (* Lua Codegen Names *)
 
-let switch_scrutinee_name = "_switch"
+let switch_scrutinee_name = "matched"
 let dispatch_table_name = "_dispatch"
 let dispatch_handler_name = "_handler"
 let record_update_result_name = "_result"
