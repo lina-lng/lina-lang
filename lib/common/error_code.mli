@@ -77,6 +77,8 @@ val e_recursive_type : t
 
 (** {1 Warning Codes (W0001-W9999)} *)
 
+(** {2 Core Warnings} *)
+
 (** Variable is defined but never used. *)
 val w_unused_variable : t
 
@@ -88,6 +90,58 @@ val w_redundant_pattern : t
 
 (** Variable shadows an existing binding. *)
 val w_shadowing : t
+
+(** {2 Unused Code Detection}
+
+    These warnings detect unused code. In strict mode, they become errors. *)
+
+(** Function is defined but never called. *)
+val w_unused_function : t
+
+(** Function parameter is never used. *)
+val w_unused_parameter : t
+
+(** Module is imported but none of its bindings are used. *)
+val w_unused_module : t
+
+(** [open] statement imports no bindings that are used. *)
+val w_unused_open : t
+
+(** Type is defined but never referenced. *)
+val w_unused_type : t
+
+(** Variant constructor is defined but never used. *)
+val w_unused_constructor : t
+
+(** Record field is defined but never accessed. *)
+val w_unused_field : t
+
+(** [rec] flag is unnecessary (function does not call itself). *)
+val w_unused_rec : t
+
+(** Code is unreachable (after a diverging expression). *)
+val w_dead_code : t
+
+(** {2 Additional Analysis Warnings} *)
+
+(** Weak type variable (cannot be generalized). *)
+val w_weak_type_variable : t
+
+(** Use of a deprecated binding. *)
+val w_deprecated : t
+
+(** Function has high cyclomatic complexity. *)
+val w_complexity : t
+
+(** {1 Strict Mode} *)
+
+(** Codes that should become errors in strict mode.
+    This includes all unused code detection warnings. *)
+val strict_mode_codes : t list
+
+(** [is_strict_mode_code code] returns [true] if the code should be an error
+    in strict mode. *)
+val is_strict_mode_code : t -> bool
 
 (** {1 Code Operations} *)
 

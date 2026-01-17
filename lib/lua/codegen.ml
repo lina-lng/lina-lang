@@ -13,7 +13,6 @@ type context = {
   name_cache : (int, string) Hashtbl.t;  (** Maps identifier stamps to Lua names *)
 }
 
-(** Create a fresh empty context with new hashtables. *)
 let make_empty_context () = {
   singletons = Singleton_registry.empty;
   used_names = Hashtbl.create 64;
@@ -594,40 +593,39 @@ and translate_record_update_to_statements ctx base_expression update_fields =
 
   (copy_stmt :: copy_loop :: update_stmts @ [StatementReturn [ExpressionVariable result_name]], ctx)
 
+(** Handle special let-value forms that avoid IIFE generation.
+    Returns Some when special handling was applied, None for normal values. *)
+and translate_let_special_value ctx id value body =
+  match value with
+  | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
+    Some (translate_to_statements ctx (Lambda.LambdaLet (inner_id, inner_value,
+      Lambda.LambdaLet (id, inner_body, body))))
+
+  | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
+    let name = mangle_identifier_smart ctx id in
+    let decl = StatementLocal ([name], []) in
+    let cond_expr, ctx = translate_expression ctx cond in
+    let then_stmts, ctx = translate_value_to_assignment ctx name then_branch in
+    let else_stmts, ctx = translate_value_to_assignment ctx name else_branch in
+    let if_stmt = StatementIf ([(cond_expr, then_stmts)], Some else_stmts) in
+    let rest, ctx = translate_to_statements ctx body in
+    Some (decl :: if_stmt :: rest, ctx)
+
+  | Lambda.LambdaSequence (first, second) ->
+    let first_stmts, ctx = translate_to_effect ctx first in
+    let rest, ctx = translate_to_statements ctx (Lambda.LambdaLet (id, second, body)) in
+    Some (first_stmts @ rest, ctx)
+
+  | _ ->
+    None
+
 (** Translate a lambda to a block of statements, threading context *)
 and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
   match lambda with
   | Lambda.LambdaLet (id, value, body) ->
-    begin match value with
-    | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
-      (* Float nested let out to avoid IIFE:
-         let id = (let inner = v in e) in body
-         becomes: let inner = v in let id = e in body *)
-      translate_to_statements ctx (Lambda.LambdaLet (inner_id, inner_value,
-        Lambda.LambdaLet (id, inner_body, body)))
-
-    | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
-      (* Transform if-in-value to avoid IIFE:
-         let id = if c then e1 else e2 in body
-         becomes: local id; if c then id = e1 else id = e2 end; body *)
-      let name = mangle_identifier_smart ctx id in
-      let decl = StatementLocal ([name], []) in
-      let cond_expr, ctx = translate_expression ctx cond in
-      let then_stmts, ctx = translate_value_to_assignment ctx name then_branch in
-      let else_stmts, ctx = translate_value_to_assignment ctx name else_branch in
-      let if_stmt = StatementIf ([(cond_expr, then_stmts)], Some else_stmts) in
-      let rest, ctx = translate_to_statements ctx body in
-      (decl :: if_stmt :: rest, ctx)
-
-    | Lambda.LambdaSequence (first, second) ->
-      (* Float sequence to avoid IIFE:
-         let id = (e1; e2) in body
-         becomes: e1; let id = e2 in body *)
-      let first_stmts, ctx = translate_to_effect ctx first in
-      let rest, ctx = translate_to_statements ctx (Lambda.LambdaLet (id, second, body)) in
-      (first_stmts @ rest, ctx)
-
-    | _ ->
+    begin match translate_let_special_value ctx id value body with
+    | Some result -> result
+    | None ->
       let name = mangle_identifier_smart ctx id in
       let value_expr, ctx = translate_expression ctx value in
       let local_stmt = StatementLocal ([name], [value_expr]) in
@@ -693,7 +691,7 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
     let call_expr = make_curried_call func_expr arg_exprs in
     begin match call_expr with
     | ExpressionCall (f, a) -> ([StatementCall (f, a)], ctx)
-    | _ -> ([StatementCall (call_expr, [])], ctx)  (* Fallback for closures *)
+    | _ -> ([StatementCall (call_expr, [])], ctx)
     end
 
   | Lambda.LambdaPrimitive (Lambda.PrimitivePrint, args) ->

@@ -58,17 +58,17 @@ let warn_error_arg =
 
 (** Parse warning specs and build configuration.
     Takes a base config (from file) and applies CLI overrides on top. *)
-let parse_warning_config ?(base = Driver.Warning_config.default) warning_specs warn_error_spec =
-  match Driver.Warning_config.parse_specs base warning_specs with
+let parse_warning_config ?(base = Common.Warning_config.default) warning_specs warn_error_spec =
+  match Common.Warning_config.parse_specs base warning_specs with
   | Error msg -> Error msg
   | Ok config ->
     match warn_error_spec with
     | None -> Ok config
     | Some spec ->
       if spec = "+all" || spec = "all" then
-        Ok (Driver.Warning_config.warn_error_all config)
+        Ok (Common.Warning_config.warn_error_all config)
       else
-        Driver.Warning_config.parse_spec config (spec ^ "=deny")
+        Common.Warning_config.parse_spec config (spec ^ "=deny")
 
 (** {1 Project Discovery} *)
 

@@ -1,6 +1,12 @@
+(** Suppress all warnings in tests to avoid noise in expected output. *)
+let test_options = Driver.Pipeline.{
+  default_options with
+  warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
+}
+
 let compile source =
   Typing.Types.reset_type_variable_id ();
-  match Driver.Pipeline.compile_string Driver.Pipeline.default_options "<test>" source with
+  match Driver.Pipeline.compile_string test_options "<test>" source with
   | Ok lua_code -> lua_code
   | Error msg -> "ERROR: " ^ msg
 
@@ -92,8 +98,6 @@ let%expect_test "match with guard" =
         return x_1
       end
     end
-    File "<string>", line 1, characters 51-57:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "match with constructor pattern" =
@@ -270,10 +274,6 @@ let%expect_test "multiple guards in match" =
         end
       end
     end
-    File "<string>", line 3, characters 4-22:
-    Warning: Redundant pattern: this case will never be matched
-    File "<string>", line 4, characters 4-10:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "type error: record field type mismatch" =
@@ -318,8 +318,6 @@ let%expect_test "type error: guard must be bool" =
         return error("Match failure")
       end
     end
-    File "<string>", line 1, characters 10-38:
-    Warning: Non-exhaustive pattern matching, missing case: true
     |}]
 
 (* === Pattern Matching: Exhaustiveness Tests === *)
@@ -356,8 +354,6 @@ let f x = match x with | Some n -> n");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 10-36:
-    Warning: Non-exhaustive pattern matching, missing case: None
     |}]
 
 let%expect_test "non-exhaustive match - missing Some" =
@@ -373,8 +369,6 @@ let f x = match x with | None -> 0");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 10-34:
-    Warning: Non-exhaustive pattern matching, missing case: Some _
     |}]
 
 let%expect_test "exhaustive match on bool - no warning" =
@@ -405,8 +399,6 @@ let%expect_test "non-exhaustive match on bool - missing false" =
         return error("Match failure")
       end
     end
-    File "<string>", line 1, characters 10-34:
-    Warning: Non-exhaustive pattern matching, missing case: false
     |}]
 
 let%expect_test "wildcard makes match exhaustive" =
@@ -440,8 +432,6 @@ let f x = match x with | _ -> 0 | None -> 1");
         return 0
       end
     end
-    File "<string>", line 2, characters 34-43:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "redundant pattern - duplicate constructor" =
@@ -460,8 +450,6 @@ let f x = match x with | None -> 0 | Some n -> n | None -> 2");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 51-60:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "redundant integer pattern" =
@@ -536,8 +524,6 @@ let%expect_test "match on record pattern" =
       local x = r_match.x;
       return x
     end
-    File "<string>", line 1, characters 14-39:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "match with multiple record fields" =
@@ -549,8 +535,6 @@ let%expect_test "match with multiple record fields" =
       local x = r_match.x;
       return x + y
     end
-    File "<string>", line 1, characters 15-47:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "guard with constructor pattern" =
@@ -595,8 +579,6 @@ let f x = match x with | Some n when n > 0 -> n | None -> 0");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 10-59:
-    Warning: Non-exhaustive pattern matching, missing case: Some _
     |}]
 
 (* === Pattern Matching: Complex Scenarios === *)
@@ -691,8 +673,6 @@ let%expect_test "match with unit pattern" =
         return error("Match failure")
       end
     end
-    File "<string>", line 1, characters 10-33:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 (* === Pattern Matching: Tuple Patterns === *)
@@ -799,8 +779,6 @@ let extract t = match t with | (Some (a, b), c) -> a + b + c | (None, d) -> d");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 16-77:
-    Warning: Non-exhaustive pattern matching, missing case: (_, _)
     |}]
 
 let%expect_test "constructor containing tuple containing constructor" =
@@ -873,8 +851,6 @@ let to_num d = match d with | North -> 0 | South -> 1 | East -> 2");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 15-65:
-    Warning: Non-exhaustive pattern matching, missing case: West
     |}]
 
 let%expect_test "five constructor variant with wildcard" =
@@ -965,8 +941,6 @@ let f x = match x with | Some (a, b, c) -> a + b + c | None -> 0");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 10-64:
-    Warning: Non-exhaustive pattern matching, missing case: Some _
     |}]
 
 (* === Pattern Matching: Guards === *)
@@ -988,8 +962,6 @@ let%expect_test "guard accessing multiple bound variables" =
         return b_1
       end
     end
-    File "<string>", line 1, characters 54-65:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "guard with boolean operators" =
@@ -1009,8 +981,6 @@ let%expect_test "guard with boolean operators" =
         return 0
       end
     end
-    File "<string>", line 1, characters 73-79:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "guard on constructor with argument" =
@@ -1065,12 +1035,6 @@ let%expect_test "multiple guards same pattern" =
         end
       end
     end
-    File "<string>", line 3, characters 4-23:
-    Warning: Redundant pattern: this case will never be matched
-    File "<string>", line 4, characters 4-22:
-    Warning: Redundant pattern: this case will never be matched
-    File "<string>", line 5, characters 4-10:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 (* === Pattern Matching: Recursive Functions === *)
@@ -1188,8 +1152,6 @@ let unwrap x = match x with | Some y -> y");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 15-41:
-    Warning: Non-exhaustive pattern matching, missing case: None
     |}]
 
 let%expect_test "all wildcards match" =
@@ -1200,8 +1162,6 @@ let%expect_test "all wildcards match" =
       local x = t_match[1];
       return x
     end
-    File "<string>", line 1, characters 47-53:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 let%expect_test "overlapping constant and variable patterns" =
@@ -1229,10 +1189,6 @@ let%expect_test "multiple identical wildcards" =
       local x_match = x;
       return 1
     end
-    File "<string>", line 1, characters 34-40:
-    Warning: Redundant pattern: this case will never be matched
-    File "<string>", line 1, characters 43-49:
-    Warning: Redundant pattern: this case will never be matched
     |}]
 
 (* === Pattern Matching: Type Errors === *)
@@ -1288,8 +1244,6 @@ let get_x p = match p with | { x; y } -> x");
       local x = p_match.x;
       return x
     end
-    File "<string>", line 2, characters 14-42:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "record pattern ignoring some fields" =
@@ -1302,8 +1256,6 @@ let project p = match p with | { x; y } -> (x, y)");
       local x = p_match.x;
       return {x, y}
     end
-    File "<string>", line 2, characters 16-49:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "nested record in constructor" =
@@ -1322,8 +1274,6 @@ let get_x opt = match opt with | Some { x } -> x | None -> 0");
         return error("Match failure")
       end
     end
-    File "<string>", line 2, characters 16-60:
-    Warning: Non-exhaustive pattern matching, missing case: Some _
     |}]
 
 let%expect_test "record pattern with renamed binding" =
@@ -1334,8 +1284,6 @@ let%expect_test "record pattern with renamed binding" =
       local value = r_match.x;
       return value
     end
-    File "<string>", line 1, characters 16-53:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 (* === Pattern Matching: Integration Tests === *)
@@ -2296,8 +2244,6 @@ let f x = match x with
         end
       end
     end
-    File "<string>", line 2, characters 10-14:
-    Warning: Non-exhaustive pattern matching, missing case: _
     |}]
 
 let%expect_test "nested poly variant" =

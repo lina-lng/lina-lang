@@ -65,7 +65,8 @@ compare_test() {
     # Compile with Lina
     local lina_out
     local lina_exit_code
-    lina_out=$($LINA_COMPILER compile "$lina_file" 2>&1) && lina_exit_code=0 || lina_exit_code=$?
+    # Use --relaxed to suppress unused code errors for compatibility testing
+    lina_out=$($LINA_COMPILER compile "$lina_file" --relaxed 2>&1) && lina_exit_code=0 || lina_exit_code=$?
     local lina_ok=false
     if [ $lina_exit_code -eq 0 ] && [[ ! "$lina_out" =~ ^ERROR: ]]; then
         lina_ok=true

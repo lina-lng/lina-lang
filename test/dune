@@ -4,6 +4,12 @@
  (libraries parsing common)
  (modules helpers))
 
+; Analysis test helpers library
+(library
+ (name analysis_test_helpers)
+ (libraries analysis typing parsing common)
+ (modules analysis_test_helpers))
+
 ; Lexer tests
 (library
  (name test_lexer)
@@ -239,5 +245,53 @@
  (name test_smart_naming)
  (libraries parsing typing lambda lua driver common)
  (modules test_smart_naming)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Scope analysis tests
+(library
+ (name test_scope_analysis)
+ (libraries analysis typing parsing common analysis_test_helpers)
+ (modules test_scope_analysis)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Unused detection tests
+(library
+ (name test_unused_detection)
+ (libraries analysis typing parsing common analysis_test_helpers)
+ (modules test_unused_detection)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Dead code detection tests
+(library
+ (name test_dead_code)
+ (libraries analysis typing parsing common analysis_test_helpers)
+ (modules test_dead_code)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Warning configuration tests
+(library
+ (name test_warning_config)
+ (libraries driver common)
+ (modules test_warning_config)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; CFG (Control Flow Graph) tests
+(library
+ (name test_cfg)
+ (libraries analysis parsing typing common analysis_test_helpers)
+ (modules test_cfg)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Analysis pipeline integration tests
+(library
+ (name test_analysis_pipeline)
+ (libraries analysis parsing typing common)
+ (modules test_analysis_pipeline)
  (inline_tests)
  (preprocess (pps ppx_expect)))

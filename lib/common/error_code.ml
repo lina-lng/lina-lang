@@ -9,7 +9,6 @@ type t = {
 let make_error number description = { kind = Error; number; description }
 let make_warning number description = { kind = Warning; number; description }
 
-(* Error codes E0001-E9999 *)
 let e_type_mismatch = make_error 1 "type mismatch"
 let e_unbound_value = make_error 2 "unbound value"
 let e_unbound_type = make_error 3 "unbound type"
@@ -27,11 +26,25 @@ let e_unbound_field = make_error 14 "unbound record field"
 let e_duplicate_definition = make_error 15 "duplicate definition"
 let e_recursive_type = make_error 16 "recursive type without indirection"
 
-(* Warning codes W0001-W9999 *)
 let w_unused_variable = make_warning 1 "unused variable"
 let w_non_exhaustive = make_warning 2 "non-exhaustive pattern matching"
 let w_redundant_pattern = make_warning 3 "redundant pattern"
 let w_shadowing = make_warning 4 "shadowed binding"
+
+(* Unused code detection (strict mode: these become errors) *)
+let w_unused_function = make_warning 5 "unused function"
+let w_unused_parameter = make_warning 6 "unused parameter"
+let w_unused_module = make_warning 7 "unused module"
+let w_unused_open = make_warning 8 "unused open"
+let w_unused_type = make_warning 9 "unused type"
+let w_unused_constructor = make_warning 10 "unused constructor"
+let w_unused_field = make_warning 11 "unused record field"
+let w_unused_rec = make_warning 12 "unnecessary rec flag"
+let w_dead_code = make_warning 13 "unreachable code"
+
+let w_weak_type_variable = make_warning 14 "weak type variable"
+let w_deprecated = make_warning 15 "use of deprecated binding"
+let w_complexity = make_warning 16 "high cyclomatic complexity"
 
 let to_string code =
   let prefix = match code.kind with Error -> "E" | Warning -> "W" in
@@ -45,7 +58,6 @@ let is_warning code = code.kind = Warning
 let description code = code.description
 
 let all_codes () = [
-  (* Errors *)
   e_type_mismatch;
   e_unbound_value;
   e_unbound_type;
@@ -62,11 +74,22 @@ let all_codes () = [
   e_unbound_field;
   e_duplicate_definition;
   e_recursive_type;
-  (* Warnings *)
   w_unused_variable;
   w_non_exhaustive;
   w_redundant_pattern;
   w_shadowing;
+  w_unused_function;
+  w_unused_parameter;
+  w_unused_module;
+  w_unused_open;
+  w_unused_type;
+  w_unused_constructor;
+  w_unused_field;
+  w_unused_rec;
+  w_dead_code;
+  w_weak_type_variable;
+  w_deprecated;
+  w_complexity;
 ]
 
 let of_string str =
@@ -82,11 +105,8 @@ let of_string str =
         | 'W' | 'w' -> Some Warning
         | _ -> None
       in
-      match kind with
-      | None -> None
-      | Some kind ->
-        (* Look up the actual code to get the description *)
-        List.find_opt (fun code -> code.kind = kind && code.number = number) (all_codes ())
+      Option.bind kind (fun kind ->
+        List.find_opt (fun code -> code.kind = kind && code.number = number) (all_codes ()))
 
 let pp fmt code = Format.fprintf fmt "%s" (to_string code)
 
@@ -96,3 +116,22 @@ let compare a b =
   | cmp -> cmp
 
 let equal a b = compare a b = 0
+
+(** Codes that should become errors in strict mode. *)
+let strict_mode_codes = [
+  w_unused_variable;
+  w_unused_function;
+  w_unused_parameter;
+  w_unused_module;
+  w_unused_open;
+  w_unused_type;
+  w_unused_constructor;
+  w_unused_field;
+  w_unused_rec;
+  w_dead_code;
+  w_redundant_pattern;
+  w_non_exhaustive;
+]
+
+let is_strict_mode_code code =
+  List.exists (equal code) strict_mode_codes

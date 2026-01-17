@@ -26,16 +26,23 @@ type level =
 (** Warning configuration state. *)
 type t
 
-(** [default] returns the default warning configuration where all warnings
-    are set to [Warn]. *)
+(** [default] returns the default warning configuration.
+
+    {b Strict mode is the default}: unused code detection warnings
+    (unused variables, functions, parameters, modules, types, constructors,
+    fields, dead code) are treated as errors. This ensures code quality
+    for production and safety-critical systems.
+
+    Use [relaxed] or configure [preset = "relaxed"] in lina.toml to
+    treat these as warnings instead. *)
 val default : t
 
 (** [set_level config code level] returns a new configuration with the
     given warning code set to the specified level. *)
-val set_level : t -> Common.Error_code.t -> level -> t
+val set_level : t -> Error_code.t -> level -> t
 
 (** [get_level config code] returns the current level for a warning code. *)
-val get_level : t -> Common.Error_code.t -> level
+val get_level : t -> Error_code.t -> level
 
 (** [enable_all config] enables all warnings (sets to [Warn]). *)
 val enable_all : t -> t
@@ -62,18 +69,35 @@ val parse_specs : t -> string list -> (t, string) result
 
 (** [should_report config code] returns [true] if the warning should be
     displayed (level is [Warn], [Deny], or [Forbid]). *)
-val should_report : t -> Common.Error_code.t -> bool
+val should_report : t -> Error_code.t -> bool
 
 (** [is_error config code] returns [true] if the warning should be treated
     as an error (level is [Deny] or [Forbid]). *)
-val is_error : t -> Common.Error_code.t -> bool
+val is_error : t -> Error_code.t -> bool
 
 (** [is_fatal config code] returns [true] if the warning should stop
     compilation (level is [Forbid]). *)
-val is_fatal : t -> Common.Error_code.t -> bool
+val is_fatal : t -> Error_code.t -> bool
+
+(** [severity_for config code] returns [Error] if the code is configured
+    as an error (Deny/Forbid level), otherwise [Warning]. *)
+val severity_for : t -> Error_code.t -> Compiler_error.severity
 
 (** [level_to_string level] returns the string representation. *)
 val level_to_string : level -> string
 
 (** [level_of_string s] parses a level from string. *)
 val level_of_string : string -> level option
+
+(** {1 Relaxed Mode}
+
+    The default configuration is strict (unused code = error).
+    Use relaxed mode to opt-out and treat unused code as warnings only. *)
+
+(** [relaxed] is a configuration where strict-mode codes (unused detection,
+    dead code, etc.) are set to [Warn] instead of [Deny]. *)
+val relaxed : t
+
+(** [apply_relaxed config] returns a configuration where strict-mode codes
+    are set to [Warn], preserving other settings. *)
+val apply_relaxed : t -> t

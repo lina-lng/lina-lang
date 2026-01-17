@@ -12,9 +12,18 @@ type build = {
   output_dir : string;
 }
 
+type preset = Strict | Relaxed
+
+type path_override = {
+  path_pattern : string;
+  path_preset : preset option;
+  path_overrides : (string * Common.Warning_config.level) list;
+}
+
 type warnings = {
-  default_level : Warning_config.level;
-  overrides : (string * Warning_config.level) list;
+  preset : preset;
+  overrides : (string * Common.Warning_config.level) list;
+  by_path : path_override list;
 }
 
 type t = {
@@ -30,8 +39,9 @@ let default_build = {
 }
 
 let default_warnings = {
-  default_level = Warning_config.Warn;
+  preset = Strict;
   overrides = [];
+  by_path = [];
 }
 
 let default_config name = {
@@ -43,10 +53,10 @@ let default_config name = {
 (** Parse warning level from string. *)
 let parse_warning_level str =
   match String.lowercase_ascii str with
-  | "allow" | "ignore" | "off" -> Some Warning_config.Allow
-  | "warn" | "warning" | "on" -> Some Warning_config.Warn
-  | "deny" | "error" -> Some Warning_config.Deny
-  | "forbid" | "fatal" -> Some Warning_config.Forbid
+  | "allow" | "ignore" | "off" -> Some Common.Warning_config.Allow
+  | "warn" | "warning" | "on" -> Some Common.Warning_config.Warn
+  | "deny" | "error" -> Some Common.Warning_config.Deny
+  | "forbid" | "fatal" -> Some Common.Warning_config.Forbid
   | _ -> None
 
 (** Get string value from TOML table. *)
@@ -83,23 +93,60 @@ let parse_build table =
   | Some _ -> Error "Invalid [build] section: expected table"
   | None -> Ok default_build
 
+(** Parse preset from string. Defaults to Strict. *)
+let parse_preset str =
+  match String.lowercase_ascii str with
+  | "strict" -> Strict
+  | "relaxed" -> Relaxed
+  | _ -> Strict
+
+(** Parse a single path override entry. *)
+let parse_path_override pattern override_table =
+  let path_preset =
+    match get_string override_table "preset" with
+    | Some s -> Some (parse_preset s)
+    | None -> None
+  in
+  let path_overrides =
+    Toml.Types.Table.fold (fun key value acc ->
+      let key_str = Toml.Types.Table.Key.to_string key in
+      if key_str = "preset" then acc
+      else match value with
+        | Toml.Types.TString level_str ->
+          (match parse_warning_level level_str with
+           | Some level -> (key_str, level) :: acc
+           | None -> acc)
+        | _ -> acc
+    ) override_table []
+  in
+  { path_pattern = pattern; path_preset; path_overrides }
+
+(** Parse [warnings.by-path] section. *)
+let parse_by_path warn_table =
+  match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "by-path") warn_table with
+  | Some (Toml.Types.TTable by_path_table) ->
+    Toml.Types.Table.fold (fun key value acc ->
+      let pattern = Toml.Types.Table.Key.to_string key in
+      match value with
+      | Toml.Types.TTable override_table ->
+        parse_path_override pattern override_table :: acc
+      | _ -> acc
+    ) by_path_table []
+  | _ -> []
+
 (** Parse [warnings] section. *)
 let parse_warnings table =
   match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "warnings") table with
   | Some (Toml.Types.TTable warn_table) ->
-    let default_level =
-      match get_string warn_table "default" with
-      | Some s ->
-        (match parse_warning_level s with
-         | Some level -> level
-         | None -> Warning_config.Warn)
-      | None -> Warning_config.Warn
+    let preset =
+      match get_string warn_table "preset" with
+      | Some s -> parse_preset s
+      | None -> Strict
     in
-    (* Parse per-warning overrides *)
     let overrides =
       Toml.Types.Table.fold (fun key value acc ->
         let key_str = Toml.Types.Table.Key.to_string key in
-        if key_str = "default" then acc
+        if key_str = "preset" || key_str = "by-path" then acc
         else match value with
           | Toml.Types.TString level_str ->
             (match parse_warning_level level_str with
@@ -108,7 +155,8 @@ let parse_warnings table =
           | _ -> acc
       ) warn_table []
     in
-    Ok { default_level; overrides }
+    let by_path = parse_by_path warn_table in
+    Ok { preset; overrides; by_path }
   | Some _ -> Error "Invalid [warnings] section: expected table"
   | None -> Ok default_warnings
 
@@ -139,16 +187,56 @@ let load_project_config root =
   else
     Error "No lina.toml found in project root"
 
-let to_warning_config warnings =
-  let base = match warnings.default_level with
-    | Warning_config.Allow -> Warning_config.disable_all Warning_config.default
-    | Warning_config.Warn -> Warning_config.default
-    | Warning_config.Deny -> Warning_config.warn_error_all Warning_config.default
-    | Warning_config.Forbid -> Warning_config.warn_error_all Warning_config.default
+(** Simple glob pattern matching. Supports * and ** wildcards. *)
+let glob_match pattern path =
+  let rec match_parts pattern_parts path_parts =
+    match pattern_parts, path_parts with
+    | [], [] -> true
+    | ["**"], _ -> true
+    | "**" :: rest, _ :: path_rest ->
+      match_parts pattern_parts path_rest || match_parts rest path_parts
+    | "*" :: rest, _ :: path_rest ->
+      match_parts rest path_rest
+    | p :: rest, path_p :: path_rest when p = path_p ->
+      match_parts rest path_rest
+    | _ :: _, [] -> false
+    | [], _ :: _ -> false
+    | _ :: _, _ :: _ -> false
   in
-  (* Apply overrides *)
+  let pattern_parts = String.split_on_char '/' pattern in
+  let path_parts = String.split_on_char '/' path in
+  match_parts pattern_parts path_parts
+
+(** Find matching path override for a file. *)
+let find_path_override warnings file_path =
+  List.find_opt (fun override ->
+    glob_match override.path_pattern file_path
+  ) warnings.by_path
+
+let to_warning_config warnings =
+  let base = match warnings.preset with
+    | Strict -> Common.Warning_config.default
+    | Relaxed -> Common.Warning_config.relaxed
+  in
   List.fold_left (fun config (name, level) ->
-    match Warning_config.parse_spec config (name ^ "=" ^ Warning_config.level_to_string level) with
+    match Common.Warning_config.parse_spec config (name ^ "=" ^ Common.Warning_config.level_to_string level) with
     | Ok config -> config
-    | Error _ -> config  (* Silently ignore invalid warning names *)
+    | Error _ -> config
   ) base warnings.overrides
+
+(** Get warning config for a specific file, applying path-specific overrides. *)
+let warning_config_for_file warnings file_path =
+  let base_config = to_warning_config warnings in
+  match find_path_override warnings file_path with
+  | None -> base_config
+  | Some override ->
+    let with_preset = match override.path_preset with
+      | Some Strict -> Common.Warning_config.default
+      | Some Relaxed -> Common.Warning_config.relaxed
+      | None -> base_config
+    in
+    List.fold_left (fun config (name, level) ->
+      match Common.Warning_config.parse_spec config (name ^ "=" ^ Common.Warning_config.level_to_string level) with
+      | Ok config -> config
+      | Error _ -> config
+    ) with_preset override.path_overrides

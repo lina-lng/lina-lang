@@ -26,10 +26,16 @@ module String = struct
       check 0
 end
 
+(** Suppress all warnings in tests to avoid noise in expected output. *)
+let test_options = Pipeline.{
+  default_options with
+  warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
+}
+
 (** Helper to compile Lina code to Lua and return the generated code *)
 let compile code =
   Typing.Types.reset_type_variable_id ();
-  match Pipeline.compile_string Pipeline.default_options "<test>" code with
+  match Pipeline.compile_string test_options "<test>" code with
   | Ok lua -> lua
   | Error msg -> "ERROR: " ^ msg
 

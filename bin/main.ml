@@ -56,6 +56,11 @@ let warn_error_arg =
   let doc = "Treat warnings as errors. Use $(b,+all) to treat all warnings as errors." in
   Arg.(value & opt (some string) None & info ["warn-error"] ~docv:"SPEC" ~doc)
 
+let relaxed_arg =
+  let doc = "Use relaxed mode: treat unused code warnings as warnings instead of errors. \
+             By default, Lina uses strict mode where unused code is an error." in
+  Arg.(value & flag & info ["relaxed"] ~doc)
+
 (** {1 Compile Command} *)
 
 let to_render_format = function
@@ -68,19 +73,20 @@ let to_color_choice = function
   | Always -> Driver.Diagnostic_render.Always
   | Never -> Driver.Diagnostic_render.Never
 
-(** Parse warning specs and build configuration. Returns error message on failure. *)
-let parse_warning_config warning_specs warn_error_spec =
-  let config = Driver.Warning_config.default in
-  match Driver.Warning_config.parse_specs config warning_specs with
+(** Parse warning specs and build configuration. Returns error message on failure.
+    Strict mode (unused code = error) is the default. Use relaxed=true to opt out. *)
+let parse_warning_config ~relaxed warning_specs warn_error_spec =
+  let base = if relaxed then Common.Warning_config.relaxed else Common.Warning_config.default in
+  match Common.Warning_config.parse_specs base warning_specs with
   | Error msg -> Error msg
   | Ok config ->
     match warn_error_spec with
     | None -> Ok config
     | Some spec ->
       if spec = "+all" || spec = "all" then
-        Ok (Driver.Warning_config.warn_error_all config)
+        Ok (Common.Warning_config.warn_error_all config)
       else
-        Driver.Warning_config.parse_spec config (spec ^ "=deny")
+        Common.Warning_config.parse_spec config (spec ^ "=deny")
 
 let compile_single options error_fmt color input_file output_file =
   let sources = Driver.Diagnostic_render.create_source_cache () in
@@ -160,9 +166,9 @@ let compile_multi options error_fmt color input_files output_dir =
     `Error (false, "Compilation failed")
 
 let compile input_file output_file multi_files output_dir error_fmt color
-    warning_specs warn_error_spec dump_ast dump_typed dump_lambda =
+    warning_specs warn_error_spec relaxed dump_ast dump_typed dump_lambda =
   (* Parse warning configuration *)
-  match parse_warning_config warning_specs warn_error_spec with
+  match parse_warning_config ~relaxed warning_specs warn_error_spec with
   | Error msg ->
     Printf.eprintf "Error in warning configuration: %s\n" msg;
     `Error (false, "Invalid warning configuration")
@@ -227,12 +233,14 @@ let compile_cmd =
     `P "Warning configuration:";
     `Pre "  linac compile file.lina -W +all -W -unused";
     `Pre "  linac compile file.lina --warn-error +all";
+    `P "Note: Strict mode (unused code = error) is the default.";
+    `P "Configure [preset = \"relaxed\"] in lina.toml to treat unused code as warnings.";
   ] in
   let info = Cmd.info "compile" ~doc ~man in
   Cmd.v info Term.(ret (const compile $ compile_input_file $ compile_output_file $
                         compile_multi_files $ compile_output_dir $
                         error_format_arg $ color_arg $
-                        warning_spec_arg $ warn_error_arg $
+                        warning_spec_arg $ warn_error_arg $ relaxed_arg $
                         dump_ast $ dump_typed $ dump_lambda))
 
 (** {1 Format Command} *)

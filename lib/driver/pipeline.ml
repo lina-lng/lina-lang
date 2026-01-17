@@ -4,14 +4,14 @@ type options = {
   dump_ast : bool;
   dump_typed : bool;
   dump_lambda : bool;
-  warning_config : Warning_config.t;
+  warning_config : Common.Warning_config.t;
 }
 
 let default_options = {
   dump_ast = false;
   dump_typed = false;
   dump_lambda = false;
-  warning_config = Warning_config.default;
+  warning_config = Common.Warning_config.default;
 }
 
 (** Simple pretty-printer for typed AST *)
@@ -167,6 +167,10 @@ let compile_string options _filename source =
       Printf.eprintf "=== Typed AST ===\n%s\n\n" (dump_typed_structure typed_ast)
     end;
 
+    (* Run static analysis: scope analysis, unused detection, dead code detection *)
+    let analysis_result = Analysis.Analysis_pipeline.run options.warning_config typed_ast in
+    let analysis_diagnostics = analysis_result.Analysis.Analysis_pipeline.diagnostics in
+
     let lambda = Lambda.translate_structure typed_ast in
     if options.dump_lambda then begin
       Printf.eprintf "=== Lambda IR ===\n%s\n\n" (dump_lambda_ir lambda)
@@ -175,21 +179,49 @@ let compile_string options _filename source =
     let lua_ast = Lua.Codegen.generate lambda in
     let lua_code = Lua.Printer.print_chunk lua_ast in
 
-    (* Process warnings based on configuration *)
-    let warnings = Compiler_error.get_warnings () in
+    (* Process type inference warnings *)
+    let type_warnings = Compiler_error.get_warnings () in
     let has_error = ref false in
+
     List.iter (fun w ->
       let code = Compiler_error.warning_code w in
-      if Warning_config.should_report options.warning_config code then begin
-        let is_error = Warning_config.is_error options.warning_config code in
+      if Common.Warning_config.should_report options.warning_config code then begin
+        let is_error = Common.Warning_config.is_error options.warning_config code in
         if is_error then begin
           has_error := true;
-          (* Print as error instead of warning *)
           Printf.eprintf "%s\n" (Compiler_error.report_warning_as_error_to_string w)
         end else
           Printf.eprintf "%s\n" (Compiler_error.report_warning_to_string w)
       end
-    ) warnings;
+    ) type_warnings;
+
+    (* Process analysis diagnostics (unused code, dead code, etc.) *)
+    List.iter (fun (diag : Compiler_error.diagnostic) ->
+      let severity_str = match diag.severity with
+        | Compiler_error.Error -> "error"
+        | Compiler_error.Warning -> "warning"
+        | Compiler_error.Info -> "info"
+        | Compiler_error.Hint -> "hint"
+      in
+      let code_str = match diag.code with
+        | Some code -> Error_code.to_string code
+        | None -> "unknown"
+      in
+      let primary_label =
+        List.find_opt (fun l -> l.Compiler_error.is_primary) diag.labels
+      in
+      let loc_str = match primary_label with
+        | Some label when not (Location.is_none label.label_span) ->
+          let loc = label.label_span in
+          Printf.sprintf "%s:%d:%d: "
+            loc.start_pos.filename loc.start_pos.line loc.start_pos.column
+        | _ -> ""
+      in
+      Printf.eprintf "%s%s[%s]: %s\n" loc_str severity_str code_str diag.message;
+
+      if diag.severity = Compiler_error.Error then
+        has_error := true
+    ) analysis_diagnostics;
 
     if !has_error then
       Error "Compilation failed due to warnings treated as errors"
@@ -198,7 +230,7 @@ let compile_string options _filename source =
   with
   | Compiler_error.Error err ->
     Error (Compiler_error.report_to_string err)
-  | Typing.Unification.Unification_error { expected; actual; location; message } ->
+  | Typing.Unification.Unification_error { expected; actual; location; message; trace } ->
     let loc_str =
       if Location.is_none location then ""
       else Printf.sprintf "File \"%s\", line %d, characters %d-%d:\n"
@@ -207,10 +239,12 @@ let compile_string options _filename source =
         location.start_pos.column
         location.end_pos.column
     in
-    Error (Printf.sprintf "%sType error: %s\nExpected: %s\nActual: %s"
+    let trace_str = Typing.Unification.format_trace trace in
+    Error (Printf.sprintf "%sType error: %s\nExpected: %s\nActual: %s%s"
       loc_str message
       (Typing.Types.type_expression_to_string expected)
-      (Typing.Types.type_expression_to_string actual))
+      (Typing.Types.type_expression_to_string actual)
+      trace_str)
 
 let compile_file options filename =
   try
