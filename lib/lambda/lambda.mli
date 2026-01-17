@@ -39,9 +39,11 @@ type primitive =
   | PrimitiveIntGreaterEqual     (** Integer greater-or-equal *)
   | PrimitiveStringEqual         (** String equality *)
   | PrimitiveStringConcat        (** String concatenation *)
+  | PrimitiveBoolNot             (** Boolean negation *)
   | PrimitiveMakeBlock of int    (** Create a tuple of given arity *)
   | PrimitiveGetField of int     (** Get tuple field by index (0-based) *)
   | PrimitivePrint               (** Print any value *)
+  | PrimError                    (** Raise an error with message *)
 
 (** {1 Constants} *)
 
@@ -124,6 +126,10 @@ type lambda =
       (** Assignment: [e1 := e2] *)
   | LambdaPolyVariant of string * lambda option
       (** Polymorphic variant constructor: [`Tag] or [`Tag(arg)] *)
+  | LambdaWhile of lambda * lambda
+      (** While loop: [while cond do body done] *)
+  | LambdaFor of Common.Identifier.t * lambda * lambda * Parsing.Syntax_tree.direction_flag * lambda
+      (** For loop: [for i = start to/downto end do body done] *)
 
 (** Module binding in a module expression. *)
 and module_binding = {

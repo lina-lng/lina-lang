@@ -1,0 +1,125 @@
+(* Test assert expression edge cases *)
+
+(* Test 1: Assert in nested let expressions *)
+let test_nested_let =
+  let x =
+    let y = 5 in
+    assert (y > 0);
+    y + 1
+  in
+  print x
+(* Expected: 6 *)
+
+(* Test 2: Assert in sequence position *)
+let test_sequence =
+  let x = 10 in
+  assert (x > 0);
+  assert (x < 100);
+  print x
+(* Expected: 10 *)
+
+(* Test 3: Assert with complex boolean expressions *)
+let test_complex_bool =
+  let a = 5 in
+  let b = 10 in
+  let c = 15 in
+  assert (a < b);
+  assert (b < c);
+  assert (a < c);
+  print "complex bool passed"
+(* Expected: complex bool passed *)
+
+(* Test 4: Assert with function call results *)
+let is_positive x = x > 0
+let test_function_call =
+  let x = 42 in
+  assert (is_positive x);
+  print x
+(* Expected: 42 *)
+
+(* Test 5: Assert at module level *)
+let _ = assert true
+let _ = print "module level assert passed"
+(* Expected: module level assert passed *)
+
+(* Test 6: Assert inside match arms *)
+type sign = Positive | Negative | Zero
+let test_match_arm =
+  let classify x =
+    if x > 0 then Positive
+    else if x < 0 then Negative
+    else Zero
+  in
+  let check x = match classify x with
+    | Positive -> assert (x > 0); "pos"
+    | Negative -> assert (x < 0); "neg"
+    | Zero -> assert (x == 0); "zero"
+  in
+  print (check 5);
+  print (check 0)
+(* Expected: pos *)
+(* Expected: zero *)
+
+(* Test 7: Assert inside for loop *)
+let test_in_for =
+  let sum = ref 0 in
+  for i = 1 to 5 do
+    assert (i > 0);
+    assert (i <= 5);
+    sum := !sum + i
+  done;
+  print (!sum)
+(* Expected: 15 *)
+
+(* Test 8: Assert inside while loop *)
+let test_in_while =
+  let counter = ref 0 in
+  while !counter < 3 do
+    assert (!counter >= 0);
+    counter := !counter + 1
+  done;
+  print (!counter)
+(* Expected: 3 *)
+
+(* Test 9: Multiple asserts in one expression *)
+let test_multiple =
+  let x = 50 in
+  assert (x > 0);
+  assert (x < 100);
+  assert (x >= 50);
+  assert (x <= 50);
+  print "multiple asserts passed"
+(* Expected: multiple asserts passed *)
+
+(* Test 10: Assert with comparison operators *)
+let test_comparisons =
+  assert (1 < 2);
+  assert (2 <= 2);
+  assert (3 > 2);
+  assert (3 >= 3);
+  assert (4 == 4);
+  assert (4 != 5);
+  print "comparisons passed"
+(* Expected: comparisons passed *)
+
+(* Test 11: Assert with negation *)
+let test_negation =
+  let x = false in
+  assert (not x);
+  print "negation passed"
+(* Expected: negation passed *)
+
+(* Test 12: Assert preserves control flow *)
+let test_control_flow =
+  let result =
+    let x = 10 in
+    assert (x > 0);
+    if x > 5 then
+      (assert (x > 5); 100)
+    else
+      (assert (x <= 5); 200)
+  in
+  print result
+(* Expected: 100 *)
+
+let _ = print "Assert edge cases complete"

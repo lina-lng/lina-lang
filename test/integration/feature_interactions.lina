@@ -1,0 +1,287 @@
+(* Test interactions between all implemented features:
+   - Raw strings
+   - Assert expressions
+   - While/For loops
+   - Binding operators *)
+
+type 'a option = None | Some of 'a
+type ('a, 'e) result = Ok of 'a | Error of 'e
+
+(* Binding operator definitions *)
+let option_bind opt f = match opt with
+  | None -> None
+  | Some x -> f x
+
+let option_both a b = match a with
+  | None -> None
+  | Some x -> match b with
+    | None -> None
+    | Some y -> Some (x, y)
+
+let option_map opt f = match opt with
+  | None -> None
+  | Some x -> Some (f x)
+
+let ( let* ) = option_bind
+let ( and* ) = option_both
+let ( let+ ) = option_map
+
+(* Test 1: Raw string inside for loop *)
+let test_raw_in_loop =
+  for i = 1 to 3 do
+    let s = {|iteration|} in
+    if i == 3 then print s else ()
+  done
+(* Expected: iteration *)
+
+(* Test 2: Raw string inside while loop *)
+let test_raw_in_while =
+  let count = ref 0 in
+  let msg = {|while-raw|} in
+  while !count < 2 do
+    let _ = count := !count + 1 in
+    if !count == 2 then print msg else ()
+  done
+(* Expected: while-raw *)
+
+(* Test 3: Assert inside for loop *)
+let test_assert_in_for =
+  let valid = ref true in
+  for i = 1 to 5 do
+    assert (i > 0);
+    assert (i <= 5);
+    if i == 5 then valid := !valid else ()
+  done;
+  print (if !valid then "assert-for ok" else "FAIL")
+(* Expected: assert-for ok *)
+
+(* Test 4: Assert inside while loop *)
+let test_assert_in_while =
+  let i = ref 0 in
+  while !i < 3 do
+    assert (!i >= 0);
+    i := !i + 1
+  done;
+  print "assert-while ok"
+(* Expected: assert-while ok *)
+
+(* Test 5: Binding operator with assert in body *)
+let test_bind_with_assert =
+  let result =
+    let* x = Some 10 in
+    let* y = Some 20 in
+    assert (x > 0);
+    assert (y > x);
+    Some (x + y)
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 30 *)
+
+(* Test 6: Binding operator inside for loop *)
+let test_bind_in_for =
+  let sum = ref 0 in
+  for i = 1 to 3 do
+    let result =
+      let* x = Some i in
+      let* y = Some (i * 2) in
+      Some (x + y)
+    in
+    match result with
+    | None -> ()
+    | Some n -> sum := !sum + n
+  done;
+  print (!sum)
+(* Expected: 18 *)
+
+(* Test 7: Binding operator inside while loop *)
+let test_bind_in_while =
+  let i = ref 1 in
+  let product = ref 1 in
+  while !i <= 4 do
+    let result =
+      let* x = Some (!i) in
+      Some (x * 2)
+    in
+    (match result with
+     | None -> ()
+     | Some n -> product := !product * n);
+    i := !i + 1
+  done;
+  print (!product)
+(* Expected: 384 *)
+
+(* Test 8: For loop with state threading via binding operators *)
+let state_bind ma f = fun s ->
+  let (a, s1) = ma s in
+  let next = f a in
+  next s1
+
+let state_return x s = (x, s)
+let state_get s = (s, s)
+let state_put new_s _ = ((), new_s)
+
+let ( let** ) = state_bind
+
+let test_loop_with_state =
+  let iterations = ref 0 in
+  for i = 1 to 3 do
+    let computation =
+      let** x = state_get in
+      let** _ = state_put (x + i) in
+      state_return x
+    in
+    let (_, _) = computation 0 in
+    iterations := !iterations + 1
+  done;
+  print (!iterations)
+(* Expected: 3 *)
+
+(* Test 9: Raw string with binding operator *)
+let test_raw_with_bind =
+  let make_message prefix =
+    let* p = Some prefix in
+    let raw_suffix = {|-suffix|} in
+    Some (p ^ raw_suffix)
+  in
+  match make_message "raw" with
+  | None -> print "FAIL"
+  | Some msg -> print msg
+(* Expected: raw-suffix *)
+
+(* Test 10: Assert with binding operator result *)
+let test_assert_bind_result =
+  let safe_div a b =
+    if b == 0 then None else Some (a / b)
+  in
+  let result =
+    let* x = safe_div 10 2 in
+    assert (x == 5);
+    Some x
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 5 *)
+
+(* Test 11: Complex interaction - loop accumulating with binds *)
+let test_loop_bind_accumulate =
+  let acc = ref 0 in
+  for i = 1 to 5 do
+    let result =
+      let* x = Some i
+      and* y = Some (i * i) in
+      Some (x + y)
+    in
+    match result with
+    | None -> ()
+    | Some n -> acc := !acc + n
+  done;
+  print (!acc)
+(* Expected: 70 *)
+
+(* Test 12: Nested loops with binding operators *)
+let test_nested_loop_bind =
+  let total = ref 0 in
+  for i = 1 to 2 do
+    for j = 1 to 2 do
+      let result =
+        let* a = Some i
+        and* b = Some j in
+        Some (a * 10 + b)
+      in
+      match result with
+      | None -> ()
+      | Some n -> total := !total + n
+    done
+  done;
+  print (!total)
+(* Expected: 66 *)
+
+(* Test 13: While loop controlled by option *)
+let test_while_option_control =
+  let current = ref (Some 5) in
+  let sum = ref 0 in
+  while (match !current with None -> false | Some _ -> true) do
+    (match !current with
+     | None -> ()
+     | Some n ->
+         sum := !sum + n;
+         current := if n > 1 then Some (n - 1) else None)
+  done;
+  print (!sum)
+(* Expected: 15 *)
+
+(* Test 14: Raw string in match arm with loop *)
+let test_raw_match_loop =
+  let data = Some 3 in
+  match data with
+  | None -> print "FAIL"
+  | Some n ->
+      let result = ref {||} in
+      for i = 1 to n do
+        result := !result ^ {|x|}
+      done;
+      print (!result)
+(* Expected: xxx *)
+
+(* Test 15: All features combined *)
+let test_all_combined =
+  let process items =
+    let acc = ref 0 in
+    for i = 1 to items do
+      let result =
+        let* x = Some i in
+        let msg = {|processing|} in
+        assert (x > 0);
+        Some (x * 2)
+      in
+      match result with
+      | None -> ()
+      | Some n -> acc := !acc + n
+    done;
+    !acc
+  in
+  print (process 4)
+(* Expected: 20 *)
+
+(* Test 16: While loop with assert and raw string *)
+let test_while_assert_raw =
+  let i = ref 0 in
+  let msg = ref {||} in
+  while !i < 3 do
+    assert (!i >= 0);
+    msg := !msg ^ {|a|};
+    i := !i + 1
+  done;
+  print (!msg)
+(* Expected: aaa *)
+
+(* Test 17: Binding operator returning raw string *)
+let test_bind_raw_return =
+  let get_raw_string opt =
+    let* _ = opt in
+    Some {|raw-value|}
+  in
+  match get_raw_string (Some ()) with
+  | None -> print "FAIL"
+  | Some s -> print s
+(* Expected: raw-value *)
+
+(* Test 18: For loop with downto and bindings *)
+let test_downto_bind =
+  let acc = ref 0 in
+  for i = 5 downto 1 do
+    let result =
+      let* x = Some i in
+      Some x
+    in
+    match result with
+    | None -> ()
+    | Some n -> acc := !acc + n
+  done;
+  print (!acc)
+(* Expected: 15 *)
+
+let _ = print "Feature interactions complete"

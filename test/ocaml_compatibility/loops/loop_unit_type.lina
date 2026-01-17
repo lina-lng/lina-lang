@@ -1,0 +1,19 @@
+(* Loops: have type unit *)
+(* Expected: ACCEPT - loops return unit *)
+
+let process () =
+  let loop_result : unit =
+    for i = 1 to 3 do
+      ()
+    done
+  in
+  let while_result : unit =
+    while false do
+      ()
+    done
+  in
+  ignore loop_result;
+  ignore while_result;
+  42
+
+let _ = print_int (process ())

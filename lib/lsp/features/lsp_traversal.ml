@@ -146,12 +146,26 @@ and search_children offset expr =
 
   (* Reference expressions *)
   | TypedExpressionRef inner
-  | TypedExpressionDeref inner ->
+  | TypedExpressionDeref inner
+  | TypedExpressionAssert inner ->
       find_node_at offset inner
   | TypedExpressionAssign (ref_expr, value_expr) ->
       try_searches [
         (fun () -> find_node_at offset ref_expr);
         (fun () -> find_node_at offset value_expr);
+      ]
+
+  (* Loop expressions *)
+  | TypedExpressionWhile (cond, body) ->
+      try_searches [
+        (fun () -> find_node_at offset cond);
+        (fun () -> find_node_at offset body);
+      ]
+  | TypedExpressionFor (_, start_e, end_e, _, body) ->
+      try_searches [
+        (fun () -> find_node_at offset start_e);
+        (fun () -> find_node_at offset end_e);
+        (fun () -> find_node_at offset body);
       ]
 
   (* Terminal expressions - no children to search *)

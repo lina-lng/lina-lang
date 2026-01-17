@@ -14,9 +14,11 @@ type primitive =
   | PrimitiveIntGreaterEqual
   | PrimitiveStringEqual
   | PrimitiveStringConcat
+  | PrimitiveBoolNot
   | PrimitiveMakeBlock of int
   | PrimitiveGetField of int
   | PrimitivePrint
+  | PrimError
 
 type constant =
   | ConstantInt of int
@@ -63,6 +65,10 @@ type lambda =
   | LambdaAssign of lambda * lambda               (** e1 := e2 - write to mutable cell *)
   (* Polymorphic variant *)
   | LambdaPolyVariant of string * lambda option   (** `Tag or `Tag e - poly variant constructor *)
+  (* Loops *)
+  | LambdaWhile of lambda * lambda                (** while cond do body done *)
+  | LambdaFor of Identifier.t * lambda * lambda * Parsing.Syntax_tree.direction_flag * lambda
+      (** for i = start to/downto end do body done *)
 
 and module_binding = {
   mb_id : Identifier.t;  (** Original identifier for internal references *)
@@ -94,6 +100,7 @@ let primitive_of_operator = function
   | ">=" -> Some PrimitiveIntGreaterEqual
   | "^" -> Some PrimitiveStringConcat
   | "print" -> Some PrimitivePrint
+  | "not" -> Some PrimitiveBoolNot
   | _ -> None
 
 let translate_constant = function
@@ -745,6 +752,25 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
 
   | TypedExpressionAssign (ref_expr, value_expr) ->
     LambdaAssign (translate_expression ref_expr, translate_expression value_expr)
+
+  | TypedExpressionAssert cond_expr ->
+    (* assert e => if e then () else error("Assertion failed") *)
+    let cond = translate_expression cond_expr in
+    let unit_value = LambdaConstant ConstantUnit in
+    let error_call = LambdaPrimitive (PrimError, [LambdaConstant (ConstantString "Assertion failed")]) in
+    LambdaIfThenElse (cond, unit_value, error_call)
+
+  | TypedExpressionWhile (cond_expr, body_expr) ->
+    LambdaWhile (translate_expression cond_expr, translate_expression body_expr)
+
+  | TypedExpressionFor (var_id, start_expr, end_expr, direction, body_expr) ->
+    LambdaFor (
+      var_id,
+      translate_expression start_expr,
+      translate_expression end_expr,
+      direction,
+      translate_expression body_expr
+    )
 
   | TypedExpressionPolyVariant (tag, arg) ->
     LambdaPolyVariant (tag, Option.map translate_expression arg)

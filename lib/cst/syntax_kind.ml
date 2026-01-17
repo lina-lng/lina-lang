@@ -94,6 +94,15 @@ type t =
   | TK_TILDE         (** ~ labeled argument prefix *)
   | TK_QUESTION      (** ? optional argument prefix *)
   | TK_PLUSEQUAL     (** += type extension *)
+  | TK_ASSERT        (** assert keyword *)
+  | TK_WHILE         (** while keyword *)
+  | TK_DO            (** do keyword *)
+  | TK_DONE          (** done keyword *)
+  | TK_FOR           (** for keyword *)
+  | TK_TO            (** to keyword *)
+  | TK_DOWNTO        (** downto keyword *)
+  | TK_LETOP         (** let*, let+, etc. binding operators *)
+  | TK_ANDOP         (** and*, and+, etc. binding operators *)
 
   (* Special *)
   | TK_EOF
@@ -220,7 +229,9 @@ let is_token = function
   | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH | TK_CARET
   | TK_LESS | TK_GREATER | TK_LESS_EQUAL | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL | TK_NOT_EQUAL
-  | TK_REF | TK_BANG | TK_COLONEQUALS | TK_COLONCOLON | TK_TILDE | TK_QUESTION | TK_PLUSEQUAL
+  | TK_REF | TK_BANG | TK_COLONEQUALS | TK_COLONCOLON | TK_TILDE | TK_QUESTION | TK_PLUSEQUAL | TK_ASSERT
+  | TK_WHILE | TK_DO | TK_DONE | TK_FOR | TK_TO | TK_DOWNTO
+  | TK_LETOP | TK_ANDOP
   | TK_EOF
   | TK_WHITESPACE | TK_NEWLINE | TK_LINE_COMMENT | TK_BLOCK_COMMENT -> true
   | _ -> false
@@ -244,7 +255,7 @@ let is_keyword = function
   | TK_TYPE | TK_OF | TK_AND | TK_AS | TK_MATCH | TK_WITH | TK_WHEN
   | TK_MODULE | TK_STRUCT | TK_END | TK_SIG | TK_FUNCTOR
   | TK_OPEN | TK_INCLUDE | TK_VAL | TK_PRIVATE | TK_CONSTRAINT | TK_EXTERNAL
-  | TK_TRUE | TK_FALSE | TK_REF -> true
+  | TK_TRUE | TK_FALSE | TK_REF | TK_ASSERT -> true
   | _ -> false
 
 (** Check if a syntax kind is a punctuation token. *)

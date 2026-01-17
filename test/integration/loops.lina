@@ -1,0 +1,35 @@
+(* Test while and for loops *)
+
+(* While loop with counter *)
+let test_while =
+  let counter = ref 0 in
+  while !counter < 5 do
+    counter := !counter + 1
+  done;
+  print (!counter)  (* Expected: 5 *)
+
+(* For loop with to *)
+let test_for_upto =
+  let sum = ref 0 in
+  for i = 1 to 5 do
+    sum := !sum + i
+  done;
+  print (!sum)  (* Expected: 15 (1+2+3+4+5) *)
+
+(* For loop with downto *)
+let test_for_downto =
+  let product = ref 1 in
+  for i = 5 downto 1 do
+    product := !product * i
+  done;
+  print (!product)  (* Expected: 120 (5*4*3*2*1) *)
+
+(* Nested loops *)
+let test_nested =
+  let count = ref 0 in
+  for i = 1 to 3 do
+    for j = 1 to 3 do
+      count := !count + 1
+    done
+  done;
+  print (!count)  (* Expected: 9 *)

@@ -1,0 +1,96 @@
+(* Test raw/quoted strings edge cases *)
+
+(* Test 1: Escaped-looking sequences should be literal *)
+let test_escapes =
+  let s = {|hello\nworld\t"quoted"|} in
+  print s
+(* Expected: hello\nworld\t"quoted" *)
+
+(* Test 2: Raw string containing the simple end marker as content *)
+let test_end_marker =
+  let s = {delim|This contains |} inside|delim} in
+  print s
+(* Expected: This contains |} inside *)
+
+(* Test 3: Multiple different delimiters in one file *)
+let test_multiple_delimiters =
+  let sql = {sql|SELECT * FROM users WHERE name = 'John'|sql} in
+  let lua = {lua|local x = "hello"|lua} in
+  print sql;
+  print lua
+(* Expected: SELECT * FROM users WHERE name = 'John' *)
+(* Expected: local x = "hello" *)
+
+(* Test 4: Single-character delimiter *)
+let test_single_char_delim =
+  let s = {x|content with x|x} in
+  print s
+(* Expected: content with x *)
+
+(* Test 5: Nested-looking syntax (not actually nested, just text) *)
+let test_nested_looking =
+  let s = {outer|text {inner| more |inner} end|outer} in
+  print s
+(* Expected: text {inner| more |inner} end *)
+
+(* Test 6: Unicode content *)
+let test_unicode =
+  let s = {|Hello, world!|} in
+  print s
+(* Expected: Hello, world! *)
+
+(* Test 7: Raw string in function argument *)
+let identity x = x
+let test_in_function =
+  let result = identity {|function arg|} in
+  print result
+(* Expected: function arg *)
+
+(* Test 8: Raw string in record field *)
+type config = { name : string; query : string }
+let test_in_record =
+  let cfg = { name = "test"; query = {sql|SELECT 1|sql} } in
+  print cfg.query
+(* Expected: SELECT 1 *)
+
+(* Test 9: Raw string in match arm *)
+let test_in_match =
+  let x = 1 in
+  let result = match x with
+    | 1 -> {|matched one|}
+    | _ -> {|matched other|}
+  in
+  print result
+(* Expected: matched one *)
+
+(* Test 10: Raw string with many special characters *)
+let test_special_chars =
+  let s = {|!@#$%^&*()[]{}|\\/<>,.?;:'"`~|} in
+  print s
+(* Expected: !@#$%^&*()[]{}|\/<>,.?;:'"`~ *)
+
+(* Test 11: Multi-line raw string *)
+let test_multiline =
+  let s = {|line 1
+line 2
+line 3|} in
+  print s
+(* Expected: line 1
+line 2
+line 3 *)
+
+(* Test 12: Empty raw string *)
+let test_empty =
+  let s = {||} in
+  print s;
+  print "empty string printed above"
+(* Expected:  *)
+(* Expected: empty string printed above *)
+
+(* Test 13: Raw string with only whitespace *)
+let test_whitespace =
+  let s = {|   |} in
+  print s
+(* Expected:    *)
+
+let _ = print "Raw strings edge cases complete"

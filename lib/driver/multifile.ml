@@ -142,8 +142,19 @@ and extract_from_expr referenced (expr : Parsing.Syntax_tree.expression) =
   | ExpressionLetModule (_, me, body) ->
     extract_from_module_expr referenced me;
     extract_from_expr referenced body
+  | ExpressionAssert e ->
+    extract_from_expr referenced e
+  | ExpressionWhile (cond, body) ->
+    extract_from_expr referenced cond;
+    extract_from_expr referenced body
+  | ExpressionFor (_, start_e, end_e, _, body) ->
+    extract_from_expr referenced start_e;
+    extract_from_expr referenced end_e;
+    extract_from_expr referenced body
+  | ExpressionLetOp (_, bindings, body) ->
+    List.iter (fun b -> extract_from_expr referenced b.letop_expression) bindings;
+    extract_from_expr referenced body
   | ExpressionError _ ->
-    (* Error nodes don't reference other modules *)
     ()
 
 (** Build dependency graph *)

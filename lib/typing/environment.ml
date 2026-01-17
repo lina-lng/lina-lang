@@ -285,4 +285,7 @@ let initial =
 
   (* Add print function *)
   let env = add_builtin "print" Builtins.polymorphic_print_type env in
+
+  (* Add boolean negation *)
+  let env = add_builtin "not" Builtins.bool_not_type env in
   env

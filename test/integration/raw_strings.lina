@@ -1,0 +1,39 @@
+(* Test raw string literals *)
+
+(* Simple raw string *)
+let simple = {|hello world|}
+let _ = print simple
+
+(* Raw string with quotes - no escaping needed *)
+let with_quotes = {|say "hello" and 'goodbye'|}
+let _ = print with_quotes
+
+(* Raw string with backslashes - no escaping needed *)
+let with_backslashes = {|path\to\file|}
+let _ = print with_backslashes
+
+(* Delimited raw string *)
+let sql_query = {sql|SELECT * FROM users WHERE name = 'John'|sql}
+let _ = print sql_query
+
+(* Delimited raw string can contain |} *)
+let with_pipe_brace = {lua|function() return x |> f end|lua}
+let _ = print with_pipe_brace
+
+(* Empty raw string *)
+let empty = {||}
+let _ = print empty
+
+(* Raw string in expression *)
+let result = {|prefix|} ^ "-" ^ {|suffix|}
+let _ = print result
+
+(* Expected output:
+hello world
+say "hello" and 'goodbye'
+path\to\file
+SELECT * FROM users WHERE name = 'John'
+function() return x |> f end
+
+prefix-suffix
+*)

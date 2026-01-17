@@ -1,0 +1,167 @@
+(* Test binding operators with Result type *)
+
+type ('a, 'e) result = Ok of 'a | Error of 'e
+
+(* Result monad operations *)
+let result_bind r f = match r with
+  | Error e -> Error e
+  | Ok x -> f x
+
+let result_both r1 r2 = match r1 with
+  | Error e -> Error e
+  | Ok x -> match r2 with
+    | Error e -> Error e
+    | Ok y -> Ok (x, y)
+
+let result_map r f = match r with
+  | Error e -> Error e
+  | Ok x -> Ok (f x)
+
+let ( let* ) = result_bind
+let ( and* ) = result_both
+let ( let+ ) = result_map
+
+(* Test 1: Basic Result bind *)
+let test_basic_bind =
+  let result =
+    let* x = Ok 10 in
+    let* y = Ok 20 in
+    Ok (x + y)
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 30 *)
+
+(* Test 2: Error short-circuiting *)
+let test_error_short =
+  let result =
+    let* x = Ok 10 in
+    let* y = Error "failed" in
+    let* z = Ok 30 in
+    Ok (x + y + z)
+  in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: failed *)
+
+(* Test 3: Multiple error sources with and* *)
+let test_and_both_ok =
+  let result =
+    let* a = Ok 5
+    and* b = Ok 10 in
+    Ok (a * b)
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 50 *)
+
+(* Test 4: First error wins with and* *)
+let test_and_first_error =
+  let result =
+    let* a = Error "first error"
+    and* b = Error "second error" in
+    Ok (a + b)
+  in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: first error *)
+
+(* Test 5: Validation-style combining *)
+let validate_positive x =
+  if x > 0 then Ok x else Error "must be positive"
+
+let validate_even x =
+  if x / 2 * 2 == x then Ok x else Error "must be even"
+
+let test_validation =
+  let result =
+    let* a = validate_positive 10 in
+    let* b = validate_even a in
+    Ok b
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 10 *)
+
+let test_validation_fail =
+  let result =
+    let* a = validate_positive (0 - 5) in
+    Ok a
+  in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: must be positive *)
+
+(* Test 6: Result map with let+ *)
+let test_result_map =
+  let result =
+    let+ x = Ok 7 in
+    x * 3
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 21 *)
+
+(* Test 7: Chain of computations *)
+let divide a b =
+  if b == 0 then Error "division by zero" else Ok (a / b)
+
+let test_chain =
+  let result =
+    let* x = divide 100 10 in
+    let* y = divide x 2 in
+    Ok y
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 5 *)
+
+let test_chain_fail =
+  let result =
+    let* x = divide 100 10 in
+    let* y = divide x 0 in
+    Ok y
+  in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: division by zero *)
+
+(* Test 8: Complex computation *)
+let test_complex =
+  let result =
+    let* a = Ok 1
+    and* b = Ok 2
+    and* c = Ok 3 in
+    let* sum = Ok (a + b + c) in
+    let* doubled = Ok (sum * 2) in
+    Ok doubled
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 12 *)
+
+(* Test 9: Nested and* with different structure *)
+let test_nested_and =
+  let result =
+    let* x = Ok 100 in
+    let* a = Ok 1
+    and* b = Ok 2 in
+    let* y = Ok (x + a + b) in
+    Ok y
+  in
+  match result with
+  | Error _ -> print "FAIL"
+  | Ok n -> print n
+(* Expected: 103 *)
+
+let _ = print "Binding operators Result tests complete"

@@ -656,6 +656,51 @@ and infer_expression ctx (expr : expression) =
       expression_location = loc;
     }, ctx)
 
+  | ExpressionAssert cond_expr ->
+    (* assert e : unit when e : bool *)
+    let typed_cond, ctx = infer_expression ctx cond_expr in
+    unify ctx loc typed_cond.expression_type Types.type_bool;
+    ({
+      expression_desc = TypedExpressionAssert typed_cond;
+      expression_type = Types.type_unit;
+      expression_location = loc;
+    }, ctx)
+
+  | ExpressionWhile (cond_expr, body_expr) ->
+    (* while cond do body done : unit when cond : bool and body : unit *)
+    let typed_cond, ctx = infer_expression ctx cond_expr in
+    unify ctx loc typed_cond.expression_type Types.type_bool;
+    let typed_body, ctx = infer_expression ctx body_expr in
+    unify ctx loc typed_body.expression_type Types.type_unit;
+    ({
+      expression_desc = TypedExpressionWhile (typed_cond, typed_body);
+      expression_type = Types.type_unit;
+      expression_location = loc;
+    }, ctx)
+
+  | ExpressionFor (var_name, start_expr, end_expr, direction, body_expr) ->
+    (* for i = start to/downto end do body done : unit
+       var : int, start : int, end : int, body : unit *)
+    let typed_start, ctx = infer_expression ctx start_expr in
+    unify ctx loc typed_start.expression_type Types.type_int;
+    let typed_end, ctx = infer_expression ctx end_expr in
+    unify ctx loc typed_end.expression_type Types.type_int;
+
+    (* Add loop variable to environment as int *)
+    let var_id = Identifier.create var_name in
+    let var_scheme = Types.trivial_scheme Types.type_int in
+    let env = Typing_context.environment ctx in
+    let env' = Environment.add_value var_name var_id var_scheme loc env in
+    let ctx' = Typing_context.with_environment env' ctx in
+
+    let typed_body, _ctx' = infer_expression ctx' body_expr in
+    unify ctx loc typed_body.expression_type Types.type_unit;
+    ({
+      expression_desc = TypedExpressionFor (var_id, typed_start, typed_end, direction, typed_body);
+      expression_type = Types.type_unit;
+      expression_location = loc;
+    }, ctx)
+
   | ExpressionPolyVariant (tag, arg_expr) ->
     (* Polymorphic variant expression: `Tag or `Tag expr
        Creates an open "at least" type: [> `Tag] or [> `Tag of ty] *)
@@ -741,6 +786,77 @@ and infer_expression ctx (expr : expression) =
       expression_type = typed_body.expression_type;
       expression_location = loc;
     }, ctx)
+
+  | ExpressionLetOp (letop, bindings, body) ->
+    (* Binding operators: desugar and infer the desugared form.
+
+       let* p = e1 in e2  =>  ( let* ) e1 (fun p -> e2)
+
+       let* p1 = e1 and* p2 = e2 in e3  =>
+         ( let* ) (( and* ) e1 e2) (fun (p1, p2) -> e3)
+
+       General case with n and-bindings:
+         let* p1 = e1 and* p2 = e2 ... and* pn = en in body  =>
+         ( let* ) (( and* ) ... (( and* ) e1 e2) ... en) (fun (((p1, p2), ...), pn) -> body)
+    *)
+    let mk_loc value = { Location.value; location = loc } in
+
+    (* Create an operator variable expression *)
+    let mk_op_var op_name =
+      (* Construct the parenthesized operator: ( let* ) or ( and* ) *)
+      let var_name = "( " ^ op_name ^ " )" in
+      mk_loc (ExpressionVariable var_name)
+    in
+
+    (* Create a function application *)
+    let mk_apply fn args =
+      mk_loc (ExpressionApply (fn, List.map (fun arg -> (Parsing.Syntax_tree.Nolabel, arg)) args))
+    in
+
+    (* Create a function expression *)
+    let mk_fun pattern body =
+      mk_loc (ExpressionFunction ([(Parsing.Syntax_tree.Nolabel, pattern)], body))
+    in
+
+    (* Create a tuple pattern *)
+    let mk_tuple_pattern p1 p2 =
+      mk_loc (PatternTuple [p1; p2])
+    in
+
+    (* Combine bindings using and* operators into a single expression and pattern *)
+    let rec combine_and_bindings (combined_expr, combined_pattern) rest_bindings =
+      match rest_bindings with
+      | [] -> (combined_expr, combined_pattern)
+      | binding :: rest ->
+        match binding.letop_and with
+        | None ->
+          (* Should not happen - first binding shouldn't have and* *)
+          Compiler_error.internal_error "First binding in let-op should not have and-operator"
+        | Some andop ->
+          let andop_var = mk_op_var andop in
+          let new_expr = mk_apply andop_var [combined_expr; binding.letop_expression] in
+          let new_pattern = mk_tuple_pattern combined_pattern binding.letop_pattern in
+          combine_and_bindings (new_expr, new_pattern) rest
+    in
+
+    (* Get the first binding and remaining bindings *)
+    let first_binding, rest_bindings = match bindings with
+      | [] -> Compiler_error.internal_error "Empty bindings in let-op"
+      | first :: rest -> (first, rest)
+    in
+
+    let combined_expr, combined_pattern =
+      combine_and_bindings (first_binding.letop_expression, first_binding.letop_pattern) rest_bindings
+    in
+
+    (* Construct the final desugared expression:
+       ( letop ) combined_expr (fun combined_pattern -> body) *)
+    let letop_var = mk_op_var letop in
+    let callback_fn = mk_fun combined_pattern body in
+    let desugared = mk_apply letop_var [combined_expr; callback_fn] in
+
+    (* Type-check the desugared expression *)
+    infer_expression ctx desugared
 
   | ExpressionError error_info ->
     (* Error expressions get a fresh type variable and are preserved in typed tree *)

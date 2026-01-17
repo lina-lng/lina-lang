@@ -1,0 +1,169 @@
+(* Test binding operators edge cases *)
+
+type 'a option = None | Some of 'a
+
+(* Basic bind and both for option *)
+let bind opt f = match opt with
+  | None -> None
+  | Some x -> f x
+
+let both a b = match a with
+  | None -> None
+  | Some x -> match b with
+    | None -> None
+    | Some y -> Some (x, y)
+
+let ( let* ) = bind
+let ( and* ) = both
+
+(* Test 1: Multiple and* clauses *)
+let test_multiple_and =
+  let result =
+    let* a = Some 1
+    and* b = Some 2
+    and* c = Some 3 in
+    Some (a + b + c)
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 6 *)
+
+(* Test 2: Custom operator names with >>= style *)
+let ( let>>= ) = bind
+let ( and>>= ) = both
+
+let test_custom_names =
+  let result =
+    let>>= x = Some 10
+    and>>= y = Some 20 in
+    Some (x + y)
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 30 *)
+
+(* Test 3: Deeply nested (6 levels) *)
+let test_deep_nesting =
+  let result =
+    let* a = Some 1 in
+    let* b = Some 2 in
+    let* c = Some 3 in
+    let* d = Some 4 in
+    let* e = Some 5 in
+    let* f = Some 6 in
+    Some (a + b + c + d + e + f)
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 21 *)
+
+(* Test 4: Complex patterns - tuples *)
+let test_tuple_pattern =
+  let result =
+    let* (x, y) = Some (10, 20) in
+    Some (x + y)
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 30 *)
+
+(* Test 5: Short-circuit on first None with and* *)
+let test_short_circuit_first =
+  let result =
+    let* a = None
+    and* b = Some 100
+    and* c = Some 200 in
+    Some (a + b + c)
+  in
+  match result with
+  | None -> print "short-circuit ok"
+  | Some _ -> print "FAIL"
+(* Expected: short-circuit ok *)
+
+(* Test 6: Short-circuit on middle None with and* *)
+let test_short_circuit_middle =
+  let result =
+    let* a = Some 100
+    and* b = None
+    and* c = Some 200 in
+    Some (a + b + c)
+  in
+  match result with
+  | None -> print "middle short-circuit ok"
+  | Some _ -> print "FAIL"
+(* Expected: middle short-circuit ok *)
+
+(* Test 7: Mixing let* and let+ *)
+let map opt f = match opt with
+  | None -> None
+  | Some x -> Some (f x)
+
+let ( let+ ) = map
+
+let test_mix_star_plus =
+  let result1 =
+    let* x = Some 5 in
+    Some (x * 2)
+  in
+  let result2 =
+    let+ x = Some 5 in
+    x * 2
+  in
+  (match result1 with None -> print "FAIL" | Some n -> print n);
+  (match result2 with None -> print "FAIL" | Some n -> print n)
+(* Expected: 10 *)
+(* Expected: 10 *)
+
+(* Test 8: Binding operator with type constraint *)
+let test_type_constraint =
+  let result =
+    let* (x : int) = Some 42 in
+    Some x
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 42 *)
+
+(* Test 9: Operator as value reference *)
+let test_op_as_value =
+  let my_bind = ( let* ) in
+  let result = my_bind (Some 99) (fun x -> Some (x + 1)) in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 100 *)
+
+(* Test 10: Binding in function result *)
+let compute_sum a b =
+  let* x = a in
+  let* y = b in
+  Some (x + y)
+
+let test_in_function =
+  let result = compute_sum (Some 15) (Some 25) in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 40 *)
+
+(* Test 11: Many and* (stress test) *)
+let test_many_and =
+  let result =
+    let* a = Some 1
+    and* b = Some 2
+    and* c = Some 3
+    and* d = Some 4
+    and* e = Some 5 in
+    Some (a + b + c + d + e)
+  in
+  match result with
+  | None -> print "FAIL"
+  | Some n -> print n
+(* Expected: 15 *)
+
+let _ = print "Binding operators edge cases complete"

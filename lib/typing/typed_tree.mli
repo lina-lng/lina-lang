@@ -79,6 +79,11 @@ and typed_expression_desc =
   | TypedExpressionRef of typed_expression           (** ref e *)
   | TypedExpressionDeref of typed_expression         (** !e *)
   | TypedExpressionAssign of typed_expression * typed_expression  (** e1 := e2 *)
+  | TypedExpressionAssert of typed_expression        (** assert e *)
+  | TypedExpressionWhile of typed_expression * typed_expression
+      (** while loop: condition and body *)
+  | TypedExpressionFor of Common.Identifier.t * typed_expression * typed_expression * Parsing.Syntax_tree.direction_flag * typed_expression
+      (** for loop: variable, start, end, direction, body *)
   | TypedExpressionPolyVariant of string * typed_expression option
       (** Polymorphic variant constructor: [`Tag] or [`Tag expr] *)
   | TypedExpressionPack of typed_module_expression * Module_types.module_type

@@ -34,6 +34,10 @@ let polymorphic_print_type =
     body = TypeArrow (Nolabel, TypeVariable alpha, type_unit);
   }
 
+(** Boolean negation: bool -> bool *)
+let bool_not_type =
+  trivial_scheme (TypeArrow (Nolabel, type_bool, type_bool))
+
 (** {1 Option Type} *)
 
 (** Built-in option type: type 'a option = None | Some of 'a *)

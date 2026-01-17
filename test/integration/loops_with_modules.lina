@@ -1,0 +1,157 @@
+(* Test loops interaction with module system *)
+
+(* Test 1: Loop inside module definition *)
+module Counter = struct
+  let sum_to n =
+    let result = ref 0 in
+    for i = 1 to n do
+      result := !result + i
+    done;
+    !result
+
+  let factorial n =
+    let result = ref 1 in
+    for i = 1 to n do
+      result := !result * i
+    done;
+    !result
+end
+
+let _ = print (Counter.sum_to 10)
+(* Expected: 55 *)
+
+let _ = print (Counter.factorial 5)
+(* Expected: 120 *)
+
+(* Test 2: Loop accessing module values *)
+module Config = struct
+  let max_iterations = 5
+  let step = 2
+end
+
+let test_access_module =
+  let sum = ref 0 in
+  for i = 1 to Config.max_iterations do
+    sum := !sum + Config.step
+  done;
+  print (!sum)
+(* Expected: 10 *)
+
+(* Test 3: Loop inside functor body *)
+module type COUNTER_CONFIG = sig
+  val start : int
+  val finish : int
+end
+
+module MakeCounter (C : COUNTER_CONFIG) = struct
+  let compute =
+    let acc = ref 0 in
+    for i = C.start to C.finish do
+      acc := !acc + i
+    done;
+    !acc
+end
+
+module C1 = MakeCounter(struct let start = 1 let finish = 5 end)
+module C2 = MakeCounter(struct let start = 10 let finish = 15 end)
+
+let _ = print C1.compute
+(* Expected: 15 *)
+
+let _ = print C2.compute
+(* Expected: 75 *)
+
+(* Test 4: While loop in module *)
+module Search = struct
+  let find_first_positive arr =
+    let len = 5 in
+    let i = ref 0 in
+    let found = ref false in
+    let result = ref 0 in
+    while not (!found) do
+      if !i >= len then
+        found := true
+      else if !i == 0 then
+        (i := !i + 1)
+      else if !i == 1 then
+        (i := !i + 1)
+      else if !i == 2 then
+        (result := 42; found := true)
+      else
+        i := !i + 1
+    done;
+    !result
+end
+
+let _ = print (Search.find_first_positive ())
+(* Expected: 42 *)
+
+(* Test 5: Nested modules with loops *)
+module Outer = struct
+  module Inner = struct
+    let double_sum n =
+      let s = ref 0 in
+      for i = 1 to n do
+        s := !s + i
+      done;
+      !s * 2
+  end
+
+  let use_inner n = Inner.double_sum n
+end
+
+let _ = print (Outer.use_inner 4)
+(* Expected: 20 *)
+
+(* Test 6: Loop in local module *)
+let test_local_module =
+  let module Local = struct
+    let countdown n =
+      let result = ref 0 in
+      for i = n downto 1 do
+        result := !result + i
+      done;
+      !result
+  end in
+  print (Local.countdown 5)
+(* Expected: 15 *)
+
+(* Test 7: Module signature with loop-using function *)
+module type SUMMER = sig
+  val sum_range : int -> int -> int
+end
+
+module Summer : SUMMER = struct
+  let sum_range start finish =
+    let acc = ref 0 in
+    for i = start to finish do
+      acc := !acc + i
+    done;
+    !acc
+end
+
+let _ = print (Summer.sum_range 1 10)
+(* Expected: 55 *)
+
+(* Test 8: Functor with while loop *)
+module type LIMIT = sig
+  val limit : int
+end
+
+module MakeAccumulator (L : LIMIT) = struct
+  let accumulate_while f =
+    let i = ref 0 in
+    let acc = ref 0 in
+    while !i < L.limit do
+      acc := !acc + f (!i);
+      i := !i + 1
+    done;
+    !acc
+end
+
+module Acc5 = MakeAccumulator(struct let limit = 5 end)
+
+let _ = print (Acc5.accumulate_while (fun x -> x * 2))
+(* Expected: 20 *)
+
+let _ = print "Loops with modules complete"

@@ -48,6 +48,8 @@ and statement =
   | StatementCall of expression * expression list
   | StatementIf of (expression * block) list * block option
   | StatementWhile of expression * block
+  | StatementForNum of identifier * expression * expression * expression option * block
+      (** Numeric for: for i = start, end[, step] do block end *)
   | StatementForIn of identifier list * expression list * block
   | StatementReturn of expression list
   | StatementBreak

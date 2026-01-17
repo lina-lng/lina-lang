@@ -1,0 +1,16 @@
+(* Binding operators: operator as value *)
+(* Expected: ACCEPT - ( let* ) can be referenced as value *)
+
+type 'a option = None | Some of 'a
+
+let ( let* ) opt f = match opt with
+  | None -> None
+  | Some x -> f x
+
+let my_bind = ( let* )
+
+let result = my_bind (Some 42) (fun x -> Some (x + 1))
+
+let _ = match result with
+  | None -> print_endline "none"
+  | Some n -> print_int n

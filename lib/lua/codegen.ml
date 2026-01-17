@@ -77,8 +77,12 @@ let translate_primitive prim args =
     ExpressionBinaryOp (OpEqual, a, b)
   | Lambda.PrimitiveStringConcat, [a; b] ->
     ExpressionBinaryOp (OpConcat, a, b)
+  | Lambda.PrimitiveBoolNot, [a] ->
+    ExpressionUnaryOp (OpNot, a)
   | Lambda.PrimitivePrint, [a] ->
     ExpressionCall (ExpressionVariable "print", [a])
+  | Lambda.PrimError, [msg] ->
+    ExpressionCall (ExpressionVariable "error", [msg])
   | Lambda.PrimitiveMakeBlock _, fields ->
     ExpressionTable (List.map (fun f -> FieldArray f) fields)
   | Lambda.PrimitiveGetField n, [obj] ->
@@ -197,6 +201,41 @@ let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list
     let constructor = ExpressionField (ExpressionVariable lua_name, "new") in
     ExpressionCall (constructor, wrapped_args)
 
+(** {1 Currying Support}
+
+    OCaml-style currying: multi-parameter functions become nested single-parameter
+    functions, and multi-argument applications become chained single-argument calls.
+    This enables partial application to work correctly.
+
+    Example:
+    - Lina: [fun a b c -> body] becomes Lua: [function(a) return function(b) return function(c) body end end end]
+    - Lina: [f x y z] becomes Lua: [f(x)(y)(z)] *)
+
+(** Build a curried function expression from parameters and body statements.
+    [make_curried_function [a; b; c] body] generates:
+    [function(a) return function(b) return function(c) body end end end] *)
+let make_curried_function (params : string list) (body_stmts : statement list) : expression =
+  match params with
+  | [] ->
+    (* Zero-arg function: function() body end *)
+    ExpressionFunction ([], body_stmts)
+  | [single] ->
+    (* Single-arg function: no currying needed *)
+    ExpressionFunction ([single], body_stmts)
+  | first :: rest ->
+    (* Multi-arg function: curry into nested single-arg functions *)
+    let innermost = ExpressionFunction ([List.hd (List.rev rest)], body_stmts) in
+    let middle_params = List.rev (List.tl (List.rev rest)) in
+    let nested = List.fold_right (fun param inner ->
+      ExpressionFunction ([param], [StatementReturn [inner]])
+    ) middle_params innermost in
+    ExpressionFunction ([first], [StatementReturn [nested]])
+
+(** Build a curried function call from a function expression and arguments.
+    [make_curried_call f [a; b; c]] generates: [f(a)(b)(c)] *)
+let make_curried_call (func : expression) (args : expression list) : expression =
+  List.fold_left (fun acc arg -> ExpressionCall (acc, [arg])) func args
+
 (** Wrap a lambda in an IIFE (Immediately Invoked Function Expression).
 
     Used when a statement-form construct appears in expression position.
@@ -222,12 +261,14 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
   | Lambda.LambdaApply (func, args) ->
     let func_expr, ctx = translate_expression ctx func in
     let arg_exprs, ctx = translate_expression_list ctx args in
-    (ExpressionCall (func_expr, arg_exprs), ctx)
+    (* Use curried call: f(a)(b)(c) instead of f(a, b, c) *)
+    (make_curried_call func_expr arg_exprs, ctx)
 
   | Lambda.LambdaFunction (params, body) ->
     let param_names = List.map mangle_identifier params in
     let body_stmts, ctx = translate_to_statements ctx body in
-    (ExpressionFunction (param_names, body_stmts), ctx)
+    (* Use curried function: function(a) return function(b) ... end end *)
+    (make_curried_function param_names body_stmts, ctx)
 
   (* Statement-form constructs: wrap in IIFE when in expression position *)
   | Lambda.LambdaLet _ | Lambda.LambdaLetRecursive _ ->
@@ -370,6 +411,28 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
         (Some translated, ctx)
     in
     (make_variant_table tag_expr arg_expr_opt, ctx)
+
+  | Lambda.LambdaWhile (cond, body) ->
+    (* while cond do body done -> (function() while cond do body end; return nil end)() *)
+    let cond_expr, ctx = translate_expression ctx cond in
+    let body_stmts, ctx = translate_to_effect ctx body in
+    let while_stmt = StatementWhile (cond_expr, body_stmts) in
+    let return_nil = StatementReturn [ExpressionNil] in
+    (make_iife [while_stmt; return_nil], ctx)
+
+  | Lambda.LambdaFor (var_id, start_expr, end_expr, direction, body) ->
+    (* for i = start to/downto end do body done *)
+    let var_name = mangle_identifier var_id in
+    let start_lua, ctx = translate_expression ctx start_expr in
+    let end_lua, ctx = translate_expression ctx end_expr in
+    let body_stmts, ctx = translate_to_effect ctx body in
+    let step = match direction with
+      | Parsing.Syntax_tree.Upto -> None  (* Default step is 1 *)
+      | Parsing.Syntax_tree.Downto -> Some (ExpressionNumber (-1.0))
+    in
+    let for_stmt = StatementForNum (var_name, start_lua, end_lua, step, body_stmts) in
+    let return_nil = StatementReturn [ExpressionNil] in
+    (make_iife [for_stmt; return_nil], ctx)
 
 (** Helper to translate a list of expressions.
     Uses cons + reverse for O(n) instead of O(n²) list append. *)
@@ -587,6 +650,10 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
     let arg_exprs, ctx = translate_expression_list ctx args in
     ([StatementCall (ExpressionVariable "print", arg_exprs)], ctx)
 
+  | Lambda.LambdaPrimitive (Lambda.PrimError, args) ->
+    let arg_exprs, ctx = translate_expression_list ctx args in
+    ([StatementCall (ExpressionVariable "error", arg_exprs)], ctx)
+
   | Lambda.LambdaSequence (first, second) ->
     let first_stmts, ctx = translate_to_effect ctx first in
     let second_stmts, ctx = translate_to_effect ctx second in
@@ -603,6 +670,20 @@ and translate_to_effect ctx (lambda : Lambda.lambda) : block * context =
     let rest, ctx = translate_to_effect ctx body in
     (forward_decl :: assignments @ rest, ctx)
 
+  | Lambda.LambdaAssign (ref_expr, value_expr) ->
+    (* e1 := e2 -> e1.value = e2 (as statement, not IIFE) *)
+    let ref_lua, ctx = translate_expression ctx ref_expr in
+    let value_lua, ctx = translate_expression ctx value_expr in
+    let lvalue = LvalueField (ref_lua, Codegen_constants.ref_value_field) in
+    ([StatementAssign ([lvalue], [value_lua])], ctx)
+
+  | Lambda.LambdaIfThenElse (cond, then_branch, else_branch) ->
+    (* if c then e1 else e2 as statement (for effect context) *)
+    let cond_expr, ctx = translate_expression ctx cond in
+    let then_stmts, ctx = translate_to_effect ctx then_branch in
+    let else_stmts, ctx = translate_to_effect ctx else_branch in
+    ([StatementIf ([(cond_expr, then_stmts)], Some else_stmts)], ctx)
+
   | _ ->
     let expr, ctx = translate_expression ctx lambda in
     match expr with
@@ -616,7 +697,9 @@ let rec generate_top_level_binding ctx (target_name : identifier) (value : Lambd
   | Lambda.LambdaFunction (params, body) ->
     let param_names = List.map mangle_identifier params in
     let body_stmts, ctx = translate_to_statements ctx body in
-    ([StatementLocalFunction (target_name, param_names, body_stmts)], ctx)
+    (* Generate curried function: local f = function(a) return function(b) ... end end *)
+    let curried_fn = make_curried_function param_names body_stmts in
+    ([StatementLocal ([target_name], [curried_fn])], ctx)
 
   | Lambda.LambdaLet (inner_id, inner_value, inner_body) ->
     (* Float nested let out:
@@ -696,8 +779,9 @@ let generate_top_level ctx (lambda : Lambda.lambda) : block * context =
         | Lambda.LambdaFunction (params, body) ->
           let param_names = List.map mangle_identifier params in
           let body_stmts, ctx = translate_to_statements ctx body in
-          let stmt = StatementAssign ([LvalueVariable name],
-            [ExpressionFunction (param_names, body_stmts)]) in
+          (* Generate curried function for recursive bindings *)
+          let curried_fn = make_curried_function param_names body_stmts in
+          let stmt = StatementAssign ([LvalueVariable name], [curried_fn]) in
           (stmt :: acc, ctx)
         | _ ->
           let value_expr, ctx = translate_expression ctx value in

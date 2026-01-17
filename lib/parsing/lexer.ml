@@ -76,8 +76,16 @@ type token =
   (* Labeled arguments *)
   | TILDE          (** ~ for labeled arguments *)
   | QUESTION       (** ? for optional arguments *)
-  (* Extensible variants *)
   | PLUSEQUAL      (** += for type extension *)
+  | ASSERT
+  | WHILE
+  | DO
+  | DONE
+  | FOR
+  | TO
+  | DOWNTO
+  | LETOP of string   (** let*, let+, etc. binding operators *)
+  | ANDOP of string   (** and*, and+, etc. binding operators *)
   | EOF
 [@@deriving show, eq]
 
@@ -87,6 +95,9 @@ let uppercase_letter = [%sedlex.regexp? 'A' .. 'Z']
 let letter = [%sedlex.regexp? lowercase_letter | uppercase_letter]
 let identifier_char = [%sedlex.regexp? letter | digit | '_' | '\'']
 let whitespace = [%sedlex.regexp? ' ' | '\t' | '\n' | '\r']
+
+(** Operator suffix characters for binding operators (let*, and*, etc.) *)
+let binding_op_char = [%sedlex.regexp? '!' | '$' | '%' | '&' | '*' | '+' | '-' | '.' | '/' | ':' | '<' | '=' | '>' | '?' | '@' | '^' | '|' | '~']
 
 (* Extended number literal patterns *)
 let hex_digit = [%sedlex.regexp? '0' .. '9' | 'a' .. 'f' | 'A' .. 'F']
@@ -133,8 +144,14 @@ let keywords_table : (string, token) Hashtbl.t =
       ("constraint", CONSTRAINT);
       (* FFI keywords *)
       ("external", EXTERNAL);
-      (* Reference keyword *)
       ("ref", REF);
+      ("assert", ASSERT);
+      ("while", WHILE);
+      ("do", DO);
+      ("done", DONE);
+      ("for", FOR);
+      ("to", TO);
+      ("downto", DOWNTO);
     ];
   table
 
@@ -292,6 +309,52 @@ let parse_float_literal s loc =
     Compiler_error.lexer_error loc
       (Printf.sprintf "Invalid float literal: %s" s)
 
+(** Parse a simple raw string: {|...|}.
+    Called after seeing "{|". Reads until "|}". *)
+let parse_raw_string_simple lexbuf loc =
+  let buffer = Buffer.create 64 in
+  let rec read () =
+    match%sedlex lexbuf with
+    | "|}" -> Buffer.contents buffer
+    | eof -> Compiler_error.lexer_error loc "Unterminated raw string literal"
+    | any ->
+        Buffer.add_string buffer (Sedlexing.Utf8.lexeme lexbuf);
+        read ()
+    | _ -> Compiler_error.lexer_error loc "Invalid character in raw string"
+  in
+  read ()
+
+(** Parse a delimited raw string: {delim|...|delim}.
+    Called after seeing "{delim|" where delim is the delimiter.
+    Reads until "|delim}" is found. *)
+let parse_raw_string_delimited delimiter lexbuf loc =
+  let buffer = Buffer.create 64 in
+  let end_marker = "|" ^ delimiter ^ "}" in
+  let end_len = String.length end_marker in
+
+  let rec read () =
+    match%sedlex lexbuf with
+    | eof -> Compiler_error.lexer_error loc "Unterminated raw string literal"
+    | any ->
+        let char_str = Sedlexing.Utf8.lexeme lexbuf in
+        Buffer.add_string buffer char_str;
+
+        (* Check if buffer ends with the end marker *)
+        let buf_len = Buffer.length buffer in
+        if buf_len >= end_len then begin
+          let suffix = Buffer.sub buffer (buf_len - end_len) end_len in
+          if suffix = end_marker then begin
+            (* Remove the end marker from result *)
+            let content_len = buf_len - end_len in
+            Buffer.sub buffer 0 content_len
+          end
+          else read ()
+        end
+        else read ()
+    | _ -> Compiler_error.lexer_error loc "Invalid character in raw string"
+  in
+  read ()
+
 let parse_string lexbuf loc =
   let buffer = Buffer.create 64 in
   let rec read_string () =
@@ -372,6 +435,20 @@ let lex_real_token state =
   | ')' -> make_token RPAREN state
   | '[' -> make_token LBRACKET state
   | ']' -> make_token RBRACKET state
+  (* Raw string literals: {|...|} or {delim|...|delim} *)
+  | "{|" ->
+      update_location state;
+      let str = parse_raw_string_simple lexbuf state.current_location in
+      update_location state;
+      Some (STRING str, state.current_location)
+  | '{', Plus lowercase_letter, '|' ->
+      update_location state;
+      let lexeme = current_lexeme state in
+      (* Extract delimiter: from "{delim|" get "delim" *)
+      let delimiter = String.sub lexeme 1 (String.length lexeme - 2) in
+      let str = parse_raw_string_delimited delimiter lexbuf state.current_location in
+      update_location state;
+      Some (STRING str, state.current_location)
   | '{' -> make_token LBRACE state
   | '}' -> make_token RBRACE state
   (* Punctuation - multi-char first for longest match *)
@@ -423,6 +500,14 @@ let lex_real_token state =
       let lexeme = current_lexeme state in
       let tag_name = String.sub lexeme 1 (String.length lexeme - 1) in
       Some (BACKTICK_TAG tag_name, state.current_location)
+  (* Binding operators: let*, let+, etc. *)
+  | "let", Plus binding_op_char ->
+      update_location state;
+      Some (LETOP (current_lexeme state), state.current_location)
+  (* Binding operators: and*, and+, etc. *)
+  | "and", Plus binding_op_char ->
+      update_location state;
+      Some (ANDOP (current_lexeme state), state.current_location)
   (* Identifiers and keywords *)
   | lowercase_letter, Star identifier_char ->
       update_location state;

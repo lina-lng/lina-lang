@@ -34,6 +34,12 @@ type recursion_flag =
   | Recursive
 [@@deriving show, eq]
 
+(** Direction flag for for-loops. *)
+type direction_flag =
+  | Upto     (** for i = start to end *)
+  | Downto   (** for i = start downto end *)
+[@@deriving show, eq]
+
 (** Argument label for function parameters and types.
     Mirrors the Types.arg_label type but for surface syntax. *)
 type arg_label =
@@ -217,14 +223,29 @@ and expression_desc =
   | ExpressionRef of expression                     (** ref e *)
   | ExpressionDeref of expression                   (** !e *)
   | ExpressionAssign of expression * expression     (** e1 := e2 *)
+  | ExpressionAssert of expression                  (** assert e *)
+  | ExpressionWhile of expression * expression
+      (** while loop: [while cond do body done] *)
+  | ExpressionFor of string * expression * expression * direction_flag * expression
+      (** for loop: [for i = start to/downto end do body done] *)
   | ExpressionPolyVariant of string * expression option
       (** Polymorphic variant expression: [` `A] or [` `A e] *)
   | ExpressionPack of module_expression * module_type
       (** First-class module packing: [(module ME : MT)] *)
   | ExpressionLetModule of string Location.located * module_expression * expression
       (** Local module binding: [let module M = ME in body] *)
+  | ExpressionLetOp of string * let_op_binding list * expression
+      (** Binding operator: [let* x = e1 in e2] or [let* x = e1 and* y = e2 in e3] *)
   | ExpressionError of error_info
       (** Error recovery placeholder for invalid expression syntax *)
+
+(** Binding for let-operators.
+    [letop_and] is [None] for the first binding, [Some "and*"] for subsequent bindings. *)
+and let_op_binding = {
+  letop_and : string option;
+  letop_pattern : pattern;
+  letop_expression : expression;
+}
 
 and record_field = {
   field_name : string Location.located;

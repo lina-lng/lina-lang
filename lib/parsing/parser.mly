@@ -74,12 +74,16 @@ let build_function loc params body =
 %token REF BANG COLONEQUALS COLONCOLON
 %token <string> BACKTICK_TAG
 %token TILDE QUESTION PLUSEQUAL
+%token ASSERT
+%token WHILE DO DONE FOR TO DOWNTO
+%token <string> LETOP
+%token <string> ANDOP
 %token EOF
 
 %right ARROW
-%right COLONEQUALS
-%right SEMICOLON
 %nonassoc IN
+%right SEMICOLON
+%right COLONEQUALS
 %nonassoc WITH
 %left BAR
 %nonassoc WHEN
@@ -175,6 +179,19 @@ let_binding:
       let name_pattern = make_located (PatternVariable name) $loc(name) in
       make_binding name_pattern func_expr $loc
     }
+  (* Parenthesized binding operators as function definitions: let ( let* ) x f = ... *)
+  | LPAREN; op = LETOP; RPAREN; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
+    {
+      let func_expr = build_function $loc params expr in
+      let name_pattern = make_located (PatternVariable ("( " ^ op ^ " )")) $loc in
+      make_binding name_pattern func_expr $loc
+    }
+  | LPAREN; op = ANDOP; RPAREN; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
+    {
+      let func_expr = build_function $loc params expr in
+      let name_pattern = make_located (PatternVariable ("( " ^ op ^ " )")) $loc in
+      make_binding name_pattern func_expr $loc
+    }
   (* let f x y : return_type = expr - return type annotation on function *)
   | name = LOWERCASE_IDENTIFIER; params = nonempty_list(labeled_pattern); COLON; ty = type_expression; EQUAL; expr = expression
     {
@@ -183,6 +200,11 @@ let_binding:
       let name_pattern = make_located (PatternVariable name) $loc(name) in
       make_binding name_pattern func_expr $loc
     }
+
+(* Binding operator "and" clause: and* p = e *)
+and_letop_binding:
+  | op = ANDOP; p = pattern; EQUAL; e = expression
+    { { letop_and = Some op; letop_pattern = p; letop_expression = e } }
 
 type_declaration:
   | params = type_parameters; name = LOWERCASE_IDENTIFIER; EQUAL; kind = type_declaration_kind; constraints = list(type_constraint)
@@ -404,6 +426,12 @@ expression:
     { make_located (ExpressionLet (rf, bindings, body)) $loc }
   | LET; MODULE; name = UPPERCASE_IDENTIFIER; EQUAL; me = module_expression; IN; body = expression
     { make_located (ExpressionLetModule (make_located name $loc(name), me, body)) $loc }
+  (* Binding operators: let* x = e1 [and* y = e2 ...] in body *)
+  | op = LETOP; p = pattern; EQUAL; e = expression; rest = list(and_letop_binding); IN; body = expression
+    {
+      let first_binding = { letop_and = None; letop_pattern = p; letop_expression = e } in
+      make_located (ExpressionLetOp (op, first_binding :: rest, body)) $loc
+    }
   | FUN; params = nonempty_list(labeled_pattern); ARROW; body = expression
     { build_function $loc params body }
   (* function | pat -> expr | ... is sugar for fun x -> match x with | pat -> expr | ... *)
@@ -426,6 +454,14 @@ expression:
     { make_located (ExpressionConstraint (e, t)) $loc }
   | MATCH; scrutinee = expression; WITH; arms = match_arms
     { make_located (ExpressionMatch (scrutinee, arms)) $loc }
+  (* While loop: while cond do body done *)
+  | WHILE; cond = expression; DO; body = expression; DONE
+    { make_located (ExpressionWhile (cond, body)) $loc }
+  (* For loop: for i = start to/downto end do body done *)
+  | FOR; i = LOWERCASE_IDENTIFIER; EQUAL; start_e = expression; TO; end_e = expression; DO; body = expression; DONE
+    { make_located (ExpressionFor (i, start_e, end_e, Upto, body)) $loc }
+  | FOR; i = LOWERCASE_IDENTIFIER; EQUAL; start_e = expression; DOWNTO; end_e = expression; DO; body = expression; DONE
+    { make_located (ExpressionFor (i, start_e, end_e, Downto, body)) $loc }
   (* Reference assignment: e1 := e2 *)
   | e1 = simple_expression; COLONEQUALS; e2 = expression
     { make_located (ExpressionAssign (e1, e2)) $loc }
@@ -441,6 +477,9 @@ simple_expression:
   (* Reference creation: ref e *)
   | REF; e = simple_expression %prec REF
     { make_located (ExpressionRef e) $loc }
+  (* Assert expression: assert e *)
+  | ASSERT; e = simple_expression %prec REF
+    { make_located (ExpressionAssert e) $loc }
   | e1 = simple_expression; op = binary_operator; e2 = simple_expression
     {
       let op_expr = make_located (ExpressionVariable op) $loc(op) in
@@ -527,6 +566,11 @@ postfix_expression:
 atomic_expression:
   | LPAREN; RPAREN
     { make_located (ExpressionConstant ConstantUnit) $loc }
+  (* Parenthesized binding operators as values: ( let* ), ( and* ) *)
+  | LPAREN; op = LETOP; RPAREN
+    { make_located (ExpressionVariable ("( " ^ op ^ " )")) $loc }
+  | LPAREN; op = ANDOP; RPAREN
+    { make_located (ExpressionVariable ("( " ^ op ^ " )")) $loc }
   | LPAREN; e = expression; RPAREN
     { e }
   | LPAREN; es = expression_tuple; RPAREN
@@ -621,6 +665,11 @@ atomic_pattern:
     { make_located (PatternConstant ConstantUnit) $loc }
   | LPAREN; TYPE; name = LOWERCASE_IDENTIFIER; RPAREN
     { make_located (PatternLocallyAbstract name) $loc }
+  (* Parenthesized binding operators as patterns: ( let* ), ( and* ) *)
+  | LPAREN; op = LETOP; RPAREN
+    { make_located (PatternVariable ("( " ^ op ^ " )")) $loc }
+  | LPAREN; op = ANDOP; RPAREN
+    { make_located (PatternVariable ("( " ^ op ^ " )")) $loc }
   | LPAREN; p = pattern; RPAREN
     { p }
   | LPAREN; ps = pattern_tuple; RPAREN

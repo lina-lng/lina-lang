@@ -17,6 +17,9 @@ val string_concat_type : Types.type_scheme
 (** Polymorphic print: 'a -> unit *)
 val polymorphic_print_type : Types.type_scheme
 
+(** Boolean negation: bool -> bool *)
+val bool_not_type : Types.type_scheme
+
 (** {1 Option Type} *)
 
 (** Built-in option type declaration. *)

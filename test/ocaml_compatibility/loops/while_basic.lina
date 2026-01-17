@@ -1,0 +1,11 @@
+(* While loop: basic usage *)
+(* Expected: ACCEPT - basic while loop *)
+
+let count = ref 0
+
+let _ =
+  while !count < 5 do
+    count := !count + 1
+  done
+
+let _ = print_int !count

@@ -134,6 +134,19 @@ let rec strip_expr_locations (e : Syntax_tree.expression) :
         Syntax_tree.ExpressionPack (strip_module_expr_locations me, strip_module_type_locations mt)
     | Syntax_tree.ExpressionLetModule (name, me, body) ->
         Syntax_tree.ExpressionLetModule (strip_loc name, strip_module_expr_locations me, strip_expr_locations body)
+    | Syntax_tree.ExpressionAssert e ->
+        Syntax_tree.ExpressionAssert (strip_expr_locations e)
+    | Syntax_tree.ExpressionWhile (cond, body) ->
+        Syntax_tree.ExpressionWhile (strip_expr_locations cond, strip_expr_locations body)
+    | Syntax_tree.ExpressionFor (var, start_e, end_e, dir, body) ->
+        Syntax_tree.ExpressionFor (var, strip_expr_locations start_e, strip_expr_locations end_e, dir, strip_expr_locations body)
+    | Syntax_tree.ExpressionLetOp (op, bindings, body) ->
+        let strip_letop_binding (b : Syntax_tree.let_op_binding) =
+          { Syntax_tree.letop_and = b.letop_and;
+            letop_pattern = strip_pattern_locations b.letop_pattern;
+            letop_expression = strip_expr_locations b.letop_expression }
+        in
+        Syntax_tree.ExpressionLetOp (op, List.map strip_letop_binding bindings, strip_expr_locations body)
     | Syntax_tree.ExpressionError _ as err -> err
   in
   { value = desc; location = Location.none }

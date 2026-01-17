@@ -107,6 +107,9 @@ module TypedExpression : EXPRESSION with type t = Typed_tree.typed_expression = 
     | Typed_tree.TypedExpressionRef _ -> ShapeNonValue
     | Typed_tree.TypedExpressionDeref _ -> ShapeNonValue
     | Typed_tree.TypedExpressionAssign _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionAssert _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionWhile _ -> ShapeNonValue
+    | Typed_tree.TypedExpressionFor _ -> ShapeNonValue
     | Typed_tree.TypedExpressionPack _ -> ShapeNonValue
     | Typed_tree.TypedExpressionLetModule (_, _, body) -> ShapeLet ([], body)
     | Typed_tree.TypedExpressionError _ -> ShapeNonValue
@@ -158,6 +161,10 @@ module SyntaxExpression : EXPRESSION with type t = Parsing.Syntax_tree.expressio
     | Parsing.Syntax_tree.ExpressionAssign _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionPack _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionLetModule (_, _, body) -> ShapeLet ([], body)
+    | Parsing.Syntax_tree.ExpressionAssert _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionWhile _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionFor _ -> ShapeNonValue
+    | Parsing.Syntax_tree.ExpressionLetOp _ -> ShapeNonValue
     | Parsing.Syntax_tree.ExpressionError _ -> ShapeNonValue
 end
 

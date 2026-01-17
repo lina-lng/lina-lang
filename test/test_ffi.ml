@@ -522,10 +522,10 @@ external create_tcp : unit -> int = "tcp"
 let sock = create_tcp ()
 |});
   [%expect {|
-    local function create_tcp_14(arg0_16)
-      return require("socket").tcp(arg0_16)
-    end
-    local sock_15 = create_tcp_14(nil)
+    local create_tcp_15 = function(arg0_17)
+      return require("socket").tcp(arg0_17)
+    end;
+    local sock_16 = create_tcp_15(nil)
     |}]
 
 let%expect_test "codegen: @val generates global function call" =
@@ -536,10 +536,10 @@ external print_value : int -> unit = "print"
 let _ = print_value 42
 |});
   [%expect {|
-    local function print_value_17(arg0_18)
-      return print(arg0_18)
-    end
-    local _top_19 = print_value_17(42)
+    local print_value_18 = function(arg0_19)
+      return print(arg0_19)
+    end;
+    local _top_20 = print_value_18(42)
     |}]
 
 let%expect_test "codegen: @val @scope generates scoped call" =
@@ -550,10 +550,10 @@ external floor : float -> int = "floor"
 let x = floor 3.14
 |});
   [%expect {|
-    local function floor_20(arg0_22)
-      return math.floor(arg0_22)
-    end
-    local x_21 = floor_20(3.14)
+    local floor_21 = function(arg0_23)
+      return math.floor(arg0_23)
+    end;
+    local x_22 = floor_21(3.14)
     |}]
 
 let%expect_test "codegen: @val @scope with nested path" =
@@ -564,10 +564,10 @@ external pack_values : int -> int = "call"
 let x = pack_values 1
 |});
   [%expect {|
-    local function pack_values_23(arg0_25)
-      return table.pack.call(arg0_25)
-    end
-    local x_24 = pack_values_23(1)
+    local pack_values_24 = function(arg0_26)
+      return table.pack.call(arg0_26)
+    end;
+    local x_25 = pack_values_24(1)
     |}]
 
 let%expect_test "codegen: @send generates method call" =
@@ -584,14 +584,14 @@ let sock = get_socket ()
 let _ = close sock
 |});
   [%expect {|
-    local function close_26(arg0_29)
-      return arg0_29:close()
-    end
-    local function get_socket_27(arg0_30)
-      return get_socket(arg0_30)
-    end
-    local sock_28 = get_socket_27(nil)
-    local _top_31 = close_26(sock_28)
+    local close_27 = function(arg0_30)
+      return arg0_30:close()
+    end;
+    local get_socket_28 = function(arg0_31)
+      return get_socket(arg0_31)
+    end;
+    local sock_29 = get_socket_28(nil);
+    local _top_32 = close_27(sock_29)
     |}]
 
 let%expect_test "codegen: @send with extra args" =
@@ -608,14 +608,18 @@ let sock = get_socket ()
 let _ = send_data sock "hello" 5
 |});
   [%expect {|
-    local function send_data_32(arg0_35, arg1_36, arg2_37)
-      return arg0_35:send(arg1_36, arg2_37)
+    local send_data_33 = function(arg0_36)
+      return function(arg1_37)
+      return function(arg2_38)
+      return arg0_36:send(arg1_37, arg2_38)
     end
-    local function get_socket_33(arg0_38)
-      return get_socket(arg0_38)
     end
-    local sock_34 = get_socket_33(nil)
-    local _top_39 = send_data_32(sock_34, "hello", 5)
+    end;
+    local get_socket_34 = function(arg0_39)
+      return get_socket(arg0_39)
+    end;
+    local sock_35 = get_socket_34(nil);
+    local _top_40 = send_data_33(sock_35)("hello")(5)
     |}]
 
 let%expect_test "codegen: @get generates property access" =
@@ -626,10 +630,10 @@ external get_length : string -> int = "length"
 let len = get_length "hello"
 |});
   [%expect {|
-    local function get_length_40(arg0_42)
-      return arg0_42.length
-    end
-    local len_41 = get_length_40("hello")
+    local get_length_41 = function(arg0_43)
+      return arg0_43.length
+    end;
+    local len_42 = get_length_41("hello")
     |}]
 
 let%expect_test "codegen: @set generates assignment with IIFE" =
@@ -646,17 +650,19 @@ let o = create_obj ()
 let _ = set_value o 42
 |});
   [%expect {|
-    local function set_value_43(arg0_46, arg1_47)
+    local set_value_44 = function(arg0_47)
+      return function(arg1_48)
       return (function()
-      arg0_46.value = arg1_47
+      arg0_47.value = arg1_48;
       return nil
     end)()
     end
-    local function create_obj_44(arg0_48)
-      return create_obj(arg0_48)
-    end
-    local o_45 = create_obj_44(nil)
-    local _top_49 = set_value_43(o_45, 42)
+    end;
+    local create_obj_45 = function(arg0_49)
+      return create_obj(arg0_49)
+    end;
+    local o_46 = create_obj_45(nil);
+    local _top_50 = set_value_44(o_46)(42)
     |}]
 
 let%expect_test "codegen: @get_index generates bracket access" =
@@ -673,14 +679,16 @@ let a = create_array ()
 let x = array_get a 0
 |});
   [%expect {|
-    local function array_get_50(arg0_54, arg1_55)
-      return arg0_54[arg1_55]
+    local array_get_51 = function(arg0_55)
+      return function(arg1_56)
+      return arg0_55[arg1_56]
     end
-    local function create_array_51(arg0_56)
-      return create_array(arg0_56)
-    end
-    local a_52 = create_array_51(nil)
-    local x_53 = array_get_50(a_52, 0)
+    end;
+    local create_array_52 = function(arg0_57)
+      return create_array(arg0_57)
+    end;
+    local a_53 = create_array_52(nil);
+    local x_54 = array_get_51(a_53)(0)
     |}]
 
 let%expect_test "codegen: @set_index generates bracket assignment" =
@@ -697,17 +705,21 @@ let a = create_array ()
 let _ = array_set a 0 99
 |});
   [%expect {|
-    local function array_set_57(arg0_60, arg1_61, arg2_62)
+    local array_set_58 = function(arg0_61)
+      return function(arg1_62)
+      return function(arg2_63)
       return (function()
-      arg0_60[arg1_61] = arg2_62
+      arg0_61[arg1_62] = arg2_63;
       return nil
     end)()
     end
-    local function create_array_58(arg0_63)
-      return create_array(arg0_63)
     end
-    local a_59 = create_array_58(nil)
-    local _top_64 = array_set_57(a_59, 0, 99)
+    end;
+    local create_array_59 = function(arg0_64)
+      return create_array(arg0_64)
+    end;
+    local a_60 = create_array_59(nil);
+    local _top_65 = array_set_58(a_60)(0)(99)
     |}]
 
 let%expect_test "codegen: @new generates constructor call" =
@@ -720,10 +732,10 @@ external create_socket : int -> socket = "Socket"
 let sock = create_socket 8080
 |});
   [%expect {|
-    local function create_socket_65(arg0_67)
-      return Socket.new(arg0_67)
-    end
-    local sock_66 = create_socket_65(8080)
+    local create_socket_66 = function(arg0_68)
+      return Socket.new(arg0_68)
+    end;
+    local sock_67 = create_socket_66(8080)
     |}]
 
 let%expect_test "codegen: @as overrides Lua name" =
@@ -734,10 +746,10 @@ external print_raw : string -> unit = "print"
 let _ = print_raw "test"
 |});
   [%expect {|
-    local function print_raw_68(arg0_69)
-      return rawprint(arg0_69)
-    end
-    local _top_70 = print_raw_68("test")
+    local print_raw_69 = function(arg0_70)
+      return rawprint(arg0_70)
+    end;
+    local _top_71 = print_raw_69("test")
     |}]
 
 let%expect_test "codegen: @return(nullable) wraps result in option" =
@@ -750,17 +762,17 @@ external find_item : string -> int option = "find"
 let result = find_item "key"
 |});
   [%expect {|
-    local function find_item_71(arg0_73)
+    local find_item_72 = function(arg0_74)
       return (function()
-      local _ffi_result = find(arg0_73)
+      local _ffi_result = find(arg0_74);
       if _ffi_result == nil then
         return {_tag = 0}
       else
         return {_tag = 1, _0 = _ffi_result}
       end
     end)()
-    end
-    local result_72 = find_item_71("key")
+    end;
+    local result_73 = find_item_72("key")
     |}]
 
 let%expect_test "codegen: @send @return(nullable) combines correctly" =
@@ -778,9 +790,10 @@ let o = create_obj ()
 let result = lookup o "key"
 |});
   [%expect {|
-    local function lookup_74(arg0_78, arg1_79)
+    local lookup_75 = function(arg0_79)
+      return function(arg1_80)
       return (function()
-      local _ffi_result = arg0_78:get(arg1_79)
+      local _ffi_result = arg0_79:get(arg1_80);
       if _ffi_result == nil then
         return {_tag = 0}
       else
@@ -788,11 +801,12 @@ let result = lookup o "key"
       end
     end)()
     end
-    local function create_obj_75(arg0_80)
-      return create_obj(arg0_80)
-    end
-    local o_76 = create_obj_75(nil)
-    local result_77 = lookup_74(o_76, "key")
+    end;
+    local create_obj_76 = function(arg0_81)
+      return create_obj(arg0_81)
+    end;
+    local o_77 = create_obj_76(nil);
+    local result_78 = lookup_75(o_77)("key")
     |}]
 
 let%expect_test "codegen: @variadic marks function as variadic" =
@@ -803,10 +817,10 @@ external concat_all : string -> string = "concat"
 let result = concat_all "a"
 |});
   [%expect {|
-    local function concat_all_81(arg0_83)
-      return concat(table.unpack(arg0_83))
-    end
-    local result_82 = concat_all_81("a")
+    local concat_all_82 = function(arg0_84)
+      return concat(table.unpack(arg0_84))
+    end;
+    local result_83 = concat_all_82("a")
     |}]
 
 let%expect_test "codegen: @module @as combination" =
@@ -817,10 +831,12 @@ external tcp_connect : string -> int -> int = "tcp"
 let conn = tcp_connect "localhost" 8080
 |});
   [%expect {|
-    local function tcp_connect_84(arg0_86, arg1_87)
-      return require("socket").connect_tcp(arg0_86, arg1_87)
+    local tcp_connect_85 = function(arg0_87)
+      return function(arg1_88)
+      return require("socket").connect_tcp(arg0_87, arg1_88)
     end
-    local conn_85 = tcp_connect_84("localhost", 8080)
+    end;
+    local conn_86 = tcp_connect_85("localhost")(8080)
     |}]
 
 (** {1 Variadic Code Generation Tests}
@@ -841,14 +857,16 @@ let args = get_args ()
 let result = format "%d %d" args
 |});
   [%expect {|
-    local function format_88(arg0_92, arg1_93)
-      return string.format(arg0_92, table.unpack(arg1_93))
+    local format_89 = function(arg0_93)
+      return function(arg1_94)
+      return string.format(arg0_93, table.unpack(arg1_94))
     end
-    local function get_args_89(arg0_94)
-      return get_args(arg0_94)
-    end
-    local args_90 = get_args_89(nil)
-    local result_91 = format_88("%d %d", args_90)
+    end;
+    local get_args_90 = function(arg0_95)
+      return get_args(arg0_95)
+    end;
+    local args_91 = get_args_90(nil);
+    local result_92 = format_89("%d %d")(args_91)
     |}]
 
 let%expect_test "codegen: @variadic with @send preserves receiver" =
@@ -870,18 +888,22 @@ let args = get_args ()
 let result = call_method o "template" args
 |});
   [%expect {|
-    local function call_method_95(arg0_101, arg1_102, arg2_103)
-      return arg0_101:format(arg1_102, table.unpack(arg2_103))
+    local call_method_96 = function(arg0_102)
+      return function(arg1_103)
+      return function(arg2_104)
+      return arg0_102:format(arg1_103, table.unpack(arg2_104))
     end
-    local function get_obj_96(arg0_104)
-      return get_obj(arg0_104)
     end
-    local function get_args_97(arg0_105)
-      return get_args(arg0_105)
-    end
-    local o_98 = get_obj_96(nil)
-    local args_99 = get_args_97(nil)
-    local result_100 = call_method_95(o_98, "template", args_99)
+    end;
+    local get_obj_97 = function(arg0_105)
+      return get_obj(arg0_105)
+    end;
+    local get_args_98 = function(arg0_106)
+      return get_args(arg0_106)
+    end;
+    local o_99 = get_obj_97(nil);
+    local args_100 = get_args_98(nil);
+    local result_101 = call_method_96(o_99)("template")(args_100)
     |}]
 
 let%expect_test "codegen: @variadic with @module" =
@@ -898,14 +920,16 @@ let data = get_data ()
 let _ = log_args "message" data
 |});
   [%expect {|
-    local function log_args_106(arg0_109, arg1_110)
-      return require("utils").log(arg0_109, table.unpack(arg1_110))
+    local log_args_107 = function(arg0_110)
+      return function(arg1_111)
+      return require("utils").log(arg0_110, table.unpack(arg1_111))
     end
-    local function get_data_107(arg0_111)
-      return get_data(arg0_111)
-    end
-    local data_108 = get_data_107(nil)
-    local _top_112 = log_args_106("message", data_108)
+    end;
+    local get_data_108 = function(arg0_112)
+      return get_data(arg0_112)
+    end;
+    local data_109 = get_data_108(nil);
+    local _top_113 = log_args_107("message")(data_109)
     |}]
 
 let%expect_test "codegen: @variadic with @new constructor" =
@@ -923,14 +947,14 @@ let args = get_args ()
 let buf = create_buffer args
 |});
   [%expect {|
-    local function create_buffer_113(arg0_117)
-      return Buffer.new(table.unpack(arg0_117))
-    end
-    local function get_args_114(arg0_118)
-      return get_args(arg0_118)
-    end
-    local args_115 = get_args_114(nil)
-    local buf_116 = create_buffer_113(args_115)
+    local create_buffer_114 = function(arg0_118)
+      return Buffer.new(table.unpack(arg0_118))
+    end;
+    local get_args_115 = function(arg0_119)
+      return get_args(arg0_119)
+    end;
+    local args_116 = get_args_115(nil);
+    local buf_117 = create_buffer_114(args_116)
     |}]
 
 let%expect_test "codegen: @variadic with @return(nullable) combines correctly" =
@@ -948,9 +972,10 @@ let args = get_args ()
 let result = safe_format "%s" args
 |});
   [%expect {|
-    local function safe_format_119(arg0_123, arg1_124)
+    local safe_format_120 = function(arg0_124)
+      return function(arg1_125)
       return (function()
-      local _ffi_result = safe_format(arg0_123, table.unpack(arg1_124))
+      local _ffi_result = safe_format(arg0_124, table.unpack(arg1_125));
       if _ffi_result == nil then
         return {_tag = 0}
       else
@@ -958,11 +983,12 @@ let result = safe_format "%s" args
       end
     end)()
     end
-    local function get_args_120(arg0_125)
-      return get_args(arg0_125)
-    end
-    local args_121 = get_args_120(nil)
-    local result_122 = safe_format_119("%s", args_121)
+    end;
+    local get_args_121 = function(arg0_126)
+      return get_args(arg0_126)
+    end;
+    local args_122 = get_args_121(nil);
+    local result_123 = safe_format_120("%s")(args_122)
     |}]
 
 (** {1 Variadic Validation Error Tests} *)

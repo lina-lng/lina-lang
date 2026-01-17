@@ -347,3 +347,126 @@ let%expect_test "complex ref expression tokens" =
     (Lexer.INTEGER 1)
     Lexer.EOF
     |}]
+
+(* Raw string literals *)
+
+let%expect_test "simple raw string" =
+  (* Use OCaml delimited raw string to embed Lina raw string *)
+  print_endline (show_tokens {delim|{|hello world|}|delim});
+  [%expect
+    {|
+    (Lexer.STRING "hello world")
+    Lexer.EOF
+    |}]
+
+let%expect_test "raw string with quotes" =
+  print_endline (show_tokens {delim|{|say "hello"|}|delim});
+  [%expect
+    {|
+    (Lexer.STRING "say \"hello\"")
+    Lexer.EOF
+    |}]
+
+let%expect_test "raw string with backslashes" =
+  print_endline (show_tokens {delim|{|path\to\file|}|delim});
+  [%expect
+    {|
+    (Lexer.STRING "path\\to\\file")
+    Lexer.EOF
+    |}]
+
+let%expect_test "raw string with newlines" =
+  print_endline (show_tokens "{|line1\nline2|}");
+  [%expect
+    {|
+    (Lexer.STRING "line1\nline2")
+    Lexer.EOF
+    |}]
+
+let%expect_test "delimited raw string" =
+  print_endline (show_tokens {delim|{sql|SELECT * FROM users|sql}|delim});
+  [%expect
+    {|
+    (Lexer.STRING "SELECT * FROM users")
+    Lexer.EOF
+    |}]
+
+let%expect_test "delimited raw string with pipe" =
+  print_endline (show_tokens {delim|{lua|x |> f|lua}|delim});
+  [%expect
+    {|
+    (Lexer.STRING "x |> f")
+    Lexer.EOF
+    |}]
+
+let%expect_test "delimited raw string can contain simple end marker" =
+  (* {sql| ... |} ... |sql} - the |} in the middle is NOT the end *)
+  print_endline (show_tokens {delim|{sql|contains |} inside|sql}|delim});
+  [%expect
+    {expect|
+    (Lexer.STRING "contains |} inside")
+    Lexer.EOF
+    |expect}]
+
+let%expect_test "raw string empty" =
+  print_endline (show_tokens {delim|{||}|delim});
+  [%expect
+    {expect|
+    (Lexer.STRING "")
+    Lexer.EOF
+    |expect}]
+
+let%expect_test "unterminated raw string" =
+  print_endline (show_tokens "{|hello");
+  [%expect
+    {expect|
+    File "<test>", line 1, characters 0-2:
+    Lexer error: Unterminated raw string literal
+    |expect}]
+
+let%expect_test "unterminated delimited raw string" =
+  print_endline (show_tokens "{sql|hello");
+  [%expect
+    {expect|
+    File "<test>", line 1, characters 0-5:
+    Lexer error: Unterminated raw string literal
+    |expect}]
+
+(* Assert keyword *)
+
+let%expect_test "assert keyword" =
+  print_endline (show_tokens "assert true assert false");
+  [%expect
+    {|
+    Lexer.ASSERT
+    Lexer.TRUE
+    Lexer.ASSERT
+    Lexer.FALSE
+    Lexer.EOF
+    |}]
+
+(* Loop keywords *)
+
+let%expect_test "while loop keywords" =
+  print_endline (show_tokens "while true do done");
+  [%expect
+    {|
+    Lexer.WHILE
+    Lexer.TRUE
+    Lexer.DO
+    Lexer.DONE
+    Lexer.EOF
+    |}]
+
+let%expect_test "for loop keywords" =
+  print_endline (show_tokens "for i to downto do done");
+  [%expect
+    {|
+    Lexer.FOR
+    (Lexer.LOWERCASE_IDENTIFIER "i")
+    Lexer.TO
+    Lexer.DOWNTO
+    Lexer.DO
+    Lexer.DONE
+    Lexer.EOF
+    |}]

@@ -1,0 +1,117 @@
+(* Test binding operators (let*, let+, and*, and+) *)
+
+(* Define Option.bind for let* *)
+type 'a option = None | Some of 'a
+
+let bind opt f =
+  match opt with
+  | None -> None
+  | Some x -> f x
+
+let ( let* ) = bind
+
+(* Test basic let* *)
+let test1 =
+  let* x = Some 5 in
+  Some (x + 1)
+(* Expected: Some 6 *)
+
+let _ = match test1 with
+  | None -> print "FAIL: test1 expected Some 6"
+  | Some n -> if n == 6 then print "OK: test1" else print "FAIL: test1"
+
+(* Test chained let* *)
+let test2 =
+  let* a = Some 2 in
+  let* b = Some 3 in
+  Some (a + b)
+(* Expected: Some 5 *)
+
+let _ = match test2 with
+  | None -> print "FAIL: test2 expected Some 5"
+  | Some n -> if n == 5 then print "OK: test2" else print "FAIL: test2"
+
+(* Test short-circuiting with None *)
+let test3 =
+  let* x = None in
+  Some (x + 1)
+(* Expected: None *)
+
+let _ = match test3 with
+  | None -> print "OK: test3"
+  | Some _ -> print "FAIL: test3 expected None"
+
+(* Define and* for combining options *)
+let ( and* ) opt1 opt2 =
+  match opt1 with
+  | None -> None
+  | Some x ->
+    match opt2 with
+    | None -> None
+    | Some y -> Some (x, y)
+
+(* Test let* with and* *)
+let test4 =
+  let* a = Some 10
+  and* b = Some 20 in
+  Some (a + b)
+(* Expected: Some 30 *)
+
+let _ = match test4 with
+  | None -> print "FAIL: test4 expected Some 30"
+  | Some n -> if n == 30 then print "OK: test4" else print "FAIL: test4"
+
+(* Test short-circuit with and* when first is None *)
+let test5 =
+  let* a = None
+  and* b = Some 20 in
+  Some (a + b)
+(* Expected: None *)
+
+let _ = match test5 with
+  | None -> print "OK: test5"
+  | Some _ -> print "FAIL: test5 expected None"
+
+(* Test short-circuit with and* when second is None *)
+let test6 =
+  let* a = Some 10
+  and* b = None in
+  Some (a + b)
+(* Expected: None *)
+
+let _ = match test6 with
+  | None -> print "OK: test6"
+  | Some _ -> print "FAIL: test6 expected None"
+
+(* Define let+ for map (functor-style) *)
+let ( let+ ) opt f =
+  match opt with
+  | None -> None
+  | Some x -> Some (f x)
+
+(* Test let+ *)
+let test7 =
+  let+ x = Some 7 in
+  x * 2
+(* Expected: Some 14 *)
+
+let _ = match test7 with
+  | None -> print "FAIL: test7 expected Some 14"
+  | Some n -> if n == 14 then print "OK: test7" else print "FAIL: test7"
+
+(* Test mixed usage: define operators for simple identity monad *)
+let identity_bind x f = f x
+let identity_both a b = (a, b)
+
+let ( let** ) = identity_bind
+let ( and** ) = identity_both
+
+let test8 =
+  let** x = 5
+  and** y = 10 in
+  x + y
+(* Expected: 15 *)
+
+let _ = if test8 == 15 then print "OK: test8" else print "FAIL: test8"
+
+let _ = print "Binding operators tests complete"

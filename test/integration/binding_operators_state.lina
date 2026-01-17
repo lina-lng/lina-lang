@@ -1,0 +1,179 @@
+(* Test binding operators with State monad pattern *)
+
+(* State monad: 'a state = state -> ('a * state)
+   We simulate this using refs since Lina compiles to Lua *)
+
+type 'a option = None | Some of 'a
+
+(* Simple state threading using explicit state passing *)
+(* state_bind : ('s -> 'a * 's) -> ('a -> 's -> 'b * 's) -> 's -> 'b * 's *)
+
+(* For simplicity, use int state *)
+(* Note: f takes just the value and returns a new state computation *)
+let state_bind ma f = fun s ->
+  let (a, s1) = ma s in
+  let next = f a in
+  next s1
+
+let state_both ma mb = fun s ->
+  let (a, s1) = ma s in
+  let (b, s2) = mb s1 in
+  ((a, b), s2)
+
+let state_return x s = (x, s)
+
+let state_get s = (s, s)
+
+let state_put new_s _ = ((), new_s)
+
+let state_modify f s = ((), f s)
+
+let ( let* ) = state_bind
+let ( and* ) = state_both
+
+(* Test 1: Basic state threading *)
+let test_basic_state =
+  let computation =
+    let* x = state_get in
+    let* _ = state_put (x + 10) in
+    let* y = state_get in
+    state_return y
+  in
+  let (result, final_state) = computation 5 in
+  print result;
+  print final_state
+(* Expected: 15 *)
+(* Expected: 15 *)
+
+(* Test 2: Multiple state operations *)
+let test_multi_ops =
+  let computation =
+    let* _ = state_modify (fun s -> s * 2) in
+    let* _ = state_modify (fun s -> s + 1) in
+    let* _ = state_modify (fun s -> s * 3) in
+    state_get
+  in
+  let (result, _) = computation 5 in
+  print result
+(* Expected: 33 *)
+
+(* Test 3: State with and* (read state twice) *)
+let test_state_and =
+  let read_and_inc =
+    let* x = state_get in
+    let* _ = state_put (x + 1) in
+    state_return x
+  in
+  let computation =
+    let* a = read_and_inc
+    and* b = read_and_inc in
+    state_return (a + b)
+  in
+  let (result, final) = computation 10 in
+  print result;
+  print final
+(* Expected: 21 *)
+(* Expected: 12 *)
+
+(* Test 4: Counter operations *)
+let counter_inc s = (s, s + 1)
+let counter_dec s = (s, s - 1)
+let counter_read s = (s, s)
+let counter_reset _ = ((), 0)
+
+let ( let** ) ma f = fun s ->
+  let (a, s1) = ma s in
+  let next = f a in
+  next s1
+
+let test_counter =
+  let computation =
+    let** _ = counter_inc in
+    let** _ = counter_inc in
+    let** _ = counter_inc in
+    let** x = counter_read in
+    let** _ = counter_dec in
+    let** y = counter_read in
+    (fun s -> ((x, y), s))
+  in
+  let ((before, after), _) = computation 0 in
+  print before;
+  print after
+(* Expected: 3 *)
+(* Expected: 2 *)
+
+(* Test 5: Accumulator pattern *)
+let test_accumulator =
+  let add_to_acc n s = ((), s + n) in
+  let computation =
+    let* _ = add_to_acc 10 in
+    let* _ = add_to_acc 20 in
+    let* _ = add_to_acc 30 in
+    state_get
+  in
+  let (result, _) = computation 0 in
+  print result
+(* Expected: 60 *)
+
+(* Test 6: Building a list in state (reversed) *)
+type 'a mylist = Nil | Cons of 'a * 'a mylist
+
+let cons_to_state x s = ((), Cons (x, s))
+let get_state_list s = (s, s)
+
+let ( let*** ) ma f = fun s ->
+  let (a, s1) = ma s in
+  let next = f a in
+  next s1
+
+let test_build_list =
+  let computation =
+    let*** _ = cons_to_state 3 in
+    let*** _ = cons_to_state 2 in
+    let*** _ = cons_to_state 1 in
+    get_state_list
+  in
+  let (result, _) = computation Nil in
+  let rec sum lst = match lst with
+    | Nil -> 0
+    | Cons (x, rest) -> x + sum rest
+  in
+  print (sum result)
+(* Expected: 6 *)
+
+(* Test 7: Conditional state update *)
+let test_conditional =
+  let inc_if_positive x s =
+    if x > 0 then (true, s + x) else (false, s)
+  in
+  let computation =
+    let* r1 = inc_if_positive 5 in
+    let* r2 = inc_if_positive (0 - 3) in
+    let* r3 = inc_if_positive 10 in
+    let* final = state_get in
+    state_return final
+  in
+  let (result, _) = computation 0 in
+  print result
+(* Expected: 15 *)
+
+(* Test 8: Nested state computations *)
+let test_nested =
+  let inner_comp =
+    let* x = state_get in
+    let* _ = state_put (x * 2) in
+    state_return x
+  in
+  let outer_comp =
+    let* a = inner_comp in
+    let* b = inner_comp in
+    let* c = inner_comp in
+    state_return (a + b + c)
+  in
+  let (result, final) = outer_comp 1 in
+  print result;
+  print final
+(* Expected: 7 *)
+(* Expected: 8 *)
+
+let _ = print "Binding operators State tests complete"

@@ -1,0 +1,19 @@
+(* Binding operators: nested usage *)
+(* Expected: ACCEPT - deeply nested let* *)
+
+type 'a option = None | Some of 'a
+
+let ( let* ) opt f = match opt with
+  | None -> None
+  | Some x -> f x
+
+let result =
+  let* a = Some 1 in
+  let* b = Some 2 in
+  let* c = Some 3 in
+  let* d = Some 4 in
+  Some (a + b + c + d)
+
+let _ = match result with
+  | None -> print_endline "none"
+  | Some n -> print_int n

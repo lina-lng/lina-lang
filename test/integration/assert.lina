@@ -1,0 +1,30 @@
+(* Test assert expression *)
+
+(* Assert with true - succeeds *)
+let _ = assert true
+let _ = print "assert true passed"
+
+(* Assert with expression *)
+let x = 5
+let _ = assert (x > 0)
+let _ = print "assert x > 0 passed"
+
+(* Assert in let binding *)
+let check_positive n =
+  let _ = assert (n > 0) in
+  n * 2
+
+let _ = print (check_positive 10)
+
+(* Assert with comparison *)
+let a = 10
+let b = 5
+let _ = assert (a > b)
+let _ = print "assert a > b passed"
+
+(* Expected output:
+assert true passed
+assert x > 0 passed
+20
+assert a > b passed
+*)

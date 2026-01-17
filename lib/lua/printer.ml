@@ -198,7 +198,14 @@ and print_statement_to_buf buf level stmt =
     Buffer.add_string buf " = ";
     print_expressions_to_buf buf values
   | StatementCall (func, args) ->
-    print_expression_to_buf buf func;
+    begin match func with
+    | ExpressionFunction _ ->
+      Buffer.add_char buf '(';
+      print_expression_to_buf buf func;
+      Buffer.add_char buf ')'
+    | _ ->
+      print_expression_to_buf buf func
+    end;
     Buffer.add_char buf '(';
     print_expressions_to_buf buf args;
     Buffer.add_char buf ')'
@@ -218,6 +225,23 @@ and print_statement_to_buf buf level stmt =
   | StatementWhile (cond, block) ->
     Buffer.add_string buf "while ";
     print_expression_to_buf buf cond;
+    Buffer.add_string buf " do\n";
+    print_block_to_buf buf (level + 1) block;
+    Buffer.add_char buf '\n';
+    add_indent buf level;
+    Buffer.add_string buf "end"
+  | StatementForNum (var, start_expr, end_expr, step_opt, block) ->
+    Buffer.add_string buf "for ";
+    Buffer.add_string buf var;
+    Buffer.add_string buf " = ";
+    print_expression_to_buf buf start_expr;
+    Buffer.add_string buf ", ";
+    print_expression_to_buf buf end_expr;
+    (match step_opt with
+     | Some step ->
+       Buffer.add_string buf ", ";
+       print_expression_to_buf buf step
+     | None -> ());
     Buffer.add_string buf " do\n";
     print_block_to_buf buf (level + 1) block;
     Buffer.add_char buf '\n';
@@ -286,7 +310,10 @@ and print_if_branches_to_buf buf level branches =
 
 and print_block_to_buf buf level stmts =
   let print_stmt buf stmt = print_statement_to_buf buf level stmt in
-  print_separated buf ~sep:"\n" ~print:print_stmt stmts
+  (* Use semicolon separator to avoid Lua's ambiguous parsing of
+     "expr\n(..." as a function call. Without semicolons, "print(x)\n(function()...end)()"
+     would be parsed as "print(x)(function()...end)()" calling nil. *)
+  print_separated buf ~sep:";\n" ~print:print_stmt stmts
 
 (** {1 Public API} *)
 

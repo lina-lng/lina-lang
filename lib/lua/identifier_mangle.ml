@@ -16,9 +16,46 @@ let lua_keywords_set : (string, unit) Hashtbl.t =
 
 let is_lua_keyword name = Hashtbl.mem lua_keywords_set name
 
+(** Sanitize a name to be a valid Lua identifier.
+    Replaces special characters with underscores or descriptive suffixes. *)
+let sanitize_name name =
+  let buf = Buffer.create (String.length name) in
+  String.iter (fun c ->
+    match c with
+    | 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' -> Buffer.add_char buf c
+    | '(' -> Buffer.add_string buf "_lp_"
+    | ')' -> Buffer.add_string buf "_rp_"
+    | '*' -> Buffer.add_string buf "_star_"
+    | '+' -> Buffer.add_string buf "_plus_"
+    | '-' -> Buffer.add_string buf "_minus_"
+    | '/' -> Buffer.add_string buf "_slash_"
+    | '&' -> Buffer.add_string buf "_amp_"
+    | '|' -> Buffer.add_string buf "_bar_"
+    | '!' -> Buffer.add_string buf "_bang_"
+    | '?' -> Buffer.add_string buf "_qmark_"
+    | '=' -> Buffer.add_string buf "_eq_"
+    | '<' -> Buffer.add_string buf "_lt_"
+    | '>' -> Buffer.add_string buf "_gt_"
+    | '@' -> Buffer.add_string buf "_at_"
+    | '^' -> Buffer.add_string buf "_caret_"
+    | '~' -> Buffer.add_string buf "_tilde_"
+    | '.' -> Buffer.add_string buf "_dot_"
+    | ':' -> Buffer.add_string buf "_colon_"
+    | '$' -> Buffer.add_string buf "_dollar_"
+    | '%' -> Buffer.add_string buf "_percent_"
+    | ' ' -> ()  (* Skip spaces *)
+    | _ -> Buffer.add_char buf '_'  (* Replace other chars with underscore *)
+  ) name;
+  let result = Buffer.contents buf in
+  (* Ensure the name starts with a letter or underscore *)
+  if String.length result = 0 then "_anon"
+  else if result.[0] >= '0' && result.[0] <= '9' then "_" ^ result
+  else result
+
 let mangle_identifier (id : Identifier.t) : Lua_ast.identifier =
   let name = Identifier.name id in
   let stamp = Identifier.stamp id in
-  let base_name = if is_lua_keyword name then "_" ^ name else name in
+  let sanitized = sanitize_name name in
+  let base_name = if is_lua_keyword sanitized then "_" ^ sanitized else sanitized in
   if stamp = 0 then base_name
   else Printf.sprintf "%s_%d" base_name stamp

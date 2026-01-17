@@ -358,11 +358,21 @@ let rec collect_from_expression tokens (expr : Typing.Typed_tree.typed_expressio
       tokens
 
   | Typing.Typed_tree.TypedExpressionLetModule _ ->
-      (* Local module binding - not yet fully implemented *)
       tokens
 
+  | Typing.Typed_tree.TypedExpressionAssert inner ->
+      collect_from_expression tokens inner
+
+  | Typing.Typed_tree.TypedExpressionWhile (cond, body) ->
+      let tokens = collect_from_expression tokens cond in
+      collect_from_expression tokens body
+
+  | Typing.Typed_tree.TypedExpressionFor (_, start_e, end_e, _, body) ->
+      let tokens = collect_from_expression tokens start_e in
+      let tokens = collect_from_expression tokens end_e in
+      collect_from_expression tokens body
+
   | Typing.Typed_tree.TypedExpressionError _ ->
-      (* Error expressions don't produce semantic tokens *)
       tokens
 
 (** Collect tokens from a binding. *)

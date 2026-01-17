@@ -91,6 +91,15 @@ type token =
   | TILDE                 (** [~] labeled argument prefix *)
   | QUESTION              (** [?] optional argument prefix *)
   | PLUSEQUAL             (** [+=] type extension *)
+  | ASSERT                (** [assert] keyword *)
+  | WHILE                 (** [while] keyword *)
+  | DO                    (** [do] keyword *)
+  | DONE                  (** [done] keyword *)
+  | FOR                   (** [for] keyword *)
+  | TO                    (** [to] keyword *)
+  | DOWNTO                (** [downto] keyword *)
+  | LETOP of string       (** [let*], [let+], etc. binding operators *)
+  | ANDOP of string       (** [and*], [and+], etc. binding operators *)
   | EOF                   (** End of input *)
 [@@deriving show, eq]
 

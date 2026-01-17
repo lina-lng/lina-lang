@@ -1,0 +1,11 @@
+(* For loop: basic downto usage *)
+(* Expected: ACCEPT - for i = start downto end *)
+
+let sum = ref 0
+
+let _ =
+  for i = 5 downto 1 do
+    sum := !sum + i
+  done
+
+let _ = print_int !sum

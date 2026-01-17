@@ -94,6 +94,15 @@ type t =
   | TK_TILDE         (** ~ labeled argument prefix *)
   | TK_QUESTION      (** ? optional argument prefix *)
   | TK_PLUSEQUAL     (** += type extension *)
+  | TK_ASSERT        (** assert keyword *)
+  | TK_WHILE         (** while keyword *)
+  | TK_DO            (** do keyword *)
+  | TK_DONE          (** done keyword *)
+  | TK_FOR           (** for keyword *)
+  | TK_TO            (** to keyword *)
+  | TK_DOWNTO        (** downto keyword *)
+  | TK_LETOP         (** let*, let+, etc. binding operators *)
+  | TK_ANDOP         (** and*, and+, etc. binding operators *)
 
   (* Special *)
   | TK_EOF
