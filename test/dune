@@ -311,3 +311,11 @@
  (modules test_error_messages)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Built-in result type tests
+(library
+ (name test_result)
+ (libraries typing common)
+ (modules test_result)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

@@ -1,0 +1,99 @@
+(** Result utilities for error handling.
+
+    The result type is built-in: type ('a, 'e) result = Ok of 'a | Error of 'e *)
+
+(** {1 Constructors} *)
+
+let ok x = Ok x
+
+let error e = Error e
+
+(** {1 Predicates} *)
+
+let is_ok r = match r with
+  | Ok _ -> true
+  | Error _ -> false
+
+let is_error r = match r with
+  | Ok _ -> false
+  | Error _ -> true
+
+(** {1 Extracting} *)
+
+let get_or r default = match r with
+  | Ok x -> x
+  | Error _ -> default
+
+let get_or_else r f = match r with
+  | Ok x -> x
+  | Error e -> f e
+
+(** {1 Transforming} *)
+
+let map f r = match r with
+  | Ok x -> Ok (f x)
+  | Error e -> Error e
+
+let map_error f r = match r with
+  | Ok x -> Ok x
+  | Error e -> Error (f e)
+
+let flat_map f r = match r with
+  | Ok x -> f x
+  | Error e -> Error e
+
+let flatten r = match r with
+  | Ok inner -> inner
+  | Error e -> Error e
+
+(** {1 Combining} *)
+
+let or_ r1 r2 = match r1 with
+  | Ok _ -> r1
+  | Error _ -> r2
+
+let and_ r1 r2 = match r1 with
+  | Ok _ -> r2
+  | Error _ -> r1
+
+let map2 f r1 r2 = match r1 with
+  | Error e -> Error e
+  | Ok x -> match r2 with
+    | Error e -> Error e
+    | Ok y -> Ok (f x y)
+
+(** {1 Folding} *)
+
+let fold ok_fn error_fn r = match r with
+  | Ok x -> ok_fn x
+  | Error e -> error_fn e
+
+(** {1 Iteration} *)
+
+let iter f r = match r with
+  | Ok x -> f x
+  | Error _ -> ()
+
+let iter_error f r = match r with
+  | Ok _ -> ()
+  | Error e -> f e
+
+(** {1 Conversion} *)
+
+let to_option r = match r with
+  | Ok x -> Some x
+  | Error _ -> None
+
+let of_option opt error_value = match opt with
+  | Some x -> Ok x
+  | None -> Error error_value
+
+(** {1 Binding Operators} *)
+
+let ( let* ) r f = flat_map f r
+
+let ( and* ) r1 r2 = map2 (fun a b -> (a, b)) r1 r2
+
+let ( let+ ) r f = map f r
+
+let ( and+ ) = ( and* )

@@ -37,7 +37,7 @@ type t
 val empty : t
 
 (** Initial environment with built-in bindings.
-    Includes [print], [option] type, and other primitive operations. *)
+    Includes [print], [option] type, [result] type, and other primitive operations. *)
 val initial : t
 
 (** {1 Built-in Option Type}
@@ -54,6 +54,20 @@ val none_constructor : Types.constructor_info
 (** Constructor info for [Some : 'a -> 'a option].
     Re-exported from {!Builtins} for convenience. *)
 val some_constructor : Types.constructor_info
+
+(** {1 Built-in Result Type}
+
+    The result type is built-in for error handling.
+    [Ok x] represents successful computation with value [x].
+    [Error e] represents failed computation with error [e]. *)
+
+(** Constructor info for [Ok : 'a -> ('a, 'e) result].
+    Re-exported from {!Builtins} for convenience. *)
+val ok_constructor : Types.constructor_info
+
+(** Constructor info for [Error : 'e -> ('a, 'e) result].
+    Re-exported from {!Builtins} for convenience. *)
+val error_constructor : Types.constructor_info
 
 (** {1 Value Bindings} *)
 

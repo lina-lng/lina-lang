@@ -1,0 +1,18 @@
+(* Result: nested results *)
+(* Expected: ACCEPT - results can be nested *)
+
+let outer = Ok (Ok 42)
+let inner = Ok (Error "inner error")
+
+let flatten r = match r with
+  | Ok inner_r -> inner_r
+  | Error e -> Error e
+
+let flat1 = flatten outer
+let flat2 = flatten inner
+
+let get r = match r with
+  | Ok x -> x
+  | Error _ -> 0
+
+let _ = print (get flat1)

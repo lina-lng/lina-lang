@@ -255,6 +255,8 @@ let fold_modules f env acc =
 (** Re-export built-in constructors for use by other modules. *)
 let none_constructor = Builtins.none_constructor
 let some_constructor = Builtins.some_constructor
+let ok_constructor = Builtins.ok_constructor
+let error_constructor = Builtins.error_constructor
 
 let initial =
   let env = empty in
@@ -263,6 +265,11 @@ let initial =
   let env = add_type "option" Builtins.option_type_declaration env in
   let env = add_constructor "None" Builtins.none_constructor env in
   let env = add_constructor "Some" Builtins.some_constructor env in
+
+  (* Add result type and its constructors *)
+  let env = add_type "result" Builtins.result_type_declaration env in
+  let env = add_constructor "Ok" Builtins.ok_constructor env in
+  let env = add_constructor "Error" Builtins.error_constructor env in
 
   (* Add arithmetic operators *)
   let env = add_builtin "+" Builtins.binary_int_op_type env in

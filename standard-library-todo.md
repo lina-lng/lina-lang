@@ -47,13 +47,13 @@ lib/stdlib/
 
 ### Phase 1: Foundation
 
-- [ ] **Add Result type as built-in** (`lib/typing/builtins.ml`)
-  - [ ] Define `type ('a, 'e) result = Ok of 'a | Error of 'e`
-  - [ ] Add `Ok` and `Error` constructors
-  - [ ] Update `environment.ml` to include Result in initial environment
+- [x] **Add Result type as built-in** (`lib/typing/builtins.ml`)
+  - [x] Define `type ('a, 'e) result = Ok of 'a | Error of 'e`
+  - [x] Add `Ok` and `Error` constructors
+  - [x] Update `environment.ml` to include Result in initial environment
 
-- [ ] **Create stdlib directory structure**
-  - [ ] Create `lib/stdlib/` directory
+- [x] **Create stdlib directory structure** (partial)
+  - [x] Create `lib/stdlib/` directory
   - [ ] Create `lib/stdlib/lua/` subdirectory
   - [ ] Add `lib/stdlib/dune` configuration
 
@@ -78,13 +78,15 @@ lib/stdlib/
   - [ ] Combining: `or_`, `or_else`, `map2`, `zip`
   - [ ] Conversion: `to_list`, `to_array`, `to_result`
 
-- [ ] **Result** (`result.lina`) — Utilities for Result
-  - [ ] Constructors: `ok`, `error`, `try_with`
-  - [ ] Querying: `is_ok`, `is_error`
-  - [ ] Extracting: `get_or`, `get_exn`, `to_option`
-  - [ ] Transforming: `map`, `map_error`, `flat_map`
-  - [ ] Combining: `or_`, `and_`, `map2`
-  - [ ] Conversion: `sequence`, `of_option`
+- [x] **Result** (`result.lina`) — Utilities for Result
+  - [x] Constructors: `ok`, `error`
+  - [x] Querying: `is_ok`, `is_error`
+  - [x] Extracting: `get_or`, `get_or_else`, `to_option`
+  - [x] Transforming: `map`, `map_error`, `flat_map`, `flatten`
+  - [x] Combining: `or_`, `and_`, `map2`
+  - [x] Conversion: `of_option`
+  - [x] Binding operators: `let*`, `and*`, `let+`, `and+`
+  - [ ] Missing: `try_with`, `get_exn`, `sequence`
 
 - [ ] **List** (`list.lina`) — Immutable linked lists
   - [ ] Construction: `empty`, `singleton`, `cons`, `range`, `repeat`, `init`

@@ -1,0 +1,20 @@
+(* Result: result type in module signatures *)
+(* Expected: ACCEPT - modules can use result in signatures *)
+
+module type VALIDATOR = sig
+  val validate : int -> (int, string) result
+end
+
+module PositiveValidator : VALIDATOR = struct
+  let validate x =
+    if x > 0 then Ok x
+    else Error "non-positive"
+end
+
+let test = PositiveValidator.validate 42
+
+let get r = match r with
+  | Ok x -> x
+  | Error _ -> 0
+
+let () = print_int (get test)

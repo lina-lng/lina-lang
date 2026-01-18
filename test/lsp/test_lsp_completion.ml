@@ -181,7 +181,7 @@ let%expect_test "completion on empty document" =
     let items = Lsp_completion.get_completions store uri (pos 0 0) in
     Printf.printf "count=%d" (List.length items));
   (* Should return all keywords (24) + built-in values (11) = 35 *)
-  [%expect {| count=42 |}]
+  [%expect {| count=45 |}]
 
 let%expect_test "completion on invalid document returns keywords" =
   reset ();
@@ -270,7 +270,7 @@ let%expect_test "completion includes type names" =
       item.kind = Lsp_completion.Type) items in
     let has_color = List.exists (fun item -> item.Lsp_completion.label = "color") type_items in
     Printf.printf "has_color=%b types_count=%d" has_color (List.length type_items));
-  [%expect {| has_color=true types_count=2 |}]
+  [%expect {| has_color=true types_count=3 |}]
 
 let%expect_test "completion includes variant constructors" =
   reset ();

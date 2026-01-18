@@ -1,7 +1,8 @@
 (** Built-in types and operators.
 
-    This module defines the built-in types (option), constructors (None, Some),
-    and operators (+, -, *, /, etc.) that are available in every Lina program. *)
+    This module defines the built-in types (option, result), their constructors
+    (None, Some, Ok, Error), and operators (+, -, *, /, etc.) that are available
+    in every Lina program. *)
 
 (** {1 Built-in Type Schemes} *)
 
@@ -30,3 +31,14 @@ val none_constructor : Types.constructor_info
 
 (** Some constructor for option type. *)
 val some_constructor : Types.constructor_info
+
+(** {1 Result Type} *)
+
+(** Built-in result type declaration. *)
+val result_type_declaration : Types.type_declaration
+
+(** Ok constructor for result type. *)
+val ok_constructor : Types.constructor_info
+
+(** Error constructor for result type. *)
+val error_constructor : Types.constructor_info

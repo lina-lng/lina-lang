@@ -112,6 +112,29 @@ Tests locally abstract type syntax and semantics.
 | `with_annotation` | `type a.` annotation | ACCEPT |
 | `rigid_unification` | Rigid type doesn't unify | REJECT |
 
+### Result (16 tests)
+
+Tests the built-in result type `('a, 'e) result = Ok of 'a | Error of 'e`.
+
+| Test | Description | Expected |
+|------|-------------|----------|
+| `basic_ok` | Ok constructor | ACCEPT |
+| `basic_error` | Error constructor | ACCEPT |
+| `pattern_match` | Exhaustive pattern matching | ACCEPT |
+| `polymorphic_result` | Polymorphic result functions | ACCEPT |
+| `covariant_ok` | Ok is covariant (relaxed VR) | ACCEPT |
+| `covariant_error` | Error is covariant (relaxed VR) | ACCEPT |
+| `nested_result` | Nested results | ACCEPT |
+| `bind_function` | Monadic bind | ACCEPT |
+| `map_error` | map_error function | ACCEPT |
+| `result_in_module` | Result in module signature | ACCEPT |
+| `binding_operators` | let* and and* operators | ACCEPT |
+| `result_unit` | Result with unit type | ACCEPT |
+| `same_type_result` | Same type for Ok and Error | ACCEPT |
+| `recursive_result` | Recursive functions with result | ACCEPT |
+| `ok_error_mismatch` | Type mismatch in branches | REJECT |
+| `wrong_constructor_arg` | Wrong argument type | REJECT |
+
 ### Level Propagation (4 tests)
 
 Tests type variable level tracking for let-polymorphism.
@@ -196,10 +219,15 @@ All tests passed!
 |----------|-------|
 | Value Restriction | 10 |
 | Relaxed Value Restriction | 6 |
-| Variance | 7 |
-| GADTs | 8 |
-| Modules | 9 |
+| Variance | 11 |
+| Patterns | 19 |
+| GADTs | 18 |
+| Modules | 27 |
+| Extensible | 7 |
+| Labels | 9 |
 | Locally Abstract Types | 5 |
-| Level Propagation | 4 |
-| Error Cases | 8 |
-| **Total** | **57** |
+| Level Propagation | 5 |
+| Toplevel Expressions | 9 |
+| Result | 16 |
+| Error Cases | 14 |
+| **Total** | **156** |

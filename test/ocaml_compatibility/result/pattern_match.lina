@@ -1,0 +1,11 @@
+(* Result: exhaustive pattern matching *)
+(* Expected: ACCEPT - both branches covered *)
+
+let handle r = match r with
+  | Ok x -> x + 1
+  | Error _ -> 0
+
+let a = handle (Ok 41)
+let b = handle (Error "fail")
+
+let _ = print a
