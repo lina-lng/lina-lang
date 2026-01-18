@@ -112,8 +112,12 @@ let diagnostic_of_compiler_error (err : Compiler_error.t) : diagnostic =
       (Error, Error_code.to_string Error_code.e_lexer_error, msg)
     | Compiler_error.ParserError msg ->
       (Error, Error_code.to_string Error_code.e_syntax_error, msg)
-    | Compiler_error.TypeError msg ->
-      (Error, Error_code.to_string Error_code.e_type_mismatch, msg)
+    | Compiler_error.TypeError { message; code } ->
+      let error_code = match code with
+        | Some c -> Error_code.to_string c
+        | None -> Error_code.to_string Error_code.e_type_mismatch
+      in
+      (Error, error_code, message)
     | Compiler_error.InternalError msg ->
       (Error, "internal", msg)
   in

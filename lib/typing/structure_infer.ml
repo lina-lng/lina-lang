@@ -106,7 +106,9 @@ let rec process_type_declaration_with_params ctx type_decl type_params =
         | Some tv -> tv
         | None ->
           Compiler_error.type_error syntax_constraint.constraint_location
-            (Printf.sprintf "Constraint on unknown type variable: %s" var_name)
+            (Printf.sprintf "The type variable `%s` in this constraint is not a parameter of this type.\n\n\
+                             Constraints can only reference type parameters declared in the type definition."
+               var_name)
       in
       let constraint_type, ctx =
         Type_expression_check.check_type_expression_with_params ctx param_names type_params
@@ -309,7 +311,7 @@ and infer_structure_item ctx (item : structure_item) =
           (constrained_mexpr, spec_mty, ctx)
         | Error err ->
           Compiler_error.type_error item.Location.location
-            (Printf.sprintf "Module %s does not match signature: %s"
+            (Printf.sprintf "The module `%s` does not satisfy its signature constraint.\n\n%s"
               module_name (Signature_match.format_match_error err))
         end
     in
@@ -403,7 +405,7 @@ and infer_structure_item ctx (item : structure_item) =
       | Error err ->
         let name = binding.rec_module_name.Location.value in
         Compiler_error.type_error binding.rec_module_location
-          (Printf.sprintf "Recursive module %s does not match its signature: %s"
+          (Printf.sprintf "The recursive module `%s` does not satisfy its declared signature.\n\n%s"
             name (Signature_match.format_match_error err))
       end
     ) ([], ctx) module_infos in
@@ -443,9 +445,14 @@ and infer_structure_item ctx (item : structure_item) =
       } in
       (typed_item, ctx)
     | Module_types.ModTypeFunctor _ ->
-      Compiler_error.type_error item.Location.location "Cannot open a functor"
+      Compiler_error.type_error item.Location.location
+        "We can't open a functor directly.\n\n\
+         Functors must be applied to an argument before their contents can be accessed. \
+         Try `open F(SomeModule)` instead."
     | Module_types.ModTypeIdent _ ->
-      Compiler_error.type_error item.Location.location "Cannot open an abstract module type"
+      Compiler_error.type_error item.Location.location
+        "We can't open an abstract module type.\n\n\
+         The module's contents are hidden by its signature."
     end
 
   | StructureInclude mexpr ->
@@ -463,9 +470,14 @@ and infer_structure_item ctx (item : structure_item) =
       } in
       (typed_item, ctx)
     | Module_types.ModTypeFunctor _ ->
-      Compiler_error.type_error item.Location.location "Cannot include a functor"
+      Compiler_error.type_error item.Location.location
+        "We can't include a functor directly.\n\n\
+         Functors must be applied to an argument before their contents can be included. \
+         Try `include F(SomeModule)` instead."
     | Module_types.ModTypeIdent _ ->
-      Compiler_error.type_error item.Location.location "Cannot include an abstract module type"
+      Compiler_error.type_error item.Location.location
+        "We can't include an abstract module type.\n\n\
+         The module's contents are hidden by its signature."
     end
 
   | StructureExternal ext_decl ->
@@ -529,7 +541,9 @@ and infer_structure_item ctx (item : structure_item) =
     let type_name = match type_path with
       | PathLocal name -> name
       | PathDot (_, name) -> name
-      | _ -> Compiler_error.type_error loc "Invalid type path in type extension"
+      | _ -> Compiler_error.type_error loc
+               "This type path is not valid for a type extension.\n\n\
+                Type extensions must reference a named type like `t` or `M.t`."
     in
 
     (* 2. Look up the type declaration and verify it's extensible *)
@@ -537,14 +551,19 @@ and infer_structure_item ctx (item : structure_item) =
       | Some decl -> decl
       | None ->
         Compiler_error.type_error loc
-          (Printf.sprintf "Unbound type %s in type extension" (Types.path_to_string type_path))
+          (Printf.sprintf "We couldn't find a type named `%s` to extend.\n\n\
+                           Make sure the type is defined and in scope."
+             (Types.path_to_string type_path))
     in
 
     begin match type_decl.declaration_kind with
     | DeclarationExtensible -> ()
     | _ ->
       Compiler_error.type_error loc
-        (Printf.sprintf "Type %s is not extensible" (Types.path_to_string type_path))
+        (Printf.sprintf "The type `%s` is not extensible.\n\n\
+                         Only types declared with `type t = ..` (extensible types) can be extended. \
+                         Regular variant types cannot have new constructors added."
+           (Types.path_to_string type_path))
     end;
 
     (* 3. Create fresh type parameters for the extension *)
@@ -560,7 +579,8 @@ and infer_structure_item ctx (item : structure_item) =
     (* Verify parameter count matches *)
     if List.length type_params <> List.length type_decl.declaration_parameters then
       Compiler_error.type_error loc
-        (Printf.sprintf "Type extension has %d parameters but %s expects %d"
+        (Printf.sprintf "This type extension has %d type parameter(s), but `%s` was declared with %d.\n\n\
+                         The number of type parameters in an extension must match the original type definition."
           (List.length type_params)
           (Types.path_to_string type_path)
           (List.length type_decl.declaration_parameters));
@@ -670,7 +690,9 @@ and infer_module_expression ctx (mexpr : module_expression) =
     (* Type-check functor: functor (X : S) -> ME or functor () -> ME *)
     begin match params with
     | [] ->
-      Compiler_error.type_error loc "Functor must have at least one parameter"
+      Compiler_error.type_error loc
+        "A functor must have at least one parameter.\n\n\
+         Use `functor (X : S) -> ...` for applicative functors or `functor () -> ...` for generative functors."
     | [param] ->
       begin match param with
       | FunctorParamNamed (name_loc, param_type) ->
@@ -774,7 +796,7 @@ and infer_module_expression ctx (mexpr : module_expression) =
             (typed_mexpr, ctx)
           | Error err ->
             Compiler_error.type_error loc
-              (Printf.sprintf "Functor argument does not match parameter: %s"
+              (Printf.sprintf "The functor argument does not match the expected parameter signature.\n\n%s"
                 (Signature_match.format_match_error err))
           end
         | _ ->
@@ -799,7 +821,9 @@ and infer_module_expression ctx (mexpr : module_expression) =
         (typed_mexpr, ctx)
       end
     | _ ->
-      Compiler_error.type_error loc "Cannot apply non-functor module"
+      Compiler_error.type_error loc
+        "We can't apply this module because it's not a functor.\n\n\
+         Only functors can be applied with `F(Arg)` syntax. This module has a regular signature."
     end
 
   | ModuleConstraint (inner_mexpr, constraint_mty) ->
@@ -819,7 +843,9 @@ and infer_module_expression ctx (mexpr : module_expression) =
       } in
       (typed_mexpr, ctx)
     | Error err ->
-      Compiler_error.type_error loc (Signature_match.format_match_error err)
+      Compiler_error.type_error loc
+        (Printf.sprintf "The module does not satisfy its signature constraint.\n\n%s"
+           (Signature_match.format_match_error err))
     end
 
   | ModuleUnpack (expr, module_type_syntax) ->
@@ -868,8 +894,9 @@ and infer_module_expression ctx (mexpr : module_expression) =
 
     | _ ->
       Compiler_error.type_error loc
-        (Printf.sprintf "Expected a first-class module (module type), got %s"
-          (Types.type_expression_to_string expr_ty))
+        (Printf.sprintf "We expected a first-class module here, but found %s.\n\n\
+                         The `(val e : MT)` syntax unpacks a first-class module value."
+          (Type_explain.explain expr_ty))
     end
 
 (** Extract a signature from a typed structure *)

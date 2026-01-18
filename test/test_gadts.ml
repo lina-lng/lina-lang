@@ -292,11 +292,14 @@ let test_int (x : int expr) : int =
   | Bool b -> b
 |});
   [%expect {|
-    ERROR: File "<string>", line 8, characters 4-15:
-    Type error: Type mismatch: expected int, got bool
-    Expected: int
-    Actual: bool
-      in type argument 1
+    ERROR: error: Type Mismatch --> <string>:8:5
+
+       7 |   match x with
+       8 |   | Bool b -> b
+               ^^^^^^^^^^^
+               expected `int`, found `bool`
+
+    note: The problem is in type argument 1.
     |}]
 
 let%expect_test "polymorphic recursion required for GADT eval" =

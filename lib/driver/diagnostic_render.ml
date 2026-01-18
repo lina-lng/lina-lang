@@ -13,7 +13,6 @@ type color_choice =
 type terminal_config = {
   use_color : bool;
   width : int;
-  use_unicode : bool;
 }
 
 (* ANSI color codes *)
@@ -21,7 +20,6 @@ module Color = struct
   let reset = "\027[0m"
   let bold = "\027[1m"
   let yellow = "\027[33m"
-  let blue = "\027[34m"
   let cyan = "\027[36m"
   let bright_red = "\027[91m"
   let bright_blue = "\027[94m"
@@ -37,9 +35,7 @@ module Color = struct
   let warning use_color text = apply use_color [bold; yellow] text
   let info use_color text = apply use_color [bold; bright_blue] text
   let hint use_color text = apply use_color [bold; bright_cyan] text
-  let location use_color text = apply use_color [bold; blue] text
   let line_number use_color text = apply use_color [bright_blue] text
-  let code use_color text = apply use_color [bold] text
   let note_label use_color text = apply use_color [bold; cyan] text
 end
 
@@ -61,7 +57,7 @@ let detect_terminal color_choice =
       max 40 (min 200 term_width)
     with _ -> 80
   in
-  { use_color; width; use_unicode = true }
+  { use_color; width }
 
 (* Source file cache *)
 type source_cache = (string, string array) Hashtbl.t
@@ -93,6 +89,11 @@ let load_source_file (cache : source_cache) path =
 
 (* Human-readable rendering *)
 module Human = struct
+  let capitalize_words str =
+    String.split_on_char ' ' str
+    |> List.map String.capitalize_ascii
+    |> String.concat " "
+
   let severity_prefix terminal severity code =
     let use_color = terminal.use_color in
     let severity_text = match severity with
@@ -103,30 +104,18 @@ module Human = struct
     in
     match code with
     | Some code ->
-      let code_str = Error_code.to_string code in
-      Printf.sprintf "%s[%s]" severity_text (Color.code use_color code_str)
+      let type_name = capitalize_words (Error_code.description code) in
+      Printf.sprintf "%s: %s" severity_text type_name
     | None -> severity_text
-
-  let render_location terminal (loc : Location.t) =
-    if Location.is_none loc then ""
-    else
-      let use_color = terminal.use_color in
-      Printf.sprintf "%s %s:%d:%d"
-        (Color.location use_color "-->")
-        loc.start_pos.filename
-        loc.start_pos.line
-        loc.start_pos.column
 
   let render_context_line terminal gutter_width line_num line_content =
     let use_color = terminal.use_color in
     let line_num_str = string_of_int line_num in
     let line_num_padded =
-      String.make (gutter_width - String.length line_num_str - 1) ' ' ^ line_num_str
+      String.make (gutter_width - String.length line_num_str) ' ' ^ line_num_str
     in
-    let pipe = if terminal.use_unicode then "|" else "|" in
-    Printf.sprintf "%s %s %s"
+    Printf.sprintf "%s | %s"
       (Color.line_number use_color line_num_padded)
-      (Color.line_number use_color pipe)
       line_content
 
   let render_source_line terminal sources (label : Compiler_error.label) =
@@ -137,12 +126,11 @@ module Human = struct
       let line_num = loc.start_pos.line in
       let line_num_str = string_of_int line_num in
       let gutter_width = max 4 (String.length line_num_str + 1) in
-      let gutter_padding = String.make gutter_width ' ' in
       let line_num_padded =
-        String.make (gutter_width - String.length line_num_str - 1) ' ' ^ line_num_str
+        String.make (gutter_width - String.length line_num_str) ' ' ^ line_num_str
       in
-
-      let pipe = if terminal.use_unicode then "|" else "|" in
+      (* For non-numbered lines, use spaces instead of "N |" but keep alignment *)
+      let blank_gutter = String.make (gutter_width + 3) ' ' in
 
       (* Add context line before if available *)
       let context_before =
@@ -154,13 +142,13 @@ module Human = struct
       in
 
       match get_line sources ~path:loc.start_pos.filename ~line:line_num with
-      | None ->
-        [Printf.sprintf "%s %s" gutter_padding (Color.line_number use_color pipe)]
+      | None -> []
       | Some line_content ->
-        let start_col = max 0 (loc.start_pos.column - 1) in
+        (* Columns are 0-based internally, use directly for padding *)
+        let start_col = max 0 loc.start_pos.column in
         let end_col =
           if loc.start_pos.line = loc.end_pos.line then
-            loc.end_pos.column - 1
+            loc.end_pos.column
           else
             String.length line_content
         in
@@ -178,16 +166,11 @@ module Human = struct
         in
 
         let main_lines = [
-          Printf.sprintf "%s %s"
-            gutter_padding
-            (Color.line_number use_color pipe);
-          Printf.sprintf "%s %s %s"
+          Printf.sprintf "%s | %s"
             (Color.line_number use_color line_num_padded)
-            (Color.line_number use_color pipe)
             line_content;
-          Printf.sprintf "%s %s %s%s"
-            gutter_padding
-            (Color.line_number use_color pipe)
+          Printf.sprintf "%s%s%s"
+            blank_gutter
             underline_padding
             colored_underline;
         ] in
@@ -196,9 +179,8 @@ module Human = struct
           | None -> main_lines
           | Some msg ->
             main_lines @ [
-              Printf.sprintf "%s %s %s%s"
-                gutter_padding
-                (Color.line_number use_color pipe)
+              Printf.sprintf "%s%s%s"
+                blank_gutter
                 underline_padding
                 (Color.error use_color msg)
             ]
@@ -206,9 +188,48 @@ module Human = struct
 
         context_before @ with_message
 
+  let wrap_text width text =
+    if String.length text <= width then [text]
+    else
+      let words = String.split_on_char ' ' text in
+      let rec build_lines current_line lines remaining_words =
+        match remaining_words with
+        | [] ->
+          if current_line = "" then List.rev lines
+          else List.rev (current_line :: lines)
+        | word :: rest ->
+          let new_line =
+            if current_line = "" then word
+            else current_line ^ " " ^ word
+          in
+          if String.length new_line <= width then
+            build_lines new_line lines rest
+          else if current_line = "" then
+            build_lines word lines rest
+          else
+            build_lines word (current_line :: lines) rest
+      in
+      build_lines "" [] words
+
   let render_note terminal note =
     let use_color = terminal.use_color in
-    Printf.sprintf "%s: %s" (Color.note_label use_color "note") note
+    let prefix = "note: " in
+    let prefix_len = String.length prefix in
+    let available_width = terminal.width - prefix_len in
+    let wrapped_lines = wrap_text available_width note in
+
+    match wrapped_lines with
+    | [] -> Printf.sprintf "%s" (Color.note_label use_color "note:")
+    | first :: rest ->
+      let first_line = Printf.sprintf "%s %s"
+        (Color.note_label use_color "note:")
+        first
+      in
+      let continuation_indent = String.make prefix_len ' ' in
+      let continuation_lines = List.map (fun line ->
+        continuation_indent ^ line
+      ) rest in
+      String.concat "\n" (first_line :: continuation_lines)
 
   let render_suggestion terminal sources (sugg : Compiler_error.suggestion) =
     let use_color = terminal.use_color in
@@ -223,9 +244,10 @@ module Human = struct
       let loc = sugg.suggestion_span in
       match get_line sources ~path:loc.start_pos.filename ~line:loc.start_pos.line with
       | Some original_line ->
-        let start_col = max 0 (loc.start_pos.column - 1) in
+        (* Columns are 0-based internally, use directly *)
+        let start_col = max 0 loc.start_pos.column in
         let end_col =
-          if loc.start_pos.line = loc.end_pos.line then loc.end_pos.column - 1
+          if loc.start_pos.line = loc.end_pos.line then loc.end_pos.column
           else String.length original_line
         in
         let before = String.sub original_line 0 start_col in
@@ -244,27 +266,45 @@ module Human = struct
     else lines
 
   let render terminal sources (diag : Compiler_error.diagnostic) =
-    let buf = Buffer.create 256 in
-    let add_line line = Buffer.add_string buf line; Buffer.add_char buf '\n' in
+    let output_buffer = Buffer.create 256 in
+    let add_line line = Buffer.add_string output_buffer line; Buffer.add_char output_buffer '\n' in
+    let primary_label = List.find_opt (fun l -> l.Compiler_error.is_primary) diag.labels in
 
-    (* Header: error[E0001]: type mismatch *)
-    let header = Printf.sprintf "%s: %s"
+    (* Header: error[E0001] --> file:line:col *)
+    let location_str = match primary_label with
+      | Some label when not (Location.is_none label.label_span) ->
+        let loc = label.label_span in
+        (* Display 1-based column for users (internally 0-based) *)
+        Printf.sprintf " --> %s:%d:%d" loc.start_pos.filename loc.start_pos.line (loc.start_pos.column + 1)
+      | _ -> ""
+    in
+    let header = Printf.sprintf "%s%s"
       (severity_prefix terminal diag.severity diag.code)
-      diag.message
+      location_str
     in
     add_line header;
+    add_line "";
 
-    (* Location line: --> src/main.lina:23:15 *)
-    let primary_label = List.find_opt (fun l -> l.Compiler_error.is_primary) diag.labels in
-    (match primary_label with
-    | Some label when not (Location.is_none label.label_span) ->
-      add_line (render_location terminal label.label_span)
-    | _ -> ());
-
-    (* Source snippets for each label *)
+    (* Source snippets for each label - always first *)
     List.iter (fun label ->
       List.iter add_line (render_source_line terminal sources label)
     ) diag.labels;
+
+    (* Main message - shown if not redundant with label message *)
+    let primary_label_msg = match primary_label with
+      | Some label -> label.Compiler_error.label_message
+      | None -> None
+    in
+    let type_mismatch_prefix = "Type mismatch:" in
+    let show_message =
+      diag.message <> "" &&
+      not (String.starts_with ~prefix:type_mismatch_prefix diag.message &&
+           Option.is_some primary_label_msg)
+    in
+    if show_message then begin
+      add_line "";
+      add_line diag.message
+    end;
 
     (* Notes *)
     List.iter (fun note ->
@@ -278,7 +318,7 @@ module Human = struct
       List.iter add_line (render_suggestion terminal sources sugg)
     ) diag.suggestions;
 
-    Buffer.contents buf
+    Buffer.contents output_buffer
 end
 
 (* Short format: one line per diagnostic *)
@@ -290,18 +330,19 @@ module Short = struct
       | Compiler_error.Info -> "info"
       | Compiler_error.Hint -> "hint"
     in
-    let code_str = match diag.code with
-      | Some code -> Printf.sprintf "[%s] " (Error_code.to_string code)
+    let type_str = match diag.code with
+      | Some code -> Printf.sprintf ": %s" (Human.capitalize_words (Error_code.description code))
       | None -> ""
     in
     let loc_str =
       match List.find_opt (fun l -> l.Compiler_error.is_primary) diag.labels with
       | Some label when not (Location.is_none label.label_span) ->
         let loc = label.label_span in
-        Printf.sprintf "%s:%d:%d: " loc.start_pos.filename loc.start_pos.line loc.start_pos.column
+        (* Display 1-based column for users (internally 0-based) *)
+        Printf.sprintf "%s:%d:%d: " loc.start_pos.filename loc.start_pos.line (loc.start_pos.column + 1)
       | _ -> ""
     in
-    Printf.sprintf "%s%s: %s%s" loc_str severity code_str diag.message
+    Printf.sprintf "%s%s%s: %s" loc_str severity type_str diag.message
 end
 
 (* JSON format *)
@@ -378,14 +419,19 @@ let render_diagnostics ~format ~terminal ~sources diags =
   match format with
   | Human ->
     let rendered = List.map (Human.render terminal sources) diags in
-    let errors = List.filter (fun d -> d.Compiler_error.severity = Compiler_error.Error) diags in
-    let warnings = List.filter (fun d -> d.Compiler_error.severity = Compiler_error.Warning) diags in
+    let error_count, warning_count =
+      List.fold_left (fun (errors, warnings) diag ->
+        match diag.Compiler_error.severity with
+        | Compiler_error.Error -> (errors + 1, warnings)
+        | Compiler_error.Warning -> (errors, warnings + 1)
+        | _ -> (errors, warnings)
+      ) (0, 0) diags
+    in
     let summary =
-      if List.length errors > 0 || List.length warnings > 0 then
+      if error_count > 0 || warning_count > 0 then
         Printf.sprintf "\n%s: %d error(s), %d warning(s) emitted\n"
           (if terminal.use_color then Color.bold ^ "Summary" ^ Color.reset else "Summary")
-          (List.length errors)
-          (List.length warnings)
+          error_count warning_count
       else ""
     in
     String.concat "\n" rendered ^ summary

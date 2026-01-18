@@ -438,17 +438,21 @@ let lex_real_token state =
   (* Raw string literals: {|...|} or {delim|...|delim} *)
   | "{|" ->
       update_location state;
+      let start_loc = state.current_location in
       let str = parse_raw_string_simple lexbuf state.current_location in
       update_location state;
-      Some (STRING str, state.current_location)
+      let full_loc = Location.merge start_loc state.current_location in
+      Some (STRING str, full_loc)
   | '{', Plus lowercase_letter, '|' ->
       update_location state;
+      let start_loc = state.current_location in
       let lexeme = current_lexeme state in
       (* Extract delimiter: from "{delim|" get "delim" *)
       let delimiter = String.sub lexeme 1 (String.length lexeme - 2) in
       let str = parse_raw_string_delimited delimiter lexbuf state.current_location in
       update_location state;
-      Some (STRING str, state.current_location)
+      let full_loc = Location.merge start_loc state.current_location in
+      Some (STRING str, full_loc)
   | '{' -> make_token LBRACE state
   | '}' -> make_token RBRACE state
   (* Punctuation - multi-char first for longest match *)
@@ -485,9 +489,11 @@ let lex_real_token state =
   (* String literals *)
   | '"' ->
       update_location state;
+      let start_loc = state.current_location in
       let str = parse_string lexbuf state.current_location in
       update_location state;
-      Some (STRING str, state.current_location)
+      let full_loc = Location.merge start_loc state.current_location in
+      Some (STRING str, full_loc)
   (* Type variables: 'a, 'foo *)
   | '\'', lowercase_letter, Star identifier_char ->
       update_location state;

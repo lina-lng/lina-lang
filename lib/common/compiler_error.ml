@@ -1,7 +1,7 @@
 type kind =
   | LexerError of string
   | ParserError of string
-  | TypeError of string
+  | TypeError of { message : string; code : Error_code.t option }
   | InternalError of string
 [@@deriving show]
 
@@ -22,7 +22,10 @@ let raise_error kind location =
 
 let lexer_error location msg = raise_error (LexerError msg) location
 let parser_error location msg = raise_error (ParserError msg) location
-let type_error location msg = raise_error (TypeError msg) location
+
+let type_error ?code location message =
+  raise_error (TypeError { message; code }) location
+
 let internal_error msg = raise_error (InternalError msg) Location.none
 
 let kind_to_string = function
@@ -34,7 +37,7 @@ let kind_to_string = function
 let kind_message = function
   | LexerError msg -> msg
   | ParserError msg -> msg
-  | TypeError msg -> msg
+  | TypeError { message; _ } -> message
   | InternalError msg -> msg
 
 (** Format a source location as "File "path", line N, characters M-P". *)
@@ -88,9 +91,14 @@ let clear_warnings () = warnings := []
 
 let warning_to_string = function
   | NonExhaustiveMatch witness ->
-    Printf.sprintf "Non-exhaustive pattern matching, missing case: %s" witness
+    Printf.sprintf "This pattern matching is not exhaustive.\n\n\
+                    Missing case: `%s`\n\n\
+                    Consider adding a case for this pattern, or use a wildcard `_` \
+                    to handle all remaining cases." witness
   | RedundantPattern ->
-    "Redundant pattern: this case will never be matched"
+    "This pattern will never be matched because earlier patterns already \
+     cover all the cases it would match.\n\n\
+     Consider removing this redundant case."
 
 let report_warning fmt { warning; warning_location } =
   format_with_location fmt warning_location "Warning" (warning_to_string warning)
@@ -148,7 +156,8 @@ let make_diagnostic ~severity ~message ?code ?(labels = []) ?(notes = [])
 let code_of_kind = function
   | LexerError _ -> Error_code.e_lexer_error
   | ParserError _ -> Error_code.e_syntax_error
-  | TypeError _ -> Error_code.e_type_mismatch
+  | TypeError { code = Some c; _ } -> c
+  | TypeError { code = None; _ } -> Error_code.e_type_mismatch
   | InternalError _ -> Error_code.e_type_mismatch
 
 let diagnostic_of_error err =

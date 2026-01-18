@@ -240,44 +240,108 @@ let rec path_to_string = function
   | PathDot (parent, name) -> path_to_string parent ^ "." ^ name
   | PathApply (func, arg) -> path_to_string func ^ "(" ^ path_to_string arg ^ ")"
 
-let rec pp_type_expression fmt ty =
+let pp_path fmt path =
+  Format.pp_print_string fmt (path_to_string path)
+
+(** Pretty-printing context for normalized type variable names.
+    Assigns sequential names ('a, 'b, ...) to type variables on first encounter. *)
+module Pretty_print = struct
+  type context = {
+    mutable next_index : int;
+    mapping : (int, int) Hashtbl.t;
+  }
+
+  let create () = { next_index = 0; mapping = Hashtbl.create 16 }
+
+  let letter_of_int index =
+    if index < 26 then
+      String.make 1 (Char.chr (Char.code 'a' + index))
+    else
+      let base = index mod 26 in
+      let suffix = index / 26 in
+      String.make 1 (Char.chr (Char.code 'a' + base)) ^ string_of_int suffix
+
+  let get_name ctx var_id =
+    match Hashtbl.find_opt ctx.mapping var_id with
+    | Some index -> index
+    | None ->
+      let index = ctx.next_index in
+      ctx.next_index <- ctx.next_index + 1;
+      Hashtbl.add ctx.mapping var_id index;
+      index
+end
+
+(** Precedence-based type printing.
+
+    Uses OCaml's approach with multiple precedence levels:
+    - Top level: arrows without parens
+    - Tuple level: tuples without parens
+    - Application level: type constructors with arguments
+    - Simple level: atomic types (variables, nullary constructors, etc.)
+
+    Parentheses are only added when needed:
+    - Arrow as function argument: [('a -> 'b) -> 'c]
+    - Tuple in type application: [('a * 'b) list] *)
+
+let rec pp_type_top ctx fmt ty =
+  match representative ty with
+  | TypeArrow (_, arg, result) ->
+    Format.fprintf fmt "%a -> %a"
+      (pp_type_arrow_arg ctx) arg
+      (pp_type_top ctx) result
+  | _ -> pp_type_tuple ctx fmt ty
+
+and pp_type_arrow_arg ctx fmt ty =
+  match representative ty with
+  | TypeArrow _ -> Format.fprintf fmt "(%a)" (pp_type_top ctx) ty
+  | _ -> pp_type_tuple ctx fmt ty
+
+and pp_type_tuple ctx fmt ty =
+  match representative ty with
+  | TypeTuple elements ->
+    Format.fprintf fmt "%a"
+      (Format.pp_print_list
+        ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ")
+        (pp_type_simple ctx))
+      elements
+  | _ -> pp_type_app ctx fmt ty
+
+and pp_type_app ctx fmt ty =
+  match representative ty with
+  | TypeConstructor (path, [arg]) ->
+    Format.fprintf fmt "%a %a" (pp_type_simple ctx) arg pp_path path
+  | TypeConstructor (path, args) when args <> [] ->
+    Format.fprintf fmt "(%a) %a"
+      (Format.pp_print_list
+        ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ")
+        (pp_type_top ctx))
+      args pp_path path
+  | _ -> pp_type_simple ctx fmt ty
+
+and pp_type_simple ctx fmt ty =
   match representative ty with
   | TypeVariable tv ->
-    if tv.weak then
-      Format.fprintf fmt "'_t%d" tv.id  (* Weak variable: cannot be generalized *)
-    else
-      Format.fprintf fmt "'t%d" tv.id
-  | TypeConstructor (path, []) ->
-    pp_path fmt path
-  | TypeConstructor (path, [arg]) ->
-    Format.fprintf fmt "%a %a" pp_type_expression arg pp_path path
-  | TypeConstructor (path, args) ->
-    Format.fprintf fmt "(%a) %a"
-      (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt ", ") pp_type_expression) args
-      pp_path path
-  | TypeTuple elements ->
-    Format.fprintf fmt "(%a)"
-      (Format.pp_print_list ~pp_sep:(fun fmt () -> Format.fprintf fmt " * ") pp_type_expression) elements
-  | TypeArrow (_, arg, result) ->
-    Format.fprintf fmt "(%a -> %a)" pp_type_expression arg pp_type_expression result
-  | TypeRecord row ->
-    pp_row fmt row
-  | TypePolyVariant pv_row ->
-    pp_poly_variant_row fmt pv_row
-  | TypePackage pkg ->
-    Format.fprintf fmt "(module %a)" pp_path pkg.package_path
-  | TypeRowEmpty ->
-    Format.fprintf fmt "{}"
+    let index = Pretty_print.get_name ctx tv.id in
+    let name = Pretty_print.letter_of_int index in
+    if tv.weak then Format.fprintf fmt "'_%s" name
+    else Format.fprintf fmt "'%s" name
+  | TypeConstructor (path, []) -> pp_path fmt path
+  | TypeRecord row -> pp_row ctx fmt row
+  | TypePolyVariant pv_row -> pp_poly_variant_row ctx fmt pv_row
+  | TypePackage pkg -> Format.fprintf fmt "(module %a)" pp_path pkg.package_path
+  | TypeRowEmpty -> Format.fprintf fmt "{}"
+  | TypeArrow _ | TypeTuple _ | TypeConstructor _ ->
+    Format.fprintf fmt "(%a)" (pp_type_top ctx) ty
 
-and pp_poly_variant_row fmt pv_row =
+and pp_poly_variant_row ctx fmt pv_row =
   let open_marker = if pv_row.pv_closed then "" else "> " in
   Format.fprintf fmt "[%s" open_marker;
-  List.iteri (fun i (tag, field) ->
-    if i > 0 then Format.fprintf fmt " | ";
+  List.iteri (fun index (tag, field) ->
+    if index > 0 then Format.fprintf fmt " | ";
     match field with
     | PVFieldPresent None -> Format.fprintf fmt "`%s" tag
-    | PVFieldPresent (Some ty) -> Format.fprintf fmt "`%s of %a" tag pp_type_expression ty
-    | PVFieldAbsent -> ()  (* Don't print absent fields *)
+    | PVFieldPresent (Some ty) -> Format.fprintf fmt "`%s of %a" tag (pp_type_top ctx) ty
+    | PVFieldAbsent -> ()
   ) pv_row.pv_fields;
   begin match representative pv_row.pv_more with
   | TypeRowEmpty -> Format.fprintf fmt " ]"
@@ -285,12 +349,12 @@ and pp_poly_variant_row fmt pv_row =
   | _ -> Format.fprintf fmt " | .. ]"
   end
 
-and pp_row fmt row =
+and pp_row ctx fmt row =
   Format.fprintf fmt "{ ";
-  List.iteri (fun i (name, field) ->
-    if i > 0 then Format.fprintf fmt "; ";
+  List.iteri (fun index (name, field) ->
+    if index > 0 then Format.fprintf fmt "; ";
     match field with
-    | RowFieldPresent ty -> Format.fprintf fmt "%s : %a" name pp_type_expression ty
+    | RowFieldPresent ty -> Format.fprintf fmt "%s : %a" name (pp_type_top ctx) ty
   ) row.row_fields;
   begin match representative row.row_more with
   | TypeRowEmpty ->
@@ -304,10 +368,10 @@ and pp_row fmt row =
     else Format.fprintf fmt ".. }"
   end
 
-and pp_path fmt path =
-  Format.pp_print_string fmt (path_to_string path)
+let pp_type_expression fmt ty =
+  let ctx = Pretty_print.create () in
+  pp_type_top ctx fmt ty
 
-(* Path equality *)
 let rec path_equal p1 p2 =
   match p1, p2 with
   | PathBuiltin b1, PathBuiltin b2 -> b1 = b2
@@ -321,12 +385,16 @@ let rec path_equal p1 p2 =
 let pp_type_path = pp_path
 
 let pp_type_scheme fmt scheme =
+  let ctx = Pretty_print.create () in
   if scheme.quantified_variables = [] then
-    pp_type_expression fmt scheme.body
+    pp_type_top ctx fmt scheme.body
   else begin
     Format.fprintf fmt "forall";
-    List.iter (fun tv -> Format.fprintf fmt " 't%d" tv.id) scheme.quantified_variables;
-    Format.fprintf fmt ". %a" pp_type_expression scheme.body
+    List.iter (fun tv ->
+      let index = Pretty_print.get_name ctx tv.id in
+      Format.fprintf fmt " '%s" (Pretty_print.letter_of_int index)
+    ) scheme.quantified_variables;
+    Format.fprintf fmt ". %a" (pp_type_top ctx) scheme.body
   end
 
 let type_expression_to_string ty =

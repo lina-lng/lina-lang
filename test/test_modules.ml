@@ -158,8 +158,15 @@ end = struct
 end
 |});
   [%expect{|
-    ERROR: File "<string>", line 2, characters 0-3:
-    Type error: Module M does not match signature: Missing value: y
+    ERROR: error: Type Mismatch --> <test>:2:1
+
+       1 |
+       2 | module M : sig
+           ^^^^^^^^^^^^^^
+
+    The module `M` does not satisfy its signature constraint.
+
+    Missing value: y
     |}]
 
 let%expect_test "signature with function type" =
@@ -239,8 +246,15 @@ end
 module Result = MakeDouble(Bad)
 |});
   [%expect{|
-    ERROR: File "<string>", line 8, characters 16-31:
-    Type error: Functor argument does not match parameter: Missing value: x
+    ERROR: error: Type Mismatch --> <test>:8:17
+
+       7 | end
+       8 | module Result = MakeDouble(Bad)
+                           ^^^^^^^^^^^^^^^
+
+    The functor argument does not match the expected parameter signature.
+
+    Missing value: x
     |}]
 
 (* ==================== Open ==================== *)
@@ -274,8 +288,13 @@ let result = add 100 sub 50 30
 let _ = print result
 |});
   [%expect{|
-    ERROR: File "<string>", line 7, characters 13-30:
-    Type error: This function is applied to too many arguments (2 extra)
+    ERROR: error: Type Mismatch --> <test>:7:14
+
+       6 | open Math
+       7 | let result = add 100 sub 50 30
+                        ^^^^^^^^^^^^^^^^^
+
+    This function is applied to too many arguments (2 extra)
     |}]
 
 let%expect_test "open nested module" =
@@ -407,8 +426,13 @@ let%expect_test "unbound module error" =
 let x = NonExistent.value
 |});
   [%expect{|
-    ERROR: File "<string>", line 2, characters 8-19:
-    Type error: Unbound constructor: NonExistent
+    ERROR: error: Unbound Constructor --> <test>:2:9
+
+       1 |
+       2 | let x = NonExistent.value
+                   ^^^^^^^^^^^
+
+    We couldn't find a constructor named `NonExistent`
     |}]
 
 let%expect_test "value not found in module" =
@@ -419,8 +443,13 @@ end
 let y = M.z
 |});
   [%expect{|
-    ERROR: File "<string>", line 5, characters 8-11:
-    Type error: Value or constructor z not found in module M
+    ERROR: error: Type Mismatch --> <test>:5:9
+
+       4 | end
+       5 | let y = M.z
+                   ^^^
+
+    Value or constructor z not found in module M
     |}]
 
 let%expect_test "cannot open functor" =
@@ -431,8 +460,15 @@ end
 open F
 |});
   [%expect{|
-    ERROR: File "<string>", line 5, characters 0-6:
-    Type error: Cannot open a functor
+    ERROR: error: Type Mismatch --> <test>:5:1
+
+       4 | end
+       5 | open F
+           ^^^^^^
+
+    We can't open a functor directly.
+
+    Functors must be applied to an argument before their contents can be accessed. Try `open F(SomeModule)` instead.
     |}]
 
 let%expect_test "signature type mismatch" =
@@ -442,9 +478,12 @@ module M : sig val x : int end = struct
 end
 |});
   [%expect{|
-    ERROR: Type error: Type mismatch: expected string, got int
-    Expected: string
-    Actual: int
+    ERROR: error: Type Mismatch
+
+
+    Type mismatch: expected string, got int
+
+    note: To convert an int to a string, use `string_of_int value`
     |}]
 
 let%expect_test "nested path module not found" =
@@ -457,8 +496,13 @@ end
 let y = Outer.NonExistent.x
 |});
   [%expect{|
-    ERROR: File "<string>", line 7, characters 8-27:
-    Type error: Module NonExistent not found in signature
+    ERROR: error: Type Mismatch --> <test>:7:9
+
+       6 | end
+       7 | let y = Outer.NonExistent.x
+                   ^^^^^^^^^^^^^^^^^^^
+
+    Module NonExistent not found in signature
     |}]
 
 let%expect_test "include non-module" =
@@ -468,8 +512,13 @@ module M = struct
 end
 |});
   [%expect{|
-    ERROR: File "<string>", line 3, characters 10-12:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:3:11
+
+       2 | module M = struct
+       3 |   include 42
+                     ^^
+
+    Syntax error
     |}]
 
 let%expect_test "functor application with wrong argument type" =
@@ -480,9 +529,12 @@ end
 module M = F(struct let x = "hello" end)
 |});
   [%expect{|
-    ERROR: Type error: Type mismatch: expected string, got int
-    Expected: string
-    Actual: int
+    ERROR: error: Type Mismatch
+
+
+    Type mismatch: expected string, got int
+
+    note: To convert an int to a string, use `string_of_int value`
     |}]
 
 (* ==================== Edge Cases ==================== *)
@@ -661,8 +713,13 @@ module M : NONEXISTENT = struct
 end
 |});
   [%expect{|
-    ERROR: File "<string>", line 2, characters 11-22:
-    Type error: Unbound module type: NONEXISTENT
+    ERROR: error: Unbound Module Type --> <test>:2:12
+
+       1 |
+       2 | module M : NONEXISTENT = struct
+                      ^^^^^^^^^^^
+
+    Unbound module type: NONEXISTENT
     |}]
 
 let%expect_test "module type reuse" =
@@ -734,8 +791,13 @@ module Bad : M.NOPE = struct
 end
 |});
   [%expect{|
-    ERROR: File "<string>", line 5, characters 13-19:
-    Type error: Module type NOPE not found in module
+    ERROR: error: Type Mismatch --> <test>:5:14
+
+       4 | end
+       5 | module Bad : M.NOPE = struct
+                        ^^^^^^
+
+    Module type NOPE not found in module
     |}]
 
 (* ==================== Functor Signature Matching ==================== *)
@@ -753,8 +815,15 @@ module Result = MyFunc(struct let x = 41 end)
 let _ = print Result.y
 |});
   [%expect{|
-    ERROR: File "<string>", line 6, characters 0-3:
-    Type error: Module MyFunc does not match signature: module type mismatch
+    ERROR: error: Type Mismatch --> <test>:6:1
+
+       5 |
+       6 | module MyFunc : F = functor (X : IN) -> struct
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    The module `MyFunc` does not satisfy its signature constraint.
+
+    module type mismatch
     |}]
 
 let%expect_test "functor result covariance - impl has more" =
@@ -772,8 +841,15 @@ module Result = MyFunc(struct let x = 42 end)
 let _ = print Result.y
 |});
   [%expect{|
-    ERROR: File "<string>", line 7, characters 0-3:
-    Type error: Module MyFunc does not match signature: module type mismatch
+    ERROR: error: Type Mismatch --> <test>:7:1
+
+       6 | (* Implementation returns more than signature requires - OK *)
+       7 | module MyFunc : F = functor (X : IN) -> struct
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    The module `MyFunc` does not satisfy its signature constraint.
+
+    module type mismatch
     |}]
 
 let%expect_test "functor result covariance - impl missing value" =
@@ -788,8 +864,15 @@ module MyFunc : F = functor (X : IN) -> struct
 end
 |});
   [%expect{|
-    ERROR: File "<string>", line 7, characters 0-3:
-    Type error: Module MyFunc does not match signature: module type mismatch
+    ERROR: error: Type Mismatch --> <test>:7:1
+
+       6 | (* Implementation missing required value - ERROR *)
+       7 | module MyFunc : F = functor (X : IN) -> struct
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    The module `MyFunc` does not satisfy its signature constraint.
+
+    module type mismatch
     |}]
 
 let%expect_test "functor param contravariance - impl accepts more" =
@@ -807,8 +890,15 @@ module R = MyFunc(struct let x = 10 let y = 20 end)
 let _ = print R.result
 |});
   [%expect{|
-    ERROR: File "<string>", line 8, characters 0-3:
-    Type error: Module MyFunc does not match signature: module type mismatch
+    ERROR: error: Type Mismatch --> <test>:8:1
+
+       7 | module type F = functor (X : BIG) -> sig val result : int end
+       8 | module MyFunc : F = functor (X : SMALL) -> struct
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    The module `MyFunc` does not satisfy its signature constraint.
+
+    module type mismatch
     |}]
 
 let%expect_test "functor param contravariance - impl too strict" =
@@ -824,8 +914,15 @@ module MyFunc : F = functor (X : BIG) -> struct
 end
 |});
   [%expect{|
-    ERROR: File "<string>", line 8, characters 0-3:
-    Type error: Module MyFunc does not match signature: module type mismatch
+    ERROR: error: Type Mismatch --> <test>:8:1
+
+       7 | module type F = functor (X : SMALL) -> sig val result : int end
+       8 | module MyFunc : F = functor (X : BIG) -> struct
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    The module `MyFunc` does not satisfy its signature constraint.
+
+    module type mismatch
     |}]
 
 (* ==================== With Constraints ==================== *)
@@ -848,8 +945,13 @@ end
 module type S2 = S with type t = int
 |});
   [%expect{|
-    ERROR: File "<string>", line 5, characters 17-36:
-    Type error: Type t not found in signature
+    ERROR: error: Type Mismatch --> <test>:5:18
+
+       4 | end
+       5 | module type S2 = S with type t = int
+                            ^^^^^^^^^^^^^^^^^^^
+
+    Type t not found in signature
     |}]
 
 let%expect_test "with type constraint - parameterized type" =
@@ -871,8 +973,13 @@ end
 module type S2 = S with type t = int
 |});
   [%expect{|
-    ERROR: File "<string>", line 6, characters 17-36:
-    Type error: Type t has 1 parameters but constraint has 0
+    ERROR: error: Type Mismatch --> <test>:6:18
+
+       5 | end
+       6 | module type S2 = S with type t = int
+                            ^^^^^^^^^^^^^^^^^^^
+
+    Type t has 1 parameters but constraint has 0
     |}]
 
 (* ==================== Destructive Substitution ==================== *)
@@ -896,8 +1003,13 @@ end
 module type S2 = S with type t := int
 |});
   [%expect{|
-    ERROR: File "<string>", line 5, characters 17-37:
-    Type error: Type t not found in signature
+    ERROR: error: Type Mismatch --> <test>:5:18
+
+       4 | end
+       5 | module type S2 = S with type t := int
+                            ^^^^^^^^^^^^^^^^^^^^
+
+    Type t not found in signature
     |}]
 
 let%expect_test "destructive substitution - wrong parameter count" =
@@ -909,8 +1021,13 @@ end
 module type S2 = S with type t := int
 |});
   [%expect{|
-    ERROR: File "<string>", line 6, characters 17-37:
-    Type error: Type t has 1 parameters but constraint has 0
+    ERROR: error: Type Mismatch --> <test>:6:18
+
+       5 | end
+       6 | module type S2 = S with type t := int
+                            ^^^^^^^^^^^^^^^^^^^^
+
+    Type t has 1 parameters but constraint has 0
     |}]
 
 (* ==================== Module Binding Inter-Reference Tests ==================== *)
@@ -984,8 +1101,15 @@ type t = private | A | B of int
 let x = A
 |});
   [%expect{|
-    ERROR: File "<string>", line 3, characters 8-9:
-    Type error: Cannot construct value of private type t
+    ERROR: error: Type Mismatch --> <test>:3:9
+
+       2 | type t = private | A | B of int
+       3 | let x = A
+                   ^
+
+    The type `t` is private and cannot be constructed outside its defining module.
+
+    Private types can be pattern matched but not created directly.
     |}]
 
 let%expect_test "private type prevents construction with argument" =
@@ -994,8 +1118,15 @@ type t = private | A | B of int
 let x = B 42
 |});
   [%expect{|
-    ERROR: File "<string>", line 3, characters 8-12:
-    Type error: Cannot construct value of private type t
+    ERROR: error: Type Mismatch --> <test>:3:9
+
+       2 | type t = private | A | B of int
+       3 | let x = B 42
+                   ^^^^
+
+    The type `t` is private and cannot be constructed outside its defining module.
+
+    Private types can be pattern matched but not created directly.
     |}]
 
 let%expect_test "private type allows pattern matching" =

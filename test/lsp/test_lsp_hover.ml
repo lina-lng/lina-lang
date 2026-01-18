@@ -29,7 +29,11 @@ let%expect_test "hover on string literal" =
     match result with
     | Some r -> print_endline r.contents
     | None -> print_endline "None");
-  [%expect {| None |}]
+  [%expect {|
+    ```lina
+    string
+    ```
+    |}]
 
 let%expect_test "hover on boolean" =
   reset ();

@@ -584,54 +584,6 @@ let run_cmd =
   let info = Cmd.info "run" ~doc in
   Cmd.v info Term.(ret (const run_cmd_impl $ verbose_arg $ warning_spec_arg $ warn_error_arg))
 
-(** {1 Explain Command} *)
-
-let explain_cmd_impl color code_str =
-  match Common.Error_code.of_string code_str with
-  | None ->
-    Printf.eprintf "Unknown error code: %s\n" code_str;
-    Printf.eprintf "Error codes have the format E0001 (errors) or W0001 (warnings).\n";
-    `Error (false, "Unknown error code")
-  | Some code ->
-    match Driver.Explain.get_explanation code with
-    | Some explanation ->
-      let use_color = match color with
-        | Always -> true
-        | Never -> false
-        | Auto ->
-          let term = Driver.Diagnostic_render.detect_terminal Driver.Diagnostic_render.Auto in
-          term.use_color
-      in
-      print_endline (Driver.Explain.format_explanation ~color:use_color code explanation);
-      `Ok ()
-    | None ->
-      let description = Common.Error_code.description code in
-      let code_name = Common.Error_code.to_string code in
-      Printf.printf "%s: %s\n\n" code_name description;
-      if Common.Error_code.is_error code then
-        Printf.printf "This is a compiler error that prevents compilation.\n"
-      else
-        Printf.printf "This is a warning that may indicate a potential issue.\n";
-      `Ok ()
-
-let explain_code_arg =
-  let doc = "The error or warning code to explain (e.g., E0001, W0002)." in
-  Arg.(required & pos 0 (some string) None & info [] ~docv:"CODE" ~doc)
-
-let explain_cmd =
-  let doc = "Explain an error or warning code" in
-  let man = [
-    `S Manpage.s_description;
-    `P "Shows detailed documentation for a specific error or warning code. \
-        Error codes start with 'E' (e.g., E0001) and warning codes start with \
-        'W' (e.g., W0001).";
-    `S Manpage.s_examples;
-    `Pre "  lina explain E0001";
-    `Pre "  lina explain W0002";
-  ] in
-  let info = Cmd.info "explain" ~doc ~man in
-  Cmd.v info Term.(ret (const explain_cmd_impl $ color_arg $ explain_code_arg))
-
 (** {1 REPL Command} *)
 
 let repl_cmd_impl () =
@@ -680,7 +632,6 @@ let default_cmd =
     `P "$(b,lina init) - Create a new project";
     `P "$(b,lina format) - Format source files";
     `P "$(b,lina clean) - Remove build artifacts";
-    `P "$(b,lina explain) - Explain an error code";
     `S "PROJECT STRUCTURE";
     `P "A Lina project has the following structure:";
     `Pre "  myproject/\n  ├── lina.toml      # Project configuration\n  ├── src/           # Source files\n  │   └── main.lina\n  └── _build/        # Compiled output";
@@ -696,7 +647,6 @@ let default_cmd =
     init_cmd;
     format_cmd;
     clean_cmd;
-    explain_cmd;
   ]
 
 let () = exit (Cmd.eval default_cmd)

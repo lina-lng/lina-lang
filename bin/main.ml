@@ -63,16 +63,6 @@ let relaxed_arg =
 
 (** {1 Compile Command} *)
 
-let to_render_format = function
-  | Human -> Driver.Diagnostic_render.Human
-  | Short -> Driver.Diagnostic_render.Short
-  | Json -> Driver.Diagnostic_render.Json
-
-let to_color_choice = function
-  | Auto -> Driver.Diagnostic_render.Auto
-  | Always -> Driver.Diagnostic_render.Always
-  | Never -> Driver.Diagnostic_render.Never
-
 (** Parse warning specs and build configuration. Returns error message on failure.
     Strict mode (unused code = error) is the default. Use relaxed=true to opt out. *)
 let parse_warning_config ~relaxed warning_specs warn_error_spec =
@@ -88,11 +78,7 @@ let parse_warning_config ~relaxed warning_specs warn_error_spec =
       else
         Common.Warning_config.parse_spec config (spec ^ "=deny")
 
-let compile_single options error_fmt color input_file output_file =
-  let sources = Driver.Diagnostic_render.create_source_cache () in
-  (* Load source file for error display *)
-  let _ = Driver.Diagnostic_render.load_source_file sources input_file in
-
+let compile_single options _error_fmt _color input_file output_file =
   match Driver.Pipeline.compile_file options input_file with
   | Ok lua_code ->
     begin match output_file with
@@ -106,23 +92,11 @@ let compile_single options error_fmt color input_file output_file =
       `Ok ()
     end
   | Error msg ->
-    (* Convert to diagnostic and render with new system *)
-    let terminal = Driver.Diagnostic_render.detect_terminal (to_color_choice color) in
-    let format = to_render_format error_fmt in
-    let diag = Common.Compiler_error.(
-      error ~code:Common.Error_code.e_type_mismatch msg
-      |> with_primary_label ~span:Common.Location.none
-    ) in
-    let rendered = Driver.Diagnostic_render.render_diagnostic
-      ~format ~terminal ~sources diag
-    in
-    Printf.eprintf "%s\n" rendered;
+    (* Pipeline already renders diagnostics, just print the message *)
+    Printf.eprintf "%s" msg;
     `Error (false, "Compilation failed")
 
-let compile_multi options error_fmt color input_files output_dir =
-  let sources = Driver.Diagnostic_render.create_source_cache () in
-  (* Load all source files for error display *)
-  List.iter (fun f -> ignore (Driver.Diagnostic_render.load_source_file sources f)) input_files;
+let compile_multi options _error_fmt _color input_files output_dir =
 
   let project_options = Driver.Multifile.{
     output_dir;
@@ -153,16 +127,8 @@ let compile_multi options error_fmt color input_files output_dir =
       `Ok ()
     end
   | Error msg ->
-    let terminal = Driver.Diagnostic_render.detect_terminal (to_color_choice color) in
-    let format = to_render_format error_fmt in
-    let diag = Common.Compiler_error.(
-      error ~code:Common.Error_code.e_type_mismatch msg
-      |> with_primary_label ~span:Common.Location.none
-    ) in
-    let rendered = Driver.Diagnostic_render.render_diagnostic
-      ~format ~terminal ~sources diag
-    in
-    Printf.eprintf "%s\n" rendered;
+    (* Pipeline already renders diagnostics, just print the message *)
+    Printf.eprintf "%s" msg;
     `Error (false, "Compilation failed")
 
 let compile input_file output_file multi_files output_dir error_fmt color
@@ -318,55 +284,6 @@ let format_cmd =
   Cmd.v info Term.(ret (const format_file $ format_input_file $
                         format_in_place $ format_check $ format_width))
 
-(** {1 Explain Command} *)
-
-let explain_code color code_str =
-  match Common.Error_code.of_string code_str with
-  | None ->
-    Printf.eprintf "Unknown error code: %s\n" code_str;
-    Printf.eprintf "Error codes have the format E0001 (errors) or W0001 (warnings).\n";
-    `Error (false, "Unknown error code")
-  | Some code ->
-    match Driver.Explain.get_explanation code with
-    | Some explanation ->
-      let use_color = match color with
-        | Always -> true
-        | Never -> false
-        | Auto ->
-          let term = Driver.Diagnostic_render.detect_terminal Driver.Diagnostic_render.Auto in
-          term.use_color
-      in
-      print_endline (Driver.Explain.format_explanation ~color:use_color code explanation);
-      `Ok ()
-    | None ->
-      (* Fallback for codes without detailed explanations *)
-      let description = Common.Error_code.description code in
-      let code_name = Common.Error_code.to_string code in
-      Printf.printf "%s: %s\n\n" code_name description;
-      if Common.Error_code.is_error code then
-        Printf.printf "This is a compiler error that prevents compilation.\n"
-      else
-        Printf.printf "This is a warning that may indicate a potential issue.\n";
-      `Ok ()
-
-let explain_code_arg =
-  let doc = "The error or warning code to explain (e.g., E0001, W0002)." in
-  Arg.(required & pos 0 (some string) None & info [] ~docv:"CODE" ~doc)
-
-let explain_cmd =
-  let doc = "Explain an error or warning code" in
-  let man = [
-    `S Manpage.s_description;
-    `P "Shows detailed documentation for a specific error or warning code. \
-        Error codes start with 'E' (e.g., E0001) and warning codes start with \
-        'W' (e.g., W0001).";
-    `S Manpage.s_examples;
-    `Pre "  linac explain E0001";
-    `Pre "  linac explain W0002";
-  ] in
-  let info = Cmd.info "explain" ~doc ~man in
-  Cmd.v info Term.(ret (const explain_code $ color_arg $ explain_code_arg))
-
 (** {1 Main Command Group} *)
 
 let default_cmd =
@@ -377,7 +294,6 @@ let default_cmd =
     `S Manpage.s_commands;
     `P "Use $(b,linac compile) to compile Lina source to Lua.";
     `P "Use $(b,linac format) to format Lina source code.";
-    `P "Use $(b,linac explain) to get help with error codes.";
     `S "ERROR FORMATS";
     `P "The --error-format flag controls how errors are displayed:";
     `I ("$(b,human)", "Colored, formatted output for terminals (default)");
@@ -386,6 +302,6 @@ let default_cmd =
   ] in
   let info = Cmd.info "linac" ~version:"0.1.0" ~doc ~man in
   let default = Term.(ret (const (`Help (`Pager, None)))) in
-  Cmd.group info ~default [compile_cmd; format_cmd; explain_cmd]
+  Cmd.group info ~default [compile_cmd; format_cmd]
 
 let () = exit (Cmd.eval default_cmd)

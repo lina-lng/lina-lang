@@ -44,6 +44,12 @@ open Common
     @raise Type_error if not found *)
 val find_value_exn : Location.t -> string -> Environment.t -> Environment.value_binding
 
+(** [find_value_exn_with_suggestions loc name env] finds a value binding or raises
+    with "Did you mean?" suggestions.
+
+    Uses the environment to suggest similar variable names on error. *)
+val find_value_exn_with_suggestions : Location.t -> string -> Environment.t -> Environment.value_binding
+
 (** [find_value_opt name env] finds a value binding if it exists.
 
     Alias for {!Environment.find_value}. *)
@@ -54,6 +60,10 @@ val find_value_opt : string -> Environment.t -> Environment.value_binding option
 (** [find_type_exn loc name env] finds a type declaration or raises. *)
 val find_type_exn : Location.t -> string -> Environment.t -> Types.type_declaration
 
+(** [find_type_exn_with_suggestions loc name env] finds a type declaration or raises
+    with "Did you mean?" suggestions. *)
+val find_type_exn_with_suggestions : Location.t -> string -> Environment.t -> Types.type_declaration
+
 (** [find_type_opt name env] finds a type declaration if it exists. *)
 val find_type_opt : string -> Environment.t -> Types.type_declaration option
 
@@ -62,6 +72,10 @@ val find_type_opt : string -> Environment.t -> Types.type_declaration option
 (** [find_constructor_exn loc name env] finds a constructor or raises. *)
 val find_constructor_exn : Location.t -> string -> Environment.t -> Types.constructor_info
 
+(** [find_constructor_exn_with_suggestions loc name env] finds a constructor or raises
+    with "Did you mean?" suggestions. *)
+val find_constructor_exn_with_suggestions : Location.t -> string -> Environment.t -> Types.constructor_info
+
 (** [find_constructor_opt name env] finds a constructor if it exists. *)
 val find_constructor_opt : string -> Environment.t -> Types.constructor_info option
 
@@ -69,6 +83,10 @@ val find_constructor_opt : string -> Environment.t -> Types.constructor_info opt
 
 (** [find_module_exn loc name env] finds a module binding or raises. *)
 val find_module_exn : Location.t -> string -> Environment.t -> Module_types.module_binding
+
+(** [find_module_exn_with_suggestions loc name env] finds a module binding or raises
+    with "Did you mean?" suggestions. *)
+val find_module_exn_with_suggestions : Location.t -> string -> Environment.t -> Module_types.module_binding
 
 (** [find_module_opt name env] finds a module binding if it exists. *)
 val find_module_opt : string -> Environment.t -> Module_types.module_binding option
@@ -79,6 +97,10 @@ val find_module_opt : string -> Environment.t -> Module_types.module_binding opt
 
     Raises if the module type is not found OR if it is abstract (no definition). *)
 val find_module_type_exn : Location.t -> string -> Environment.t -> Module_types.module_type
+
+(** [find_module_type_exn_with_suggestions loc name env] finds a module type definition
+    or raises with "Did you mean?" suggestions. *)
+val find_module_type_exn_with_suggestions : Location.t -> string -> Environment.t -> Module_types.module_type
 
 (** [find_module_type_opt name env] returns the module type if found and concrete. *)
 val find_module_type_opt : string -> Environment.t -> Module_types.module_type option

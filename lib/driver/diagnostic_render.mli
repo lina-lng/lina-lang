@@ -5,27 +5,17 @@
     - Short one-line format
     - JSON for machine consumption
 
-    The human-readable format combines Rust-style structure with Elm-style
-    conversational explanations:
+    The human-readable format shows error location and code context:
 
     {v
-    error[E0001]: type mismatch
-      --> src/main.lina:23:15
-       |
+    error[E0001] --> src/main.lina:23:15
+
+    22 |   let id = get_user_id()
     23 |   process_user(id, "admin")
        |                    ^^^^^^^
-       |
-    I found a type mismatch in this function call.
+       |                    expected `Role`, found `string`
 
-    This argument has type:
-
-        string
-
-    But `process_user` expects:
-
-        Role
-
-    Hint: Did you mean to use `Role.Admin`?
+    note: To convert a string to a Role, use `Role.of_string value`
     v} *)
 
 (** {1 Output Format} *)
@@ -46,9 +36,8 @@ type color_choice =
 
 (** Terminal capabilities for rendering. *)
 type terminal_config = {
-  use_color : bool;   (** Whether to emit ANSI color codes *)
-  width : int;        (** Terminal width for wrapping *)
-  use_unicode : bool; (** Whether to use Unicode box drawing *)
+  use_color : bool;  (** Whether to emit ANSI color codes *)
+  width : int;       (** Terminal width for wrapping *)
 }
 
 (** [detect_terminal color_choice] detects terminal capabilities.

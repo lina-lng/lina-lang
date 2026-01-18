@@ -296,6 +296,14 @@ val check_existential_escape_or_error :
 
 (** {1 Error Helpers} *)
 
+(** Kind of unbound entity for error messages. *)
+type unbound_kind =
+  | UnboundVariable
+  | UnboundConstructor
+  | UnboundModule
+  | UnboundType
+  | UnboundModuleType
+
 (** [error_unbound_variable loc name] raises a type error for unbound variable.
 
     @param loc Source location for error reporting
@@ -330,6 +338,54 @@ val error_unbound_type : Location.t -> string -> 'a
     @param name The unbound module type name
     @raise Type_error always *)
 val error_unbound_module_type : Location.t -> string -> 'a
+
+(** {2 Enhanced Error Functions with Suggestions}
+
+    These functions use the environment to provide "Did you mean?" suggestions
+    when the user makes a typo. They produce human-oriented error messages. *)
+
+(** [error_unbound_variable_with_env ~env loc name] raises a type error with suggestions.
+
+    Uses the environment to find similar variable names and suggests them
+    in the error message.
+
+    @param env The typing environment (used for suggestion candidates)
+    @param loc Source location for error reporting
+    @param name The unbound variable name
+    @raise Type_error always *)
+val error_unbound_variable_with_env : env:Environment.t -> Location.t -> string -> 'a
+
+(** [error_unbound_constructor_with_env ~env loc name] raises a type error with suggestions.
+
+    @param env The typing environment (used for suggestion candidates)
+    @param loc Source location for error reporting
+    @param name The unbound constructor name
+    @raise Type_error always *)
+val error_unbound_constructor_with_env : env:Environment.t -> Location.t -> string -> 'a
+
+(** [error_unbound_module_with_env ~env loc name] raises a type error with suggestions.
+
+    @param env The typing environment (used for suggestion candidates)
+    @param loc Source location for error reporting
+    @param name The unbound module name
+    @raise Type_error always *)
+val error_unbound_module_with_env : env:Environment.t -> Location.t -> string -> 'a
+
+(** [error_unbound_type_with_env ~env loc name] raises a type error with suggestions.
+
+    @param env The typing environment (used for suggestion candidates)
+    @param loc Source location for error reporting
+    @param name The unbound type name
+    @raise Type_error always *)
+val error_unbound_type_with_env : env:Environment.t -> Location.t -> string -> 'a
+
+(** [error_unbound_module_type_with_env ~env loc name] raises a type error with suggestions.
+
+    @param env The typing environment (used for suggestion candidates)
+    @param loc Source location for error reporting
+    @param name The unbound module type name
+    @raise Type_error always *)
+val error_unbound_module_type_with_env : env:Environment.t -> Location.t -> string -> 'a
 
 (** {1 Label Conversion and Formatting} *)
 

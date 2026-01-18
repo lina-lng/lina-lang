@@ -14,7 +14,6 @@ let default_options = {
   warning_config = Common.Warning_config.default;
 }
 
-(** Simple pretty-printer for typed AST *)
 let dump_typed_structure typed_ast =
   let open Typing.Typed_tree in
   let indent n = String.make (n * 2) ' ' in
@@ -88,7 +87,6 @@ let dump_typed_structure typed_ast =
   in
   String.concat "\n\n" (List.map dump_item typed_ast)
 
-(** Simple pretty-printer for Lambda IR *)
 let dump_lambda_ir lambdas =
   let indent n = String.make (n * 2) ' ' in
   let rec dump depth = function
@@ -152,9 +150,72 @@ let dump_lambda_ir lambdas =
   in
   String.concat "\n\n" (List.map (dump 0) lambdas)
 
-let compile_string options _filename source =
+let conversion_hints = [
+  ("int", "string"), "int_of_string value";
+  ("string", "int"), "string_of_int value";
+  ("float", "string"), "float_of_string value";
+  ("string", "float"), "string_of_float value";
+  ("int", "float"), "int_of_float value` (truncates toward zero)";
+  ("float", "int"), "float_of_int value";
+  ("bool", "string"), "string_of_bool value";
+  ("string", "bool"), "bool_of_string value";
+]
+
+let conversion_hint ~expected ~actual =
+  let open Typing.Type_explain in
+  match builtin_machine_name expected, builtin_machine_name actual with
+  | Some expected_name, Some actual_name ->
+    List.assoc_opt (expected_name, actual_name) conversion_hints
+    |> Option.map (fun hint ->
+         Printf.sprintf "To convert %s %s to %s %s, use `%s`"
+           (article_for actual_name) actual_name
+           (article_for expected_name) expected_name hint)
+  | _ -> None
+
+(** Create a diagnostic for a unification error with rich type information. *)
+let diagnostic_of_unification_error ~expected ~actual ~location ~message ~trace =
+  let expected_str = Typing.Types.type_expression_to_string expected in
+  let actual_str = Typing.Types.type_expression_to_string actual in
+  let trace_str = Typing.Unification.format_trace trace in
+
+  let labels =
+    if Location.is_none location then []
+    else [{
+      Compiler_error.label_span = location;
+      label_message = Some (Printf.sprintf "expected `%s`, found `%s`" expected_str actual_str);
+      is_primary = true;
+    }]
+  in
+
+  let conversion = conversion_hint ~expected ~actual in
+
+  (* Build notes: trace (if any), conversion hint (if any) *)
+  let notes =
+    (if trace_str <> "" then [String.trim trace_str] else []) @
+    (match conversion with Some hint -> [hint] | None -> [])
+  in
+
+  Compiler_error.{
+    severity = Error;
+    code = Some Error_code.e_type_mismatch;
+    message;
+    labels;
+    notes;
+    suggestions = [];
+  }
+
+let compile_string options filename source =
+  let sources = Diagnostic_render.create_source_cache () in
+  Diagnostic_render.add_source sources ~path:filename ~content:source;
+  let terminal = Diagnostic_render.detect_terminal Diagnostic_render.Auto in
+
+  let render_diagnostic diag =
+    Diagnostic_render.render_diagnostic
+      ~format:Diagnostic_render.Human ~terminal ~sources diag
+  in
+
   try
-    let ast = Parsing.Parse.structure_from_string source in
+    let ast = Parsing.Parse.structure_from_string ~filename source in
     if options.dump_ast then begin
       Printf.eprintf "=== AST ===\n%s\n\n"
         (Parsing.Syntax_tree.show_structure ast)
@@ -179,47 +240,28 @@ let compile_string options _filename source =
     let lua_ast = Lua.Codegen.generate lambda in
     let lua_code = Lua.Printer.print_chunk lua_ast in
 
-    (* Process type inference warnings *)
+    (* Process type inference warnings with rich rendering *)
     let type_warnings = Compiler_error.get_warnings () in
     let has_error = ref false in
 
-    List.iter (fun w ->
-      let code = Compiler_error.warning_code w in
+    List.iter (fun warning_info ->
+      let code = Compiler_error.warning_code warning_info in
       if Common.Warning_config.should_report options.warning_config code then begin
         let is_error = Common.Warning_config.is_error options.warning_config code in
-        if is_error then begin
-          has_error := true;
-          Printf.eprintf "%s\n" (Compiler_error.report_warning_as_error_to_string w)
-        end else
-          Printf.eprintf "%s\n" (Compiler_error.report_warning_to_string w)
+        let diag = Compiler_error.diagnostic_of_warning warning_info in
+        let diag =
+          if is_error then { diag with Compiler_error.severity = Compiler_error.Error }
+          else diag
+        in
+        Printf.eprintf "%s" (render_diagnostic diag);
+        if is_error then has_error := true
       end
     ) type_warnings;
 
-    (* Process analysis diagnostics (unused code, dead code, etc.) *)
-    List.iter (fun (diag : Compiler_error.diagnostic) ->
-      let severity_str = match diag.severity with
-        | Compiler_error.Error -> "error"
-        | Compiler_error.Warning -> "warning"
-        | Compiler_error.Info -> "info"
-        | Compiler_error.Hint -> "hint"
-      in
-      let code_str = match diag.code with
-        | Some code -> Error_code.to_string code
-        | None -> "unknown"
-      in
-      let primary_label =
-        List.find_opt (fun l -> l.Compiler_error.is_primary) diag.labels
-      in
-      let loc_str = match primary_label with
-        | Some label when not (Location.is_none label.label_span) ->
-          let loc = label.label_span in
-          Printf.sprintf "%s:%d:%d: "
-            loc.start_pos.filename loc.start_pos.line loc.start_pos.column
-        | _ -> ""
-      in
-      Printf.eprintf "%s%s[%s]: %s\n" loc_str severity_str code_str diag.message;
-
-      if diag.severity = Compiler_error.Error then
+    (* Process analysis diagnostics with rich rendering *)
+    List.iter (fun diag ->
+      Printf.eprintf "%s" (render_diagnostic diag);
+      if diag.Compiler_error.severity = Compiler_error.Error then
         has_error := true
     ) analysis_diagnostics;
 
@@ -229,22 +271,12 @@ let compile_string options _filename source =
       Ok lua_code
   with
   | Compiler_error.Error err ->
-    Error (Compiler_error.report_to_string err)
+    let diag = Compiler_error.diagnostic_of_error err in
+    Error (render_diagnostic diag)
+
   | Typing.Unification.Unification_error { expected; actual; location; message; trace } ->
-    let loc_str =
-      if Location.is_none location then ""
-      else Printf.sprintf "File \"%s\", line %d, characters %d-%d:\n"
-        location.start_pos.filename
-        location.start_pos.line
-        location.start_pos.column
-        location.end_pos.column
-    in
-    let trace_str = Typing.Unification.format_trace trace in
-    Error (Printf.sprintf "%sType error: %s\nExpected: %s\nActual: %s%s"
-      loc_str message
-      (Typing.Types.type_expression_to_string expected)
-      (Typing.Types.type_expression_to_string actual)
-      trace_str)
+    let diag = diagnostic_of_unification_error ~expected ~actual ~location ~message ~trace in
+    Error (render_diagnostic diag)
 
 let compile_file options filename =
   try

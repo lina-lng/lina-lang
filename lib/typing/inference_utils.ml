@@ -1,7 +1,3 @@
-(** Shared utilities for type inference.
-
-    See {!Inference_utils} for documentation. *)
-
 open Common
 open Parsing.Syntax_tree
 open Types
@@ -28,11 +24,15 @@ let check_constructor_arity loc name ~has_arg ~expects_arg =
   | false, false -> ()
   | true, true -> ()
   | true, false ->
-    Compiler_error.type_error loc
-      (Printf.sprintf "Constructor %s does not take an argument" name)
+    Compiler_error.type_error ~code:Error_code.e_arity_mismatch loc
+      (Printf.sprintf "The constructor `%s` doesn't take any arguments, \
+                       but we found one here.\n\n\
+                       Use just `%s` without an argument." name name)
   | false, true ->
-    Compiler_error.type_error loc
-      (Printf.sprintf "Constructor %s requires an argument" name)
+    Compiler_error.type_error ~code:Error_code.e_arity_mismatch loc
+      (Printf.sprintf "The constructor `%s` requires an argument, \
+                       but none was provided.\n\n\
+                       Use `%s value` with an appropriate value." name name)
 
 (** {1 Module Access Validation} *)
 
@@ -40,19 +40,25 @@ let ensure_module_accessible loc (mty : Module_types.module_type) =
   match mty with
   | Module_types.ModTypeSig _ -> ()
   | Module_types.ModTypeFunctor _ ->
-    Compiler_error.type_error loc "Cannot access value in a functor"
+    Compiler_error.type_error loc
+      "This is a functor, not a regular module. You need to apply it to an \
+       argument before accessing its contents.\n\n\
+       Use `Functor(Argument).value` to access values."
   | Module_types.ModTypeIdent _ ->
-    Compiler_error.type_error loc "Cannot access value in an abstract module type"
+    Compiler_error.type_error loc
+      "This module type is abstract, so we can't access its contents directly.\n\n\
+       The concrete implementation is hidden."
 
 let error_cannot_access_in_module_type loc mty action =
   let kind_desc = match mty with
-    | Module_types.ModTypeFunctor _ -> "functor type"
-    | Module_types.ModTypeIdent _ -> "abstract module type"
+    | Module_types.ModTypeFunctor _ -> "a functor"
+    | Module_types.ModTypeIdent _ -> "an abstract module type"
     | Module_types.ModTypeSig _ ->
         Compiler_error.internal_error "error_cannot_access_in_module_type called on signature"
   in
   Compiler_error.type_error loc
-    (Printf.sprintf "Cannot %s in %s" action kind_desc)
+    (Printf.sprintf "We can't %s because this is %s.\n\n\
+                     The contents are not directly accessible." action kind_desc)
 
 (** {1 Value Restriction and Generalization} *)
 
@@ -143,8 +149,69 @@ let unbound_kind_to_string = function
   | UnboundType -> "type"
   | UnboundModuleType -> "module type"
 
+(** Built-in type names that are always available. *)
+let builtin_type_names = ["int"; "float"; "string"; "bool"; "unit"; "ref"]
+
+(** Collect candidate names from environment for a given kind. *)
+let collect_candidates env = function
+  | UnboundVariable ->
+    Environment.fold_values (fun name _ _ names -> name :: names) env []
+  | UnboundConstructor ->
+    Environment.fold_constructors (fun name _ names -> name :: names) env []
+  | UnboundModule ->
+    Environment.fold_modules (fun name _ names -> name :: names) env []
+  | UnboundType ->
+    let user_types = Environment.fold_types (fun name _ names -> name :: names) env [] in
+    builtin_type_names @ user_types
+  | UnboundModuleType ->
+    []
+
+(** Human-readable description for unbound entity error. *)
+let unbound_message kind name =
+  match kind with
+  | UnboundVariable ->
+    Printf.sprintf "We couldn't find a variable named `%s`" name
+  | UnboundConstructor ->
+    Printf.sprintf "We couldn't find a constructor named `%s`" name
+  | UnboundModule ->
+    Printf.sprintf "We couldn't find a module named `%s`" name
+  | UnboundType ->
+    Printf.sprintf "We couldn't find a type named `%s`" name
+  | UnboundModuleType ->
+    Printf.sprintf "We couldn't find a module type named `%s`" name
+
+(** Get the error code for an unbound entity kind. *)
+let unbound_kind_to_code = function
+  | UnboundVariable -> Error_code.e_unbound_value
+  | UnboundConstructor -> Error_code.e_unbound_constructor
+  | UnboundModule -> Error_code.e_unbound_module
+  | UnboundType -> Error_code.e_unbound_type
+  | UnboundModuleType -> Error_code.e_unbound_module_type
+
+(** Raise an unbound error with suggestions from the environment.
+
+    This creates a human-oriented error message with "Did you mean?" suggestions
+    based on similar names in the environment. Shows multiple suggestions when
+    there are several close matches. *)
+let error_unbound_with_env ~env kind loc name =
+  let candidates = collect_candidates env kind in
+  let message = unbound_message kind name in
+  let suggestion = Common.Suggestions.format_suggestions ~target:name ~candidates () in
+
+  let full_message =
+    if suggestion = "" then message
+    else Printf.sprintf "%s\n\n%s" message suggestion
+  in
+
+  let code = unbound_kind_to_code kind in
+  Compiler_error.type_error ~code loc full_message
+
+(** Raise an unbound error without environment context.
+
+    Falls back to the simple message format when environment is not available. *)
 let error_unbound kind loc name =
-  Compiler_error.type_error loc
+  let code = unbound_kind_to_code kind in
+  Compiler_error.type_error ~code loc
     (Printf.sprintf "Unbound %s: %s" (unbound_kind_to_string kind) name)
 
 (* Convenience functions for backward compatibility *)
@@ -153,6 +220,22 @@ let error_unbound_constructor loc name = error_unbound UnboundConstructor loc na
 let error_unbound_module loc name = error_unbound UnboundModule loc name
 let error_unbound_type loc name = error_unbound UnboundType loc name
 let error_unbound_module_type loc name = error_unbound UnboundModuleType loc name
+
+(* Enhanced versions with environment *)
+let error_unbound_variable_with_env ~env loc name =
+  error_unbound_with_env ~env UnboundVariable loc name
+
+let error_unbound_constructor_with_env ~env loc name =
+  error_unbound_with_env ~env UnboundConstructor loc name
+
+let error_unbound_module_with_env ~env loc name =
+  error_unbound_with_env ~env UnboundModule loc name
+
+let error_unbound_type_with_env ~env loc name =
+  error_unbound_with_env ~env UnboundType loc name
+
+let error_unbound_module_type_with_env ~env loc name =
+  error_unbound_with_env ~env UnboundModuleType loc name
 
 (** {1 Label Conversion and Formatting} *)
 
@@ -201,7 +284,7 @@ type constructor_result = {
 let lookup_constructor ctx loc name =
   let env = Typing_context.environment ctx in
   match Environment.find_constructor name env with
-  | None -> error_unbound_constructor loc name
+  | None -> error_unbound_constructor_with_env ~env loc name
   | Some constructor_info ->
     let expected_arg_type, result_type = instantiate_constructor_with_ctx ctx constructor_info in
     { constructor_info; expected_arg_type; result_type }
@@ -239,7 +322,7 @@ let lookup_constructor_longident ctx loc (longident : Parsing.Syntax_tree.longid
       | [] -> ctor_name
       | _ -> String.concat "." path ^ "." ^ ctor_name
     in
-    error_unbound_constructor loc full_name
+    error_unbound_constructor_with_env ~env loc full_name
   | Some constructor_info ->
     let expected_arg_type, result_type = instantiate_constructor_with_ctx ctx constructor_info in
     { constructor_info; expected_arg_type; result_type }
@@ -257,7 +340,9 @@ let check_private_type ctx loc ctor_info =
   match Environment.find_type ctor_info.Types.constructor_type_name env with
   | Some type_decl when type_decl.Types.declaration_private ->
     Compiler_error.type_error loc
-      (Printf.sprintf "Cannot construct value of private type %s"
+      (Printf.sprintf "The type `%s` is private and cannot be constructed \
+                       outside its defining module.\n\n\
+                       Private types can be pattern matched but not created directly."
          ctor_info.Types.constructor_type_name)
   | _ -> ()
 

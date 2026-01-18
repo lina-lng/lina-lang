@@ -197,7 +197,7 @@ let%expect_test "diagnostic_of_compiler_error - type error" =
         start_pos = { filename = "test.lina"; line = 1; column = 1; offset = 0 };
         end_pos = { filename = "test.lina"; line = 1; column = 5; offset = 4 };
       };
-      kind = Common.Compiler_error.TypeError "Type mismatch";
+      kind = Common.Compiler_error.TypeError { message = "Type mismatch"; code = None };
       hints = ["Expected int, got string"];
     }
   in

@@ -27,6 +27,63 @@ let infer_module_expression_ref :
 (** Unify types using context's environment for alias expansion. *)
 let unify = Inference_utils.unify
 
+(** Check if a name is a binary operator. *)
+let is_binary_operator name =
+  match name with
+  | "+" | "-" | "*" | "/" | "^" | "==" | "!=" | "<" | ">" | "<=" | ">="
+  | "+." | "-." | "*." | "/." -> true
+  | _ -> false
+
+(** Describe an operator's expected operand type. *)
+let operator_type_description op_name =
+  match op_name with
+  | "+" | "-" | "*" | "/" -> "integers"
+  | "+." | "-." | "*." | "/." -> "floats"
+  | "^" -> "strings"
+  | "==" | "!=" | "<" | ">" | "<=" | ">=" -> "comparable values"
+  | _ -> "values"
+
+(** Unify function argument with context-aware error message.
+    @param ctx Typing context
+    @param arg_loc Location of the argument expression
+    @param param_label The parameter's label (Nolabel, Labelled, Optional)
+    @param arg_index 1-based index of the argument
+    @param operator_name Optional name of the operator (for operator-specific messages)
+    @param param_ty Expected parameter type
+    @param arg_ty Actual argument type *)
+let unify_function_argument ctx arg_loc ~param_label ~arg_index ?operator_name param_ty arg_ty =
+  try
+    unify ctx arg_loc param_ty arg_ty
+  with Unification.Unification_error err ->
+    let ordinal index =
+      match index with
+      | 1 -> "1st" | 2 -> "2nd" | 3 -> "3rd"
+      | n -> Printf.sprintf "%dth" n
+    in
+    let base_message = match operator_name with
+      | Some op when is_binary_operator op ->
+        let side = if arg_index = 1 then "left" else "right" in
+        let expected_desc = operator_type_description op in
+        Printf.sprintf "The `%s` operator expects %s, but the %s operand has type `%s`."
+          op expected_desc side (Types.type_expression_to_string arg_ty)
+      | _ ->
+        let arg_desc = match param_label with
+          | Types.Labelled name -> Printf.sprintf "labeled argument `~%s`" name
+          | Types.Optional name -> Printf.sprintf "optional argument `?%s`" name
+          | Types.Nolabel -> Printf.sprintf "%s argument" (ordinal arg_index)
+        in
+        Printf.sprintf "This function's %s expects type `%s`, but you gave it `%s`."
+          arg_desc
+          (Types.type_expression_to_string param_ty)
+          (Types.type_expression_to_string arg_ty)
+    in
+    let _, _, hint = Type_explain.explain_mismatch ~expected:param_ty ~actual:arg_ty in
+    let message = match hint with
+      | Some hint_text -> Printf.sprintf "%s\n\n%s" base_message hint_text
+      | None -> base_message
+    in
+    raise (Unification.Unification_error { err with message; location = arg_loc })
+
 (** Type of constant literals *)
 let type_of_constant = Inference_utils.type_of_constant
 
@@ -298,6 +355,12 @@ let build_partial_application loc typed_func slots base_result_ty =
     expression_location = loc;
   }
 
+(** Extract operator name from function expression if it's a simple variable operator. *)
+let extract_operator_name func_expr =
+  match func_expr.Location.value with
+  | ExpressionVariable name when is_binary_operator name -> Some name
+  | _ -> None
+
 (** Infer type for function application.
     Handles labeled arguments, optional argument defaulting, and partial application.
 
@@ -308,6 +371,7 @@ let build_partial_application loc typed_func slots base_result_ty =
     @param func_expr The function being applied
     @param labeled_arg_exprs The argument expressions with labels *)
 let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
+  let operator_name = extract_operator_name func_expr in
   let typed_func, ctx = infer_expr ctx func_expr in
 
   let typed_labeled_args, ctx =
@@ -359,12 +423,16 @@ let rec infer_apply ~infer_expr ~unify_fn ctx loc func_expr labeled_arg_exprs =
 
     validate_unused_arguments loc unused_args;
 
-    List.iter2 (fun (_, param_ty) (_, slot) ->
+    List.iteri (fun index ((param_label, param_ty), (_, slot)) ->
       match slot with
-      | `Filled arg -> unify_fn ctx loc param_ty arg.Typed_tree.expression_type
-      | `FilledWrapped arg -> unify_fn ctx loc param_ty arg.Typed_tree.expression_type
+      | `Filled arg ->
+        unify_function_argument ctx arg.Typed_tree.expression_location
+          ~param_label ~arg_index:(index + 1) ?operator_name param_ty arg.Typed_tree.expression_type
+      | `FilledWrapped arg ->
+        unify_function_argument ctx arg.Typed_tree.expression_location
+          ~param_label ~arg_index:(index + 1) ?operator_name param_ty arg.Typed_tree.expression_type
       | `OptionalDefault _ | `Needed _ -> ()
-    ) expected_params slots;
+    ) (List.combine expected_params slots);
 
     let all_filled = List.for_all (fun (_, slot) ->
       match slot with
@@ -390,7 +458,7 @@ and infer_expression ctx (expr : expression) =
   match expr.Location.value with
   | ExpressionVariable name ->
     begin match Environment.find_value name env with
-    | None -> Inference_utils.error_unbound_variable loc name
+    | None -> Inference_utils.error_unbound_variable_with_env ~env loc name
     | Some binding ->
       let ty, ctx = Typing_context.instantiate ctx binding.Environment.binding_scheme in
       (* Store definition location for go-to-definition support *)

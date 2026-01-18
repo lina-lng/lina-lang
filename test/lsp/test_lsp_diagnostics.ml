@@ -77,7 +77,7 @@ let%expect_test "type error - unbound variable" =
     let error_msgs = List.filter_map (fun (d : Lsp_types.diagnostic) ->
       if d.severity = Lsp_types.Error then Some d.message else None) diags in
     List.iter print_endline error_msgs);
-  [%expect {| Unbound variable: unknown_var |}]
+  [%expect {| We couldn't find a variable named `unknown_var` |}]
 
 let%expect_test "type error - type mismatch in annotation" =
   reset ();
@@ -110,7 +110,7 @@ let%expect_test "type error - unbound type" =
     let error_msgs = List.filter_map (fun (d : Lsp_types.diagnostic) ->
       if d.severity = Lsp_types.Error then Some d.message else None) diags in
     List.iter print_endline error_msgs);
-  [%expect {| Unbound type: unknown_type |}]
+  [%expect {| We couldn't find a type named `unknown_type` |}]
 
 let%expect_test "type error - unbound module" =
   reset ();
@@ -119,7 +119,7 @@ let%expect_test "type error - unbound module" =
     let error_msgs = List.filter_map (fun (d : Lsp_types.diagnostic) ->
       if d.severity = Lsp_types.Error then Some d.message else None) diags in
     List.iter print_endline error_msgs);
-  [%expect {| Unbound constructor: Unknown |}]
+  [%expect {| We couldn't find a constructor named `Unknown` |}]
 
 (* ============================================================ *)
 (* Warnings *)

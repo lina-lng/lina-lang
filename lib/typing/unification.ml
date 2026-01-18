@@ -31,12 +31,12 @@ let trace_element_to_string = function
     Printf.sprintf "comparing %s with %s"
       (type_expression_to_string expected)
       (type_expression_to_string actual)
-  | TraceRecordField name -> Printf.sprintf "in record field '%s'" name
-  | TraceTupleElement idx -> Printf.sprintf "in tuple element %d" (idx + 1)
-  | TraceFunctionArg -> "in function argument"
-  | TraceFunctionResult -> "in function result"
+  | TraceRecordField name -> Printf.sprintf "in field `%s`" name
+  | TraceTupleElement idx -> Printf.sprintf "in element %d of the tuple" (idx + 1)
+  | TraceFunctionArg -> "in the function's argument type"
+  | TraceFunctionResult -> "in the function's return type"
   | TraceConstructorArg idx -> Printf.sprintf "in type argument %d" (idx + 1)
-  | TracePolyVariantTag tag -> Printf.sprintf "in polymorphic variant `%s" tag
+  | TracePolyVariantTag tag -> Printf.sprintf "in variant tag `%s`" tag
 
 exception Unification_error of {
   expected : type_expression;
@@ -64,12 +64,58 @@ let with_trace_element elem f =
     (* Don't clear trace on error - it's captured in unification_error *)
     raise e
 
-(** Format unification trace for error messages. *)
+(** Format unification trace for error messages.
+    Provides a breadcrumb trail showing where in the nested types the error occurred. *)
 let format_trace trace =
   if trace = [] then ""
   else
-    let trace_strs = List.rev_map trace_element_to_string trace in
-    "\n  " ^ String.concat "\n  " trace_strs
+    let path_elements = List.filter (function TraceDiff _ -> false | _ -> true) trace in
+    if path_elements = [] then ""
+    else
+      let reversed = List.rev path_elements in
+
+      let ordinal n =
+        match n with
+        | 1 -> "1st"
+        | 2 -> "2nd"
+        | 3 -> "3rd"
+        | n -> Printf.sprintf "%dth" n
+      in
+
+      let is_tuple_element = function TraceTupleElement _ -> true | _ -> false in
+      let all_tuple_elements = List.for_all is_tuple_element reversed in
+      let tuple_count = List.length (List.filter is_tuple_element reversed) in
+
+      if all_tuple_elements && tuple_count > 1 then
+        ""
+      else
+        let format_single_element = function
+          | TraceTupleElement idx ->
+            Printf.sprintf "the %s element" (ordinal (idx + 1))
+          | TraceRecordField name ->
+            Printf.sprintf "field `%s`" name
+          | TraceFunctionArg ->
+            "the function argument"
+          | TraceFunctionResult ->
+            "the return type"
+          | TraceConstructorArg idx ->
+            Printf.sprintf "type argument %d" (idx + 1)
+          | TracePolyVariantTag tag ->
+            Printf.sprintf "variant `%s`" tag
+          | TraceDiff _ -> ""
+        in
+
+        let parts = List.filter_map (fun elem ->
+          let s = format_single_element elem in
+          if s = "" then None else Some s
+        ) reversed in
+
+        match parts with
+        | [] -> ""
+        | [single] -> Printf.sprintf "\n\nThe problem is in %s." single
+        | _ ->
+          let path_desc = String.concat ", then " parts in
+          Printf.sprintf "\n\nThe problem is in %s." path_desc
 
 (** Type expansion: expand type aliases to their definitions *)
 
@@ -170,7 +216,7 @@ let rec occurs_check_with_path location tv ty path =
       let path_str = String.concat " contains " (List.rev_map (fun path_ty ->
         type_expression_to_string path_ty
       ) path) in
-      let var_name = Printf.sprintf "'t%d" tv.id in
+      let var_name = type_expression_to_string (TypeVariable tv) in
       let message =
         if path = [] then
           Printf.sprintf
@@ -250,11 +296,14 @@ type fresh_type_var = unit -> type_expression
 let default_fresh_type_var () =
   new_type_variable_at_level generic_level
 
-(** Format a type mismatch error message. *)
+(** Format a type mismatch error message using human-readable descriptions. *)
 let type_mismatch_message ty1 ty2 =
-  Printf.sprintf "Type mismatch: expected %s, got %s"
-    (type_expression_to_string ty1)
-    (type_expression_to_string ty2)
+  let expected_explain, actual_explain, hint = Type_explain.explain_mismatch ~expected:ty1 ~actual:ty2 in
+  let base_message = Printf.sprintf "We expected %s but found %s" expected_explain actual_explain in
+
+  match hint with
+  | Some hint_text -> Printf.sprintf "%s\n\n%s" base_message hint_text
+  | None -> base_message
 
 (** {2 Type Variable Unification Helpers} *)
 
@@ -274,7 +323,9 @@ let unify_type_variables location ty1 ty2 tv1 tv2 =
     (* Both rigid - must be the same variable *)
     if tv1.id <> tv2.id then
       unification_error location ty1 ty2
-        "Cannot unify different rigid type variables"
+        "These are different locally abstract types that cannot be unified.\n\n\
+         When you write `(type a)` and `(type b)` in a function signature, \
+         they represent distinct abstract types."
   end else if tv1.rigid then begin
     (* tv1 is rigid - link tv2 to tv1 *)
     if not tv2.rigid then tv2.link <- Some ty1
@@ -311,12 +362,15 @@ let unify_variable_with_concrete location tv ty =
     | TypeVariable tv2 when tv2.rigid ->
       (* Different rigid variables - error *)
       unification_error location (TypeVariable tv) ty
-        "Cannot unify different rigid type variables"
+        "These are different locally abstract types that cannot be unified.\n\n\
+         When you write `(type a)` and `(type b)` in a function signature, \
+         they represent distinct abstract types."
     | _ ->
       unification_error location (TypeVariable tv) ty
-        (Printf.sprintf "The type %s is abstract and cannot be unified with %s"
+        (Printf.sprintf "The locally abstract type `%s` cannot be unified with the concrete type %s.\n\n\
+                         Locally abstract types remain abstract within their scope."
           (type_expression_to_string (TypeVariable tv))
-          (type_expression_to_string ty))
+          (Type_explain.explain ty))
   end else begin
     occurs_check location tv ty;
     tv.link <- Some ty
@@ -347,7 +401,10 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
         false
     with Cyclic_type_alias path ->
       unification_error location ty1 ty2
-        (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
+        (Printf.sprintf "The type alias `%s` is cyclic.\n\n\
+                         A type alias cannot refer to itself, either directly or indirectly. \
+                         Consider using a recursive type with a data constructor instead."
+           (path_to_string path))
   in
 
   if ty1 == ty2 then ()
@@ -363,7 +420,9 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
       (* Same type constructor - unify arguments with trace *)
       if List.length args1 <> List.length args2 then
         unification_error location ty1 ty2
-          "Type constructor arity mismatch";
+          (Printf.sprintf "The type constructor `%s` has %d type argument(s) in one place \
+                           but %d in another."
+             (path_to_string path1) (List.length args1) (List.length args2));
       List.iteri (fun idx (arg1, arg2) ->
         with_trace_element (TraceConstructorArg idx) (fun () ->
           unify_full ~type_lookup ~fresh_type_var location arg1 arg2
@@ -384,13 +443,16 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
               (type_expression_to_string ty2))
       with Cyclic_type_alias path ->
         unification_error location ty1 ty2
-          (Printf.sprintf "Cyclic type alias detected: %s" (path_to_string path))
+          (Printf.sprintf "The type alias `%s` is cyclic.\n\n\
+                           A type alias cannot refer to itself, either directly or indirectly. \
+                           Consider using a recursive type with a data constructor instead."
+             (path_to_string path))
     end
 
   | TypeTuple elems1, TypeTuple elems2 ->
     if List.length elems1 <> List.length elems2 then
       unification_error location ty1 ty2
-        (Printf.sprintf "Tuple size mismatch: expected %d elements, got %d"
+        (Printf.sprintf "We expected a tuple of %d elements but found one with %d elements"
           (List.length elems1) (List.length elems2));
     List.iteri (fun idx (e1, e2) ->
       with_trace_element (TraceTupleElement idx) (fun () ->
@@ -420,7 +482,8 @@ let rec unify_full ~type_lookup ~fresh_type_var location ty1 ty2 =
        For now we use simple path equality - both must refer to the same module type. *)
     if not (path_equal pkg1.package_path pkg2.package_path) then
       unification_error location ty1 ty2
-        (Printf.sprintf "Package type mismatch: (module %s) vs (module %s)"
+        (Printf.sprintf "These first-class modules have different module types.\n\n\
+                         One is `(module %s)` but the other is `(module %s)`."
           (path_to_string pkg1.package_path)
           (path_to_string pkg2.package_path))
 
@@ -463,7 +526,25 @@ and unify_rows_full ~type_lookup ~fresh_type_var location row1 row2 =
     let field2 = List.assoc_opt label row2.row_fields in
     match field1, field2 with
     | Some (RowFieldPresent ty1), Some (RowFieldPresent ty2) ->
-      unify_full ~type_lookup ~fresh_type_var location ty1 ty2
+      begin try
+        unify_full ~type_lookup ~fresh_type_var location ty1 ty2
+      with Unification_error err ->
+        (* Only enhance the error if this field's location is tracked.
+           If not found, the error likely came from a nested record that
+           already has the correct field context. *)
+        match Field_locations.find label with
+        | Some field_loc ->
+          let message =
+            Printf.sprintf "The record field `%s` has type `%s`, but it should have type `%s`."
+              label
+              (Types.type_expression_to_string err.actual)
+              (Types.type_expression_to_string err.expected)
+          in
+          raise (Unification_error { err with message; location = field_loc })
+        | None ->
+          (* Re-raise the original error - it already has proper context *)
+          raise (Unification_error err)
+      end
     | Some (RowFieldPresent ty), None ->
       unify_row_with_field_full ~type_lookup ~fresh_type_var location row2.row_more label ty
     | None, Some (RowFieldPresent ty) ->
@@ -482,7 +563,8 @@ and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more lab
   | TypeRowEmpty ->
     unification_error location TypeRowEmpty
       (TypeRecord { row_fields = [(label, RowFieldPresent field_ty)]; row_more = TypeRowEmpty })
-      (Printf.sprintf "Missing field '%s' in closed record" label)
+      (Printf.sprintf "This record doesn't have a field named `%s`. \
+                       The record type is closed and only has the fields that are defined." label)
   | TypeVariable tv ->
     (* Instantiate the row variable to include this field *)
     let fresh_more = fresh_type_var () in
@@ -493,10 +575,27 @@ and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more lab
     occurs_check location tv new_row;
     tv.link <- Some new_row
   | TypeRecord inner_row ->
-    (* Check if field is in inner row *)
     begin match List.assoc_opt label inner_row.row_fields with
     | Some (RowFieldPresent inner_ty) ->
-      unify_full ~type_lookup ~fresh_type_var location field_ty inner_ty
+      begin try
+        unify_full ~type_lookup ~fresh_type_var location field_ty inner_ty
+      with Unification_error err ->
+        (* Only enhance the error if this field's location is tracked.
+           If not found, the error likely came from a nested record that
+           already has the correct field context. *)
+        match Field_locations.find label with
+        | Some field_loc ->
+          let message =
+            Printf.sprintf "The record field `%s` has type `%s`, but it should have type `%s`."
+              label
+              (Types.type_expression_to_string err.actual)
+              (Types.type_expression_to_string err.expected)
+          in
+          raise (Unification_error { err with message; location = field_loc })
+        | None ->
+          (* Re-raise the original error - it already has proper context *)
+          raise (Unification_error err)
+      end
     | None ->
       unify_row_with_field_full ~type_lookup ~fresh_type_var location inner_row.row_more label field_ty
     end
@@ -504,6 +603,17 @@ and unify_row_with_field_full ~type_lookup ~fresh_type_var location row_more lab
     unification_error location row_more
       (TypeRecord { row_fields = [(label, RowFieldPresent field_ty)]; row_more = TypeRowEmpty })
       "Expected row type"
+
+and unify_pv_tag_args ~type_lookup ~fresh_type_var location pv_row1 pv_row2 tag arg1 arg2 =
+  match arg1, arg2 with
+  | Some ty1, Some ty2 ->
+    unify_full ~type_lookup ~fresh_type_var location ty1 ty2
+  | None, None -> ()
+  | Some _, None | None, Some _ ->
+    unification_error location
+      (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
+      (Printf.sprintf "The polymorphic variant tag `%s` has different arities.\n\n\
+                       In one place it takes an argument, in another it doesn't." tag)
 
 and unify_poly_variant_rows_full ~type_lookup ~fresh_type_var location pv_row1 pv_row2 =
   let all_tags, remaining1, remaining2 =
@@ -514,21 +624,15 @@ and unify_poly_variant_rows_full ~type_lookup ~fresh_type_var location pv_row1 p
     let field2 = List.assoc_opt tag pv_row2.pv_fields in
     match field1, field2 with
     | Some (PVFieldPresent arg1), Some (PVFieldPresent arg2) ->
-      begin match arg1, arg2 with
-      | Some ty1, Some ty2 ->
-        unify_full ~type_lookup ~fresh_type_var location ty1 ty2
-      | None, None -> ()
-      | Some _, None | None, Some _ ->
-        unification_error location
-          (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
-          (Printf.sprintf "Tag `%s arity mismatch" tag)
-      end
+      unify_pv_tag_args ~type_lookup ~fresh_type_var location pv_row1 pv_row2 tag arg1 arg2
     | Some PVFieldAbsent, Some PVFieldAbsent -> ()
     | Some (PVFieldPresent _), Some PVFieldAbsent
     | Some PVFieldAbsent, Some (PVFieldPresent _) ->
       unification_error location
         (TypePolyVariant pv_row1) (TypePolyVariant pv_row2)
-        (Printf.sprintf "Tag `%s presence conflict" tag)
+        (Printf.sprintf "The polymorphic variant tag `%s` is required in one type but \
+                         explicitly absent in another.\n\n\
+                         These two polymorphic variant types are incompatible." tag)
     | Some (PVFieldPresent arg_ty), None ->
       unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location
         pv_row2.pv_more tag (PVFieldPresent arg_ty)
@@ -565,7 +669,8 @@ and unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location row_more ta
     (* Closed row - tag must be absent *)
     unification_error location TypeRowEmpty
       (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
-      (Printf.sprintf "Tag `%s not allowed in closed poly variant" tag)
+      (Printf.sprintf "The tag `%s` is not allowed in this closed polymorphic variant type.\n\n\
+                       The type only permits specific tags and `%s` is not one of them." tag tag)
   | TypeVariable tv ->
     (* Open row - instantiate the variable to include this tag *)
     let fresh_more = fresh_type_var () in
@@ -590,7 +695,8 @@ and unify_pv_row_with_tag_full ~type_lookup ~fresh_type_var location row_more ta
           unification_error location
             (TypePolyVariant inner_pv)
             (TypePolyVariant { pv_fields = [(tag, field)]; pv_more = TypeRowEmpty; pv_closed = true })
-            (Printf.sprintf "Tag `%s arity mismatch" tag)
+            (Printf.sprintf "The polymorphic variant tag `%s` has inconsistent arities.\n\n\
+                             One version takes an argument while the other doesn't." tag)
         end
       | PVFieldAbsent ->
         unification_error location

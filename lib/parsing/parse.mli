@@ -5,8 +5,9 @@
 (** Parse an expression from a string. Raises on syntax error. *)
 val expression_from_string : string -> Syntax_tree.expression
 
-(** Parse a structure from a string. Raises on syntax error. *)
-val structure_from_string : string -> Syntax_tree.structure
+(** Parse a structure from a string. Raises on syntax error.
+    @param filename Optional filename for error messages (default: "<string>") *)
+val structure_from_string : ?filename:string -> string -> Syntax_tree.structure
 
 (** Parse a structure from a file. Raises on syntax error. *)
 val structure_from_file : string -> Syntax_tree.structure

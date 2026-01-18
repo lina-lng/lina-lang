@@ -11,7 +11,6 @@ open Typing
 
 let compile_and_check code =
   Types.reset_type_variable_id ();
-  Types.reset_type_variable_id ();
   let structure = Parsing.Parse.structure_from_string code in
   let ctx = Typing_context.create Environment.initial in
   let (_typed, final_ctx) = Inference.infer_structure ctx structure in
@@ -151,8 +150,8 @@ let%expect_test "weak variables printed with underscore prefix" =
   |} in
   let scheme = get_scheme_for "result" env in
   let type_str = Format.asprintf "%a" Types.pp_type_scheme scheme in
-  print_endline (if String.sub type_str 0 3 = "('_" then "has _prefix" else type_str);
-  [%expect {| has _prefix |}]
+  print_endline (if String.sub type_str 0 2 = "'_" then "has underscore prefix" else type_str);
+  [%expect {| has underscore prefix |}]
 
 (** {1 Polymorphic Usage After Value Restriction} *)
 
@@ -339,7 +338,7 @@ let%expect_test "relaxed VR: verify scheme has quantified variables" =
   print_endline (Format.asprintf "type: %a" Types.pp_type_scheme scheme);
   [%expect {|
     quantified_vars: 1
-    type: forall 't4. 't4 list
+    type: forall 'a. 'a list
     |}]
 
 let%expect_test "relaxed VR: covariant type can be used at multiple types" =

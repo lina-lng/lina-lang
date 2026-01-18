@@ -26,8 +26,8 @@ let parse parser_entry filename content =
 let expression_from_string content =
   parse Parser.expression_eof "<string>" content
 
-let structure_from_string content =
-  parse Parser.structure "<string>" content
+let structure_from_string ?(filename = "<string>") content =
+  parse Parser.structure filename content
 
 let structure_from_file filename =
   let ic = open_in filename in

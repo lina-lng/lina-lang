@@ -19,8 +19,53 @@ type expression_infer_fn = Inference_utils.expression_infer_fn
 
 (** {1 Helper Functions} *)
 
+(** Register field locations for precise error reporting. *)
+let register_field_locations fields =
+  Field_locations.clear ();
+  List.iter (fun field ->
+    let name = field.field_name.Location.value in
+    let loc = field.field_value.Location.location in
+    Field_locations.add_field name loc
+  ) fields
+
 (** Unify types using context's environment for alias expansion. *)
 let unify = Inference_utils.unify
+
+(** Unify with field suggestion support.
+
+    Catches record field errors and adds "Did you mean?" suggestions
+    based on available field names in the record type. *)
+let unify_with_field_suggestions ctx loc ~field_name ~record_type expected actual =
+  try
+    unify ctx loc expected actual
+  with
+  | Unification.Unification_error err ->
+    let record_field_prefix = "This record doesn't have" in
+    let prefix_len = String.length record_field_prefix in
+    let is_record_field_error =
+      String.length err.message >= prefix_len &&
+      String.sub err.message 0 prefix_len = record_field_prefix
+    in
+    if is_record_field_error then begin
+      let available_fields = Type_utils.extract_record_field_names record_type in
+      let suggestion = Common.Suggestions.format_suggestions ~target:field_name ~candidates:available_fields () in
+      let available_str =
+        if available_fields = [] then ""
+        else
+          let fields_list = List.map (fun f -> Printf.sprintf "    .%s" f) available_fields in
+          Printf.sprintf "\n\nIt has these accessible fields:\n%s" (String.concat "\n" fields_list)
+      in
+      let enhanced_msg =
+        if suggestion = "" then
+          Printf.sprintf "This record doesn't have a field named `%s`.%s"
+            field_name available_str
+        else
+          Printf.sprintf "This record doesn't have a field named `%s`.\n\n%s%s"
+            field_name suggestion available_str
+      in
+      Common.Compiler_error.type_error loc enhanced_msg
+    end
+    else raise (Unification.Unification_error err)
 
 (** Infer types for a list of record fields, threading context through.
     Returns typed fields in source order and the updated context. *)
@@ -74,6 +119,9 @@ let rec extract_module_path env expr =
     @param record_fields The list of record fields
     @return A pair [(typed_expr, updated_ctx)] *)
 let infer_record ~(infer_expr : expression_infer_fn) ctx loc record_fields =
+  (* Register field locations for precise error reporting *)
+  register_field_locations record_fields;
+
   let field_names = List.map (fun rf -> rf.field_name.Location.value) record_fields in
   let rec check_duplicates seen = function
     | [] -> ()
@@ -181,7 +229,10 @@ let infer_record_access ~(infer_expr : expression_infer_fn) ctx loc record_expr 
       let expected_record_type =
         Types.type_record_open [(field_name, RowFieldPresent field_type)] ~row_var:row_tail in
 
-      unify ctx loc expected_record_type typed_record_expr.expression_type;
+      unify_with_field_suggestions ctx loc
+        ~field_name
+        ~record_type:typed_record_expr.expression_type
+        expected_record_type typed_record_expr.expression_type;
 
       ({ expression_desc = TypedExpressionRecordAccess (typed_record_expr, field_name);
          expression_type = field_type;
@@ -201,6 +252,9 @@ let infer_record_access ~(infer_expr : expression_infer_fn) ctx loc record_expr 
     @param update_fields The list of fields to update
     @return A pair [(typed_expr, updated_ctx)] *)
 let infer_record_update ~(infer_expr : expression_infer_fn) ctx loc base_expr update_fields =
+  (* Register field locations for precise error reporting *)
+  register_field_locations update_fields;
+
   let typed_base_expr, ctx = infer_expr ctx base_expr in
   let typed_update_fields, ctx = infer_field_values ~infer_expr ctx update_fields in
 

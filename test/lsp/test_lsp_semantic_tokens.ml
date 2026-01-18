@@ -84,7 +84,7 @@ let%expect_test "semantic tokens for string literal" =
   print_endline (show_tokens tokens);
   [%expect {|
     0:4 len=1 variable [static,decl,ro]
-    0:14 len=1 string []
+    0:8 len=7 string []
     |}]
 
 let%expect_test "semantic tokens for boolean" =

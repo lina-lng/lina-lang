@@ -513,8 +513,13 @@ let%expect_test "nested modules preserve naming" =
   end
 end");
   [%expect{|
-    ERROR: File "<string>", line 5, characters 16-21:
-    Type error: Unbound constructor: Outer
+    ERROR: error: Unbound Constructor --> <test>:5:17
+
+       4 |     let x = 2
+       5 |     let y = x + Outer.x
+                           ^^^^^
+
+    We couldn't find a constructor named `Outer`
     |}]
 
 (* =============================================================================
@@ -787,8 +792,12 @@ let%expect_test "let inside tuple preserves names" =
 let%expect_test "let inside record preserves names" =
   print_endline (compile "let r = { a = let x = 1 in x; b = let y = 2 in y }");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 14-17:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:1:15
+
+       1 | let r = { a = let x = 1 in x; b = let y = 2 in y }
+                         ^^^
+
+    Syntax error
     |}]
 
 let%expect_test "let inside function call preserves names" =
@@ -832,8 +841,12 @@ let some = Some 42");
 let%expect_test "operator characters in custom ops are sanitized" =
   print_endline (compile "let (++) a b = a + b");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 5-6:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:1:6
+
+       1 | let (++) a b = a + b
+                ^
+
+    Syntax error
     |}]
 
 (* =============================================================================

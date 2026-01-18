@@ -26,10 +26,36 @@ type expression_infer_fn = Inference_utils.expression_infer_fn
 
 (** {1 Helper Functions} *)
 
-(** Unify types using context's environment for alias expansion. *)
 let unify = Inference_utils.unify
 
+let unify_with_message ctx loc ty1 ty2 ~make_message =
+  try unify ctx loc ty1 ty2
+  with Unification.Unification_error { expected; actual; location; message = _; trace } ->
+    let new_message = make_message ~expected ~actual in
+    raise (Unification.Unification_error { expected; actual; location; message = new_message; trace })
+
 (** {1 If Expression Inference} *)
+
+let unify_if_condition ctx loc cond_type =
+  unify_with_message ctx loc type_bool cond_type ~make_message:(fun ~expected:_ ~actual ->
+    Printf.sprintf "The condition of this `if` expression has type `%s`, \
+                    but conditions must be `bool`.\n\n\
+                    If expressions require a boolean condition to decide which branch to take."
+      (Types.type_expression_to_string actual))
+
+let unify_if_branches ctx else_loc then_type else_type =
+  unify_with_message ctx else_loc then_type else_type ~make_message:(fun ~expected ~actual ->
+    Printf.sprintf "The `else` branch has type `%s`, but the `then` branch has type `%s`.\n\n\
+                    All branches of an `if` expression must return the same type."
+      (Types.type_expression_to_string actual)
+      (Types.type_expression_to_string expected))
+
+let unify_if_no_else ctx loc then_type =
+  unify_with_message ctx loc type_unit then_type ~make_message:(fun ~expected:_ ~actual ->
+    Printf.sprintf "This `if` has no `else` branch, so it must return `unit`, \
+                    but the `then` branch has type `%s`.\n\n\
+                    Add an `else` branch that returns the same type, or make `then` return `unit`."
+      (Types.type_expression_to_string actual))
 
 (** [infer_if ~infer_expr ctx loc cond_expr then_expr else_expr_opt] infers
     the type of an if-then-else expression.
@@ -47,15 +73,18 @@ let unify = Inference_utils.unify
     @return A pair [(typed_expr, updated_ctx)] *)
 let infer_if ~(infer_expr : expression_infer_fn) ctx loc cond_expr then_expr else_expr_opt =
   let typed_cond, ctx = infer_expr ctx cond_expr in
-  unify ctx loc type_bool typed_cond.expression_type;
+  unify_if_condition ctx cond_expr.Location.location typed_cond.expression_type;
+
   let typed_then, ctx = infer_expr ctx then_expr in
+
   let typed_else, ctx = match else_expr_opt with
     | Some else_expr ->
       let typed_else, ctx = infer_expr ctx else_expr in
-      unify ctx loc typed_then.expression_type typed_else.expression_type;
+      unify_if_branches ctx else_expr.Location.location
+        typed_then.expression_type typed_else.expression_type;
       (Some typed_else, ctx)
     | None ->
-      unify ctx loc type_unit typed_then.expression_type;
+      unify_if_no_else ctx then_expr.Location.location typed_then.expression_type;
       (None, ctx)
   in
   ({

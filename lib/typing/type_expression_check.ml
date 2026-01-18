@@ -169,7 +169,7 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
       | Lident name ->
         begin match lookup_local_type name with
         | Some ty -> ty
-        | None -> Inference_utils.error_unbound_type loc name
+        | None -> Inference_utils.error_unbound_type_with_env ~env loc name
         end
       | Ldot _ ->
         (* Qualified path like M.t or M.N.t *)
@@ -179,7 +179,7 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
           (* Should not happen, but fall back to local lookup *)
           begin match lookup_local_type type_name with
           | Some ty -> ty
-          | None -> Inference_utils.error_unbound_type loc type_name
+          | None -> Inference_utils.error_unbound_type_with_env ~env loc type_name
           end
         | _ ->
           (* Look up the module path *)

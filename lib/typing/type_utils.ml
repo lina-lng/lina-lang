@@ -7,6 +7,27 @@ open Types
 
 (** {1 Row Utilities} *)
 
+(** [extract_record_field_names ty] extracts all field names from a record type.
+
+    Follows the row structure recursively to collect all field names,
+    including those in nested row extensions. Returns an empty list if
+    the type is not a record.
+
+    @param ty The type expression (should be a record type)
+    @return List of field names in the record *)
+let extract_record_field_names ty =
+  let rec collect_from_row row =
+    let field_names = List.map fst row.row_fields in
+    let more_names = match representative row.row_more with
+      | TypeRecord inner_row -> collect_from_row inner_row
+      | _ -> []
+    in
+    field_names @ more_names
+  in
+  match representative ty with
+  | TypeRecord row -> collect_from_row row
+  | _ -> []
+
 let map_row_types f row = {
   row_fields = List.map (fun (name, field) ->
     (name, match field with
@@ -17,18 +38,18 @@ let map_row_types f row = {
 
 (** {1 Type Parameter Substitution} *)
 
+let apply_substitution substitution ty =
+  Type_traversal.map (function
+    | TypeVariable tv ->
+      Option.value (List.assoc_opt tv.id substitution) ~default:(TypeVariable tv)
+    | t -> t
+  ) ty
+
 let substitute_type_params params args body =
   if params = [] then body
   else
     let substitution = List.map2 (fun tv arg -> (tv.id, arg)) params args in
-    Type_traversal.map (function
-      | TypeVariable tv ->
-        begin match List.assoc_opt tv.id substitution with
-        | Some replacement -> replacement
-        | None -> TypeVariable tv
-        end
-      | ty -> ty
-    ) body
+    apply_substitution substitution body
 
 (** {1 Constructor Instantiation} *)
 
@@ -39,28 +60,14 @@ let substitute_type_params params args body =
     @param ctor The constructor info to instantiate
     @return Tuple of (argument_type option, result_type) with fresh variables *)
 let instantiate_constructor ~fresh_var (ctor : constructor_info) =
-  (* Create fresh type variables for each type parameter *)
-  let fresh_params =
-    List.map (fun _ -> fresh_var ()) ctor.constructor_type_parameters
-  in
-  (* Build substitution from old variable IDs to fresh types *)
+  let fresh_params = List.map (fun _ -> fresh_var ()) ctor.constructor_type_parameters in
+
   let substitution =
-    List.combine
-      (List.map (fun tv -> tv.id) ctor.constructor_type_parameters)
-      fresh_params
+    List.map2 (fun tv fresh -> (tv.id, fresh)) ctor.constructor_type_parameters fresh_params
   in
-  let substitute ty =
-    Type_traversal.map (function
-      | TypeVariable tv ->
-        begin match List.assoc_opt tv.id substitution with
-        | Some fresh_type -> fresh_type
-        | None -> TypeVariable tv
-        end
-      | ty -> ty
-    ) ty
-  in
-  (Option.map substitute ctor.constructor_argument_type,
-   substitute ctor.constructor_result_type)
+
+  (Option.map (apply_substitution substitution) ctor.constructor_argument_type,
+   apply_substitution substitution ctor.constructor_result_type)
 
 (** {1 Path Substitution} *)
 

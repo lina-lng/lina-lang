@@ -21,6 +21,16 @@
 
 (** {1 Row Utilities} *)
 
+(** [extract_record_field_names ty] extracts all field names from a record type.
+
+    Follows the row structure recursively to collect all field names,
+    including those in nested row extensions. Returns an empty list if
+    the type is not a record.
+
+    @param ty The type expression (should be a record type)
+    @return List of field names in the record *)
+val extract_record_field_names : Types.type_expression -> string list
+
 (** [map_row_types f row] applies [f] to each type within a row (shallow).
 
     Unlike [Type_traversal.map_row], this does not recurse into sub-types.
@@ -35,6 +45,18 @@ val map_row_types :
   Types.row
 
 (** {1 Type Parameter Substitution} *)
+
+val apply_substitution :
+  (int * Types.type_expression) list ->
+  Types.type_expression ->
+  Types.type_expression
+(** [apply_substitution subst ty] applies a substitution mapping type variable
+    IDs to types. Used internally by [substitute_type_params] and
+    [instantiate_constructor].
+
+    @param subst List of (type_variable_id, replacement_type) pairs
+    @param ty The type to transform
+    @return The type with variables substituted *)
 
 (** [substitute_type_params params args body] substitutes type arguments for
     type parameters in a type body.

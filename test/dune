@@ -295,3 +295,19 @@
  (modules test_analysis_pipeline)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Suggestions module tests
+(library
+ (name test_suggestions)
+ (libraries common)
+ (modules test_suggestions)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))
+
+; Error message snapshot tests
+(library
+ (name test_error_messages)
+ (libraries typing parsing common driver)
+ (modules test_error_messages)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

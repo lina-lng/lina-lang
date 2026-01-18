@@ -280,29 +280,42 @@ let%expect_test "type error: record field type mismatch" =
   print_endline (compile "let r = { x = 1 }
 let s = { r with x = true }");
   [%expect{|
-    ERROR: File "<string>", line 2, characters 8-27:
-    Type error: Type mismatch: expected bool, got int
-    Expected: bool
-    Actual: int
+    ERROR: error: Type Mismatch --> <test>:2:22
+
+       1 | let r = { x = 1 }
+       2 | let s = { r with x = true }
+                                ^^^^
+                                expected `bool`, found `int`
+
+    The record field `x` has type `int`, but it should have type `bool`.
     |}]
 
 let%expect_test "type error: accessing nonexistent field on closed record" =
   print_endline (compile "let r = { x = 1 }
 let v = r.y");
   [%expect{|
-    ERROR: File "<string>", line 2, characters 8-11:
-    Type error: Missing field 'y' in closed record
-    Expected: {}
-    Actual: { y : 't1 }
+    ERROR: error: Type Mismatch --> <test>:2:9
+
+       1 | let r = { x = 1 }
+       2 | let v = r.y
+                   ^^^
+
+    This record doesn't have a field named `y`.
+
+    Did you mean `x`?
+
+    It has these accessible fields:
+        .x
     |}]
 
 let%expect_test "type error: match arm type mismatch" =
   print_endline (compile "let f x = match x with | 0 -> 1 | n -> true");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 34-43:
-    Type error: Type mismatch: expected int, got bool
-    Expected: int
-    Actual: bool
+    ERROR: error: Type Mismatch --> <test>:1:35
+
+       1 | let f x = match x with | 0 -> 1 | n -> true
+                                             ^^^^^^^^^
+                                             expected `int`, found `bool`
     |}]
 
 let%expect_test "type error: guard must be bool" =
@@ -641,8 +654,12 @@ let%expect_test "match with string patterns" =
 let%expect_test "match with float patterns" =
   print_endline (compile "let classify f = match f with | 0.0 -> 0 | 1.0 -> 1 | _ -> 2");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 32-35:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:1:33
+
+       1 | let classify f = match f with | 0.0 -> 0 | 1.0 -> 1 | _ -> 2
+                                           ^^^
+
+    Syntax error
     |}]
 
 let%expect_test "match with boolean literal patterns" =
@@ -1196,10 +1213,13 @@ let%expect_test "multiple identical wildcards" =
 let%expect_test "type error: pattern type mismatch with scrutinee" =
   print_endline (compile "let f x = match x with | (a, b) -> a + b | 0 -> 0");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 43-49:
-    Type error: Type mismatch: expected (int * int), got int
-    Expected: (int * int)
-    Actual: int
+    ERROR: error: Type Mismatch --> <test>:1:44
+
+       1 | let f x = match x with | (a, b) -> a + b | 0 -> 0
+                                                      ^^^^^^
+                                                      expected `int * int`, found `int`
+
+    We expected a tuple of 2 elements (int * int) but found an integer (int)
     |}]
 
 let%expect_test "type error: constructor from wrong type" =
@@ -1207,29 +1227,36 @@ let%expect_test "type error: constructor from wrong type" =
 type 'a result = Ok of 'a | Err
 let f x = match x with | Some n -> n | Err -> 0");
   [%expect{|
-    ERROR: File "<string>", line 3, characters 39-47:
-    Type error: Type mismatch: expected 't5 option, got 't6 result
-    Expected: 't5 option
-    Actual: 't6 result
+    ERROR: error: Type Mismatch --> <test>:3:40
+
+       2 | type 'a result = Ok of 'a | Err
+       3 | let f x = match x with | Some n -> n | Err -> 0
+                                                  ^^^^^^^^
+                                                  expected `'a option`, found `'a result`
     |}]
 
 let%expect_test "type error: inconsistent tuple sizes" =
   print_endline (compile "let f x = match x with | (a, b) -> a | (a, b, c) -> a");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 39-53:
-    Type error: Tuple size mismatch: expected 2 elements, got 3
-    Expected: ('t2 * 't3)
-    Actual: ('t4 * 't5 * 't6)
+    ERROR: error: Type Mismatch --> <test>:1:40
+
+       1 | let f x = match x with | (a, b) -> a | (a, b, c) -> a
+                                                  ^^^^^^^^^^^^^^
+                                                  expected `'a * 'b`, found `'a * 'b * 'c`
+
+    We expected a tuple of 2 elements but found one with 3 elements
     |}]
 
 let%expect_test "type error: wrong constructor argument type" =
   print_endline (compile "type intopt = None | Some of int
 let f x = match x with | Some true -> 1 | _ -> 0");
   [%expect{|
-    ERROR: File "<string>", line 2, characters 25-34:
-    Type error: Type mismatch: expected int, got bool
-    Expected: int
-    Actual: bool
+    ERROR: error: Type Mismatch --> <test>:2:26
+
+       1 | type intopt = None | Some of int
+       2 | let f x = match x with | Some true -> 1 | _ -> 0
+                                    ^^^^^^^^^
+                                    expected `int`, found `bool`
     |}]
 
 (* === Pattern Matching: Record Patterns === *)
@@ -1436,8 +1463,12 @@ let rec eval e = match e with
 let%expect_test "lua keyword 'end' used as identifier is mangled" =
   print_endline (compile "let end = 42");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 4-7:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:1:5
+
+       1 | let end = 42
+               ^^^
+
+    Syntax error
     |}]
 
 let%expect_test "lua keyword 'nil' used as identifier is mangled" =
@@ -1455,8 +1486,12 @@ let%expect_test "lua keyword 'until' used as identifier is mangled" =
 let%expect_test "lua keyword 'do' in function parameter is mangled" =
   print_endline (compile "let check do = do");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 10-12:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:1:11
+
+       1 | let check do = do
+                     ^^
+
+    Syntax error
     |}]
 
 let%expect_test "lua keyword 'local' used as identifier is mangled" =
@@ -1478,8 +1513,12 @@ let%expect_test "lua keyword 'return' used as identifier is mangled" =
 let%expect_test "lua keyword 'while' used as identifier is mangled" =
   print_endline (compile "let while = 8");
   [%expect{|
-    ERROR: File "<string>", line 1, characters 4-9:
-    Parse error: Syntax error
+    ERROR: error: Syntax Error --> <test>:1:5
+
+       1 | let while = 8
+               ^^^^^
+
+    Syntax error
     |}]
 
 let%expect_test "non-keyword identifier is not mangled" =

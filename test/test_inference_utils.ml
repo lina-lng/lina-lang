@@ -184,7 +184,7 @@ let%expect_test "unify_with_env: tuple arity mismatch fails" =
      Printf.printf "unification error: %s\n" message
    | exn ->
      Printf.printf "ERROR: got %s\n" (Printexc.to_string exn));
-  [%expect {| unification error: Tuple size mismatch: expected 2 elements, got 3 |}]
+  [%expect {| unification error: We expected a tuple of 2 elements but found one with 3 elements |}]
 
 (** {1 Constant Coverage Tests} *)
 

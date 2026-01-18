@@ -67,7 +67,9 @@ let check_pattern_linearity (pattern : pattern) : unit =
         if List.mem_assoc name seen then begin
           let first_loc = List.assoc name seen in
           Compiler_error.type_error loc
-            (Printf.sprintf "Variable %s is bound several times in this matching (first bound at line %d)"
+            (Printf.sprintf "The variable `%s` is bound more than once in this pattern.\n\n\
+                             It was first bound at line %d. Each variable can only be bound once \
+                             in a pattern to avoid ambiguity about which value to use."
                name first_loc.Location.start_pos.line)
         end else
           check_duplicates ((name, loc) :: seen) rest
@@ -256,7 +258,11 @@ and infer_pattern_impl ctx (pattern : pattern) =
     List.iter (fun (name, _, _) ->
       if not (List.exists (fun (n, _, _) -> n = name) new_in_left) then
         Compiler_error.type_error loc
-          (Printf.sprintf "Variable %s is bound in right side of or-pattern but not in left side" name)
+          (Printf.sprintf "The variable `%s` is bound on the right side of this or-pattern \
+                           but not on the left side.\n\n\
+                           Both sides of an or-pattern (p1 | p2) must bind exactly the same \
+                           variables so that the code after the match can use them safely."
+             name)
     ) new_in_right;
 
     (* Check that right has all variables that left has, and unify their types.
@@ -265,7 +271,11 @@ and infer_pattern_impl ctx (pattern : pattern) =
       match List.find_opt (fun (n, _, _) -> n = name) new_in_right with
       | None ->
         Compiler_error.type_error loc
-          (Printf.sprintf "Variable %s is bound in left side of or-pattern but not in right side" name)
+          (Printf.sprintf "The variable `%s` is bound on the left side of this or-pattern \
+                           but not on the right side.\n\n\
+                           Both sides of an or-pattern (p1 | p2) must bind exactly the same \
+                           variables so that the code after the match can use them safely."
+             name)
       | Some (_, id_right, scheme_right) ->
         (* Unify the types of the variable from both branches *)
         let ty_left, _ctx = Typing_context.instantiate ctx scheme_left in

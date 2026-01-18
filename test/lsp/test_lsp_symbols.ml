@@ -3,9 +3,7 @@
 open Lina_lsp
 open Lsp_test_helpers
 
-(* ============================================================ *)
-(* Value Bindings *)
-(* ============================================================ *)
+(** {1 Value Bindings} *)
 
 let%expect_test "symbol for simple let binding" =
   reset ();
@@ -19,14 +17,14 @@ let%expect_test "symbol for function binding" =
   with_document "let f x = x + 1" (fun store uri ->
     let symbols = Lsp_symbols.get_document_symbols store uri in
     print_endline (show_symbols symbols));
-  [%expect {| f (Function) : (int -> int) |}]
+  [%expect {| f (Function) : int -> int |}]
 
 let%expect_test "symbol for multi-arg function" =
   reset ();
   with_document "let add x y = x + y" (fun store uri ->
     let symbols = Lsp_symbols.get_document_symbols store uri in
     print_endline (show_symbols symbols));
-  [%expect {| add (Function) : (int -> (int -> int)) |}]
+  [%expect {| add (Function) : int -> int -> int |}]
 
 let%expect_test "symbol for polymorphic function" =
   reset ();
@@ -46,11 +44,9 @@ let%expect_test "symbol for recursive function" =
   with_document "let rec fact n = if n <= 1 then 1 else n * fact (n - 1)" (fun store uri ->
     let symbols = Lsp_symbols.get_document_symbols store uri in
     print_endline (show_symbols symbols));
-  [%expect {| fact (Function) : (int -> int) |}]
+  [%expect {| fact (Function) : int -> int |}]
 
-(* ============================================================ *)
-(* Multiple Bindings *)
-(* ============================================================ *)
+(** {1 Multiple Bindings} *)
 
 let%expect_test "symbols for multiple let bindings" =
   reset ();
@@ -74,13 +70,11 @@ let s = "hello"|} (fun store uri ->
     print_endline (show_symbols symbols));
   [%expect {|
     x (Variable) : int
-    f (Function) : (int -> int)
+    f (Function) : int -> int
     s (Variable) : string
     |}]
 
-(* ============================================================ *)
-(* Type Definitions *)
-(* ============================================================ *)
+(** {1 Type Definitions} *)
 
 let%expect_test "symbol for variant type" =
   reset ();
@@ -110,9 +104,7 @@ let%expect_test "symbol for parameterized type" =
     print_endline (show_symbols symbols));
   [%expect {| tree (Type) |}]
 
-(* ============================================================ *)
-(* Module Definitions *)
-(* ============================================================ *)
+(** {1 Module Definitions} *)
 
 let%expect_test "symbol for simple module" =
   reset ();
@@ -135,7 +127,7 @@ end|} (fun store uri ->
     print_endline (show_symbols symbols));
   [%expect {|
     Math (Module)
-      add (Function) : (int -> (int -> int))
+      add (Function) : int -> int -> int
     |}]
 
 let%expect_test "symbol for module with type" =
@@ -160,9 +152,7 @@ end|} (fun store uri ->
     print_endline (show_symbols symbols));
   [%expect {| Empty (Module) |}]
 
-(* ============================================================ *)
-(* Mixed Definitions *)
-(* ============================================================ *)
+(** {1 Mixed Definitions} *)
 
 let%expect_test "symbols for types and values" =
   reset ();
@@ -191,9 +181,7 @@ let z = M.y|} (fun store uri ->
     z (Variable) : int
     |}]
 
-(* ============================================================ *)
-(* Symbol Properties *)
-(* ============================================================ *)
+(** {1 Symbol Properties} *)
 
 let%expect_test "symbol has correct range" =
   reset ();
@@ -231,9 +219,7 @@ let%expect_test "function symbol has detail with type" =
     | _ -> print_endline "unexpected");
   [%expect {| has_detail=true detail_contains_arrow=true |}]
 
-(* ============================================================ *)
-(* Edge Cases *)
-(* ============================================================ *)
+(** {1 Edge Cases} *)
 
 let%expect_test "symbols for empty document" =
   reset ();

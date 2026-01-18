@@ -30,7 +30,7 @@
 type kind =
   | LexerError of string      (** Lexical analysis error *)
   | ParserError of string     (** Syntax error *)
-  | TypeError of string       (** Type checking error *)
+  | TypeError of { message : string; code : Error_code.t option }  (** Type checking error *)
   | InternalError of string   (** Internal compiler error *)
 [@@deriving show]
 
@@ -69,12 +69,13 @@ val lexer_error : Location.t -> string -> 'a
     @raise Error Always *)
 val parser_error : Location.t -> string -> 'a
 
-(** [type_error loc msg] raises a type error. Never returns.
+(** [type_error ?code loc msg] raises a type error. Never returns.
 
+    @param code Optional error code for categorization
     @param loc Source location
     @param msg Error message
     @raise Error Always *)
-val type_error : Location.t -> string -> 'a
+val type_error : ?code:Error_code.t -> Location.t -> string -> 'a
 
 (** [internal_error msg] raises an internal compiler error. Never returns.
 
