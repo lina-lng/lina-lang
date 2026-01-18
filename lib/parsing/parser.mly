@@ -78,6 +78,13 @@ let build_function loc params body =
 %token WHILE DO DONE FOR TO DOWNTO
 %token <string> LETOP
 %token <string> ANDOP
+(* Custom operators - precedence determined by first character *)
+%token <string> INFIXOP0  (* |> || && etc. - lowest precedence *)
+%token <string> INFIXOP1  (* @@ etc. - right-associative *)
+%token <string> INFIXOP2  (* ++ +. etc. - additive *)
+%token <string> INFIXOP3  (* *. // etc. - multiplicative *)
+%token <string> INFIXOP4  (* ** - highest precedence *)
+%token <string> PREFIXOP  (* !. ~~ etc. - prefix operators *)
 %token EOF
 
 %right ARROW
@@ -91,13 +98,14 @@ let build_function loc params body =
 %left COMMA
 %nonassoc THEN
 %nonassoc ELSE
+%left INFIXOP0                              (* |> && || - lowest custom operator precedence *)
 %left EQUAL EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
-%right COLONCOLON
-%left PLUS MINUS
-%left STAR SLASH
-%right CARET
+%right INFIXOP1 COLONCOLON                  (* @@ @ ^ :: - right-associative *)
+%left INFIXOP2 PLUS MINUS                   (* ++ +. + - - additive *)
+%left INFIXOP3 STAR SLASH                   (* *. // * / - multiplicative *)
+%right INFIXOP4 CARET                       (* ** ^ - highest custom operator precedence *)
 %nonassoc unary_minus
-%nonassoc REF BANG
+%nonassoc PREFIXOP REF BANG                 (* prefix operators *)
 %left DOT
 %nonassoc APP
 
@@ -193,6 +201,13 @@ let_binding:
     {
       let func_expr = build_function $loc params expr in
       let name_pattern = make_located (PatternVariable ("( " ^ op ^ " )")) $loc in
+      make_binding name_pattern func_expr $loc
+    }
+  (* Custom operator definitions: let ( |> ) x f = f x, let ( ** ) x y = ... *)
+  | LPAREN; op = operator_name; RPAREN; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
+    {
+      let func_expr = build_function $loc params expr in
+      let name_pattern = make_located (PatternVariable op) $loc in
       make_binding name_pattern func_expr $loc
     }
   (* let f x y : return_type = expr - return type annotation on function *)
@@ -477,6 +492,12 @@ simple_expression:
       let minus = make_located (ExpressionVariable "-") $loc in
       make_located (ExpressionApply (minus, [(Nolabel, zero); (Nolabel, e)])) $loc
     }
+  (* Custom prefix operators: !foo, ~~x, etc. *)
+  | op = PREFIXOP; e = simple_expression %prec PREFIXOP
+    {
+      let op_expr = make_located (ExpressionVariable op) $loc(op) in
+      make_located (ExpressionApply (op_expr, [(Nolabel, e)])) $loc
+    }
   (* Reference creation: ref e *)
   | REF; e = simple_expression %prec REF
     { make_located (ExpressionRef e) $loc }
@@ -509,6 +530,30 @@ simple_expression:
   | GREATER { ">" }
   | LESS_EQUAL { "<=" }
   | GREATER_EQUAL { ">=" }
+  (* Custom operators *)
+  | op = INFIXOP0 { op }
+  | op = INFIXOP1 { op }
+  | op = INFIXOP2 { op }
+  | op = INFIXOP3 { op }
+  | op = INFIXOP4 { op }
+
+(* Operator names for definitions: let ( |> ) x f = f x *)
+%inline operator_name:
+  | PLUS { "+" }
+  | MINUS { "-" }
+  | STAR { "*" }
+  | SLASH { "/" }
+  | CARET { "^" }
+  | LESS { "<" }
+  | GREATER { ">" }
+  | LESS_EQUAL { "<=" }
+  | GREATER_EQUAL { ">=" }
+  | op = INFIXOP0 { op }
+  | op = INFIXOP1 { op }
+  | op = INFIXOP2 { op }
+  | op = INFIXOP3 { op }
+  | op = INFIXOP4 { op }
+  | op = PREFIXOP { op }
 
 application_expression:
   | e = postfix_expression { e }

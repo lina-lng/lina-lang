@@ -101,6 +101,12 @@ let token_metadata : Lexer.token -> Syntax_kind.t * string = function
   | Lexer.DOWNTO -> (Syntax_kind.TK_DOWNTO, "downto")
   | Lexer.LETOP s -> (Syntax_kind.TK_LETOP, s)
   | Lexer.ANDOP s -> (Syntax_kind.TK_ANDOP, s)
+  | Lexer.INFIXOP0 s -> (Syntax_kind.TK_INFIXOP0, s)
+  | Lexer.INFIXOP1 s -> (Syntax_kind.TK_INFIXOP1, s)
+  | Lexer.INFIXOP2 s -> (Syntax_kind.TK_INFIXOP2, s)
+  | Lexer.INFIXOP3 s -> (Syntax_kind.TK_INFIXOP3, s)
+  | Lexer.INFIXOP4 s -> (Syntax_kind.TK_INFIXOP4, s)
+  | Lexer.PREFIXOP s -> (Syntax_kind.TK_PREFIXOP, s)
   (* EOF *)
   | Lexer.EOF -> (Syntax_kind.TK_EOF, "")
 

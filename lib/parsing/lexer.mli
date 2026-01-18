@@ -100,6 +100,13 @@ type token =
   | DOWNTO                (** [downto] keyword *)
   | LETOP of string       (** [let*], [let+], etc. binding operators *)
   | ANDOP of string       (** [and*], [and+], etc. binding operators *)
+  (* Custom operators - precedence determined by first character *)
+  | INFIXOP0 of string    (** Lowest precedence infix: [|>], [||], [&&] etc. *)
+  | INFIXOP1 of string    (** Right-assoc infix: [@@] etc. *)
+  | INFIXOP2 of string    (** Additive infix: [++], [+.] etc. *)
+  | INFIXOP3 of string    (** Multiplicative infix: [*.], [//] etc. *)
+  | INFIXOP4 of string    (** Highest precedence infix: power operator *)
+  | PREFIXOP of string    (** Prefix operators: [!.], [~~] etc. *)
   | EOF                   (** End of input *)
 [@@deriving show, eq]
 

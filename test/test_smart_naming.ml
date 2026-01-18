@@ -841,12 +841,11 @@ let some = Some 42");
 let%expect_test "operator characters in custom ops are sanitized" =
   print_endline (compile "let (++) a b = a + b");
   [%expect{|
-    ERROR: error: Syntax Error --> <test>:1:6
-
-       1 | let (++) a b = a + b
-                ^
-
-    Syntax error
+    local _plus__plus_ = function(a)
+      return function(b)
+        return a + b
+      end
+    end
     |}]
 
 (* =============================================================================

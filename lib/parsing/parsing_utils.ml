@@ -85,6 +85,12 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.DOWNTO -> Parser.DOWNTO
   | Lexer.LETOP s -> Parser.LETOP s
   | Lexer.ANDOP s -> Parser.ANDOP s
+  | Lexer.INFIXOP0 s -> Parser.INFIXOP0 s
+  | Lexer.INFIXOP1 s -> Parser.INFIXOP1 s
+  | Lexer.INFIXOP2 s -> Parser.INFIXOP2 s
+  | Lexer.INFIXOP3 s -> Parser.INFIXOP3 s
+  | Lexer.INFIXOP4 s -> Parser.INFIXOP4 s
+  | Lexer.PREFIXOP s -> Parser.PREFIXOP s
   | Lexer.EOF -> Parser.EOF
 
 (** Convert Lina position to Lexing.position. *)

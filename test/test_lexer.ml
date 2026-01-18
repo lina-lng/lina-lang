@@ -470,3 +470,202 @@ let%expect_test "for loop keywords" =
     Lexer.DONE
     Lexer.EOF
     |}]
+
+(* Custom operators - INFIXOP tokens *)
+
+let%expect_test "INFIXOP0: pipe and logical operators" =
+  print_endline (show_tokens "|> || |>> &&");
+  [%expect
+    {|
+    (Lexer.INFIXOP0 "|>")
+    (Lexer.INFIXOP0 "||")
+    (Lexer.INFIXOP0 "|>>")
+    (Lexer.INFIXOP0 "&&")
+    Lexer.EOF
+    |}]
+
+let%expect_test "INFIXOP0: dollar and ampersand operators" =
+  print_endline (show_tokens "$> $$ &> &|");
+  [%expect
+    {|
+    (Lexer.INFIXOP0 "$>")
+    (Lexer.INFIXOP0 "$$")
+    (Lexer.INFIXOP0 "&>")
+    (Lexer.INFIXOP0 "&|")
+    Lexer.EOF
+    |}]
+
+let%expect_test "INFIXOP0: comparison-based operators" =
+  (* Note: <> is NOT_EQUAL, a built-in token *)
+  print_endline (show_tokens "==> =| <|> >=> >=>");
+  [%expect
+    {|
+    (Lexer.INFIXOP0 "==>")
+    (Lexer.INFIXOP0 "=|")
+    (Lexer.INFIXOP0 "<|>")
+    (Lexer.INFIXOP0 ">=>")
+    (Lexer.INFIXOP0 ">=>")
+    Lexer.EOF
+    |}]
+
+let%expect_test "INFIXOP1: at and caret operators" =
+  print_endline (show_tokens "@@ @> @+ ^^ ^|");
+  [%expect
+    {|
+    (Lexer.INFIXOP1 "@@")
+    (Lexer.INFIXOP1 "@>")
+    (Lexer.INFIXOP1 "@+")
+    (Lexer.INFIXOP1 "^^")
+    (Lexer.INFIXOP1 "^|")
+    Lexer.EOF
+    |}]
+
+let%expect_test "INFIXOP2: additive operators" =
+  (* Note: -- starts a line comment, so we can't test it here *)
+  (* Note: -. and ->> are valid INFIXOP2 operators *)
+  print_endline (show_tokens "++ +. +| -. ->>");
+  [%expect
+    {|
+    (Lexer.INFIXOP2 "++")
+    (Lexer.INFIXOP2 "+.")
+    (Lexer.INFIXOP2 "+|")
+    (Lexer.INFIXOP2 "-.")
+    (Lexer.INFIXOP2 "->>")
+    Lexer.EOF
+    |}]
+
+let%expect_test "INFIXOP3: multiplicative operators" =
+  print_endline (show_tokens "*. */ %% %. // /.");
+  [%expect
+    {|
+    (Lexer.INFIXOP3 "*.")
+    (Lexer.INFIXOP3 "*/")
+    (Lexer.INFIXOP3 "%%")
+    (Lexer.INFIXOP3 "%.")
+    (Lexer.INFIXOP3 "//")
+    (Lexer.INFIXOP3 "/.")
+    Lexer.EOF
+    |}]
+
+let%expect_test "INFIXOP4: power operators" =
+  print_endline (show_tokens "*** **+ **.");
+  [%expect
+    {|
+    (Lexer.INFIXOP4 "***")
+    (Lexer.INFIXOP4 "**+")
+    (Lexer.INFIXOP4 "**.")
+    Lexer.EOF
+    |}]
+
+let%expect_test "PREFIXOP: prefix operators" =
+  print_endline (show_tokens "!. !! ~~ ~| ?? ?.");
+  [%expect
+    {|
+    (Lexer.PREFIXOP "!.")
+    (Lexer.PREFIXOP "!!")
+    (Lexer.PREFIXOP "~~")
+    (Lexer.PREFIXOP "~|")
+    (Lexer.PREFIXOP "??")
+    (Lexer.PREFIXOP "?.")
+    Lexer.EOF
+    |}]
+
+let%expect_test "single-char operators remain unchanged" =
+  print_endline (show_tokens "| @ ^ + - * / ! ~");
+  [%expect
+    {|
+    Lexer.BAR
+    Lexer.AT
+    Lexer.CARET
+    Lexer.PLUS
+    Lexer.MINUS
+    Lexer.STAR
+    Lexer.SLASH
+    Lexer.BANG
+    Lexer.TILDE
+    Lexer.EOF
+    |}]
+
+let%expect_test "operators in context: pipe chain" =
+  print_endline (show_tokens "x |> f |> g");
+  [%expect
+    {|
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    (Lexer.INFIXOP0 "|>")
+    (Lexer.LOWERCASE_IDENTIFIER "f")
+    (Lexer.INFIXOP0 "|>")
+    (Lexer.LOWERCASE_IDENTIFIER "g")
+    Lexer.EOF
+    |}]
+
+let%expect_test "operators in context: reverse apply" =
+  print_endline (show_tokens "print @@ x + 1");
+  [%expect
+    {|
+    (Lexer.LOWERCASE_IDENTIFIER "print")
+    (Lexer.INFIXOP1 "@@")
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    Lexer.PLUS
+    (Lexer.INTEGER 1)
+    Lexer.EOF
+    |}]
+
+let%expect_test "operators in context: composition" =
+  print_endline (show_tokens "f >> g << h");
+  [%expect
+    {|
+    (Lexer.LOWERCASE_IDENTIFIER "f")
+    (Lexer.INFIXOP0 ">>")
+    (Lexer.LOWERCASE_IDENTIFIER "g")
+    (Lexer.INFIXOP0 "<<")
+    (Lexer.LOWERCASE_IDENTIFIER "h")
+    Lexer.EOF
+    |}]
+
+let%expect_test "operator definition syntax" =
+  print_endline (show_tokens "let ( |> ) x f = f x");
+  [%expect
+    {|
+    Lexer.LET
+    Lexer.LPAREN
+    (Lexer.INFIXOP0 "|>")
+    Lexer.RPAREN
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    (Lexer.LOWERCASE_IDENTIFIER "f")
+    Lexer.EQUAL
+    (Lexer.LOWERCASE_IDENTIFIER "f")
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    Lexer.EOF
+    |}]
+
+let%expect_test "operator definition syntax with INFIXOP1" =
+  print_endline (show_tokens "let ( @@ ) f x = f x");
+  [%expect
+    {|
+    Lexer.LET
+    Lexer.LPAREN
+    (Lexer.INFIXOP1 "@@")
+    Lexer.RPAREN
+    (Lexer.LOWERCASE_IDENTIFIER "f")
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    Lexer.EQUAL
+    (Lexer.LOWERCASE_IDENTIFIER "f")
+    (Lexer.LOWERCASE_IDENTIFIER "x")
+    Lexer.EOF
+    |}]
+
+let%expect_test "mixed operators and identifiers" =
+  print_endline (show_tokens "a |> b @@ c ++ d ** e");
+  [%expect
+    {|
+    (Lexer.LOWERCASE_IDENTIFIER "a")
+    (Lexer.INFIXOP0 "|>")
+    (Lexer.LOWERCASE_IDENTIFIER "b")
+    (Lexer.INFIXOP1 "@@")
+    (Lexer.LOWERCASE_IDENTIFIER "c")
+    (Lexer.INFIXOP2 "++")
+    (Lexer.LOWERCASE_IDENTIFIER "d")
+    (Lexer.INFIXOP4 "**")
+    (Lexer.LOWERCASE_IDENTIFIER "e")
+    Lexer.EOF
+    |}]

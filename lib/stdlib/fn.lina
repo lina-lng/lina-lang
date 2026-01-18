@@ -1,0 +1,29 @@
+(** Function combinators and operators. *)
+
+(** Identity function. *)
+let id x = x
+
+(** Constant function - always returns the first argument. *)
+let const x _ = x
+
+(** Flip the arguments of a binary function. *)
+let flip f x y = f y x
+
+(** Pipe operator: passes a value through a function.
+    [x |> f] is equivalent to [f x]. *)
+let ( |> ) x f = f x
+
+(** Reverse application: applies a function to a value.
+    [f @@ x] is equivalent to [f x]. *)
+let ( @@ ) f x = f x
+
+(** Forward composition: [(f >> g) x] is [g (f x)]. *)
+let ( >> ) f g x = g (f x)
+
+(** Backward composition: [(f << g) x] is [f (g x)]. *)
+let ( << ) f g x = f (g x)
+
+(** Tap: apply a side-effecting function and return the original value. *)
+let tap f x =
+  let _ = f x in
+  x

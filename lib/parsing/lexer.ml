@@ -86,6 +86,13 @@ type token =
   | DOWNTO
   | LETOP of string   (** let*, let+, etc. binding operators *)
   | ANDOP of string   (** and*, and+, etc. binding operators *)
+  (* Custom operators - precedence determined by first character *)
+  | INFIXOP0 of string  (** Lowest precedence infix: |> || && etc. (first char: | & $) *)
+  | INFIXOP1 of string  (** Right-assoc infix: @@ etc. (first char: @ ^) *)
+  | INFIXOP2 of string  (** Additive infix: ++ +. etc. (first char: + -) *)
+  | INFIXOP3 of string  (** Multiplicative infix: *. // etc. (first char: * / %) *)
+  | INFIXOP4 of string  (** Highest precedence infix: power operator *)
+  | PREFIXOP of string  (** Prefix operators: !. ~~ etc. (first char: ! ~ ?) *)
   | EOF
 [@@deriving show, eq]
 
@@ -474,7 +481,39 @@ let lex_real_token state =
   | '=' -> make_token EQUAL state
   | '<' -> make_token LESS state
   | '>' -> make_token GREATER state
-  (* Other operators and symbols *)
+  (* Specific multi-char operators that should not be custom operators *)
+  | "+=" -> make_token PLUSEQUAL state
+  (* Custom operators - multi-char patterns matched before single-char *)
+  (* INFIXOP4: ** followed by operator chars (highest precedence) *)
+  | "**", Star binding_op_char ->
+      update_location state;
+      Some (INFIXOP4 (current_lexeme state), state.current_location)
+  (* INFIXOP0: | & $ = < > followed by operator chars (lowest precedence) *)
+  (* Note: ==, <=, >=, <> are matched above as specific tokens *)
+  | ('|' | '&' | '$' | '=' | '<' | '>'), Plus binding_op_char ->
+      update_location state;
+      Some (INFIXOP0 (current_lexeme state), state.current_location)
+  (* INFIXOP1: @ ^ followed by operator chars *)
+  | ('@' | '^'), Plus binding_op_char ->
+      update_location state;
+      Some (INFIXOP1 (current_lexeme state), state.current_location)
+  (* INFIXOP2: + - followed by operator chars *)
+  | ('+' | '-'), Plus binding_op_char ->
+      update_location state;
+      Some (INFIXOP2 (current_lexeme state), state.current_location)
+  (* INFIXOP3: * / % followed by operator chars *)
+  (* Note: ** is matched above as INFIXOP4, sedlex longest-match picks INFIXOP4 for ** *)
+  | ('*' | '/' | '%'), Plus binding_op_char ->
+      update_location state;
+      Some (INFIXOP3 (current_lexeme state), state.current_location)
+  (* PREFIXOP: ! ~ ? followed by operator chars *)
+  | '!', Plus binding_op_char ->
+      update_location state;
+      Some (PREFIXOP (current_lexeme state), state.current_location)
+  | ('~' | '?'), Plus binding_op_char ->
+      update_location state;
+      Some (PREFIXOP (current_lexeme state), state.current_location)
+  (* Other operators and symbols - single char fallbacks *)
   | '|' -> make_token BAR state
   | '@' -> make_token AT state
   | '_' -> make_token UNDERSCORE state
@@ -485,7 +524,6 @@ let lex_real_token state =
   | '^' -> make_token CARET state
   | '~' -> make_token TILDE state
   | '?' -> make_token QUESTION state
-  | "+=" -> make_token PLUSEQUAL state
   (* String literals *)
   | '"' ->
       update_location state;

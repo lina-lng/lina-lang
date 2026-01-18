@@ -1,0 +1,159 @@
+(* Comprehensive custom operators tests *)
+
+(* === Part 1: Operator definition syntax === *)
+
+(* Test 1: Define and use pipe operator *)
+let ( |> ) x f = f x
+let inc x = x + 1
+let r1 = 1 |> inc
+let _ = print r1  (* Expected: 2 *)
+
+(* Test 2: Define and use reverse application operator *)
+let ( @@ ) f x = f x
+let r2 = inc @@ 5
+let _ = print r2  (* Expected: 6 *)
+
+(* Test 3: Define and use forward composition operator *)
+let ( >> ) f g x = g (f x)
+let double x = x * 2
+let inc_then_double = inc >> double
+let r3 = inc_then_double 3
+let _ = print r3  (* Expected: 8, (3+1)*2 *)
+
+(* Test 4: Define and use backward composition operator *)
+let ( << ) f g x = f (g x)
+let double_then_inc = inc << double
+let r4 = double_then_inc 3
+let _ = print r4  (* Expected: 7, (3*2)+1 *)
+
+(* === Part 2: Operator precedence === *)
+
+(* Test 5: Pipe has lowest precedence *)
+let double_inc x = x * 2 + 1
+let r5 = 5 |> double_inc
+let _ = print r5  (* Expected: 11, 5*2+1 *)
+
+(* Test 6: Pipe chain - left associative *)
+let r6 = 1 |> inc |> double |> inc
+let _ = print r6  (* Expected: 5, ((1+1)*2)+1 *)
+
+(* Test 7: @@ right associative *)
+let add x y = x + y
+(* add @@ (inc @@ 10) = add @@ 11 = add 11 which is partial *)
+let add11 = add @@ 11
+let r7 = add11 5
+let _ = print r7  (* Expected: 16, 11 + 5 *)
+
+(* Test 8: INFIXOP2 (++) has same precedence as + *)
+let ( ++ ) x y = x + y + 1
+let r8 = 2 ++ 3 + 4
+let _ = print r8  (* Expected: 10, (2 ++ 3) + 4 = 6 + 4 *)
+
+(* Test 9: INFIXOP3 float mul has same precedence as * *)
+let ( *. ) x y = x * y + 1
+let r9 = 2 *. 3 * 4
+let _ = print r9  (* Expected: 28, (2 *. 3) * 4 = 7 * 4 *)
+
+(* Test 10: INFIXOP4 power operator has highest precedence *)
+let ( ** ) x y = x * x * y
+let r10 = 2 + 3 ** 4
+let _ = print r10  (* Expected: 38, 2 + (3 ** 4) = 2 + 36 *)
+
+(* === Part 3: Operators in expressions === *)
+
+(* Test 11: Operators with lambdas *)
+let r11 = 5 |> (fun x -> x + 100)
+let _ = print r11  (* Expected: 105 *)
+
+(* Test 12: Operators in let bindings *)
+let piped_result =
+  10
+  |> inc
+  |> double
+  |> inc
+let _ = print piped_result  (* Expected: 23, ((10+1)*2)+1 *)
+
+(* Test 13: Operators with pattern matching results *)
+type 'a option = None | Some of 'a
+let unwrap_or default opt = match opt with
+  | None -> default
+  | Some x -> x
+let r13 = Some 42 |> unwrap_or 0
+let _ = print r13  (* Expected: 42 *)
+
+(* Test 14: Operators in function arguments *)
+let apply_to_pair f (x, y) = (f x, f y)
+let pair14 = apply_to_pair (fun x -> x |> inc |> double) (5, 10)
+let _ = match pair14 with (a14, b14) ->
+  let _ = print a14 in  (* Expected: 12, (5+1)*2 *)
+  print b14             (* Expected: 22, (10+1)*2 *)
+
+(* === Part 4: Additional operator tests === *)
+
+(* Test 15: Define apply-twice operator at top level *)
+let ( |>> ) x f = f (f x)
+let r15 = 10 |>> inc
+let _ = print r15  (* Expected: 12, inc (inc 10) *)
+
+(* Test 16: Use apply-twice with double *)
+let r16 = 5 |>> double
+let _ = print r16  (* Expected: 20, double (double 5) *)
+
+(* === Part 5: Composition operators === *)
+
+(* Test 17: Build pipelines with composition *)
+let transform = inc >> double >> inc
+let r17 = transform 10
+let _ = print r17  (* Expected: 23, ((10+1)*2)+1 *)
+
+(* Test 18: Backward composition pipeline *)
+let transform2 = inc << double << inc
+let r18 = transform2 10
+let _ = print r18  (* Expected: 23, inc (double (inc 10)) = inc (double 11) = inc 22 *)
+
+(* === Part 6: Complex expressions === *)
+
+(* Test 19: Multiple operators in one expression *)
+let complex x = x |> inc |> double
+let r19 = complex @@ 5 + 3
+let _ = print r19  (* Expected: 18, complex @@ 8 = (8+1)*2 *)
+
+(* Test 20: Operators with conditionals *)
+let process x =
+  if x > 0 then x |> inc |> double
+  else x |> double |> inc
+let r20a = process 5
+let r20b = process (-5)
+let _ = print r20a  (* Expected: 12, (5+1)*2 *)
+let _ = print r20b  (* Expected: (-9), ((-5)*2)+1 *)
+
+(* Test 21: Operators with recursion *)
+let rec repeat n f x =
+  if n <= 0 then x
+  else repeat (n - 1) f (f x)
+let r21 = 1 |> repeat 4 inc
+let _ = print r21  (* Expected: 5, 1+1+1+1+1 *)
+
+(* Test 22: Operators preserving polymorphism *)
+let id x = x
+let const x _ = x
+let flip f x y = f y x
+let r22 = (id >> id >> id) 42
+let _ = print r22  (* Expected: 42 *)
+
+(* Test 23: Tap operator for side effects *)
+let tap f x =
+  let _ = f x in
+  x
+let r23 = 10 |> tap (fun x -> print x) |> inc
+let _ = print r23  (* Expected: prints 10, then 11 *)
+
+(* Test 24: Chained applications with @@ *)
+let succ x = x + 1
+let r24 = print @@ succ @@ succ @@ succ @@ 0
+(* Expected: prints 3 *)
+
+(* Test 25: Mixed composition and application *)
+let composed = succ >> succ >> double
+let r25 = composed @@ 10
+let _ = print r25  (* Expected: 24, ((10+1)+1)*2 *)

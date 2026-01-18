@@ -1,0 +1,6 @@
+(** Prelude - automatically imported functions and operators.
+
+    This module re-exports commonly used functions that should be
+    available in every Lina program without explicit imports. *)
+
+open Fn

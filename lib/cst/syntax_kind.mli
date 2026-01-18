@@ -101,6 +101,12 @@ type t =
   | TK_DOWNTO        (** downto keyword *)
   | TK_LETOP         (** let*, let+, etc. binding operators *)
   | TK_ANDOP         (** and*, and+, etc. binding operators *)
+  | TK_INFIXOP0
+  | TK_INFIXOP1
+  | TK_INFIXOP2
+  | TK_INFIXOP3
+  | TK_INFIXOP4
+  | TK_PREFIXOP
 
   (* Special *)
   | TK_EOF

@@ -100,6 +100,12 @@ type t =
   | TK_DOWNTO        (** downto keyword *)
   | TK_LETOP         (** let*, let+, etc. binding operators *)
   | TK_ANDOP         (** and*, and+, etc. binding operators *)
+  | TK_INFIXOP0
+  | TK_INFIXOP1
+  | TK_INFIXOP2
+  | TK_INFIXOP3
+  | TK_INFIXOP4
+  | TK_PREFIXOP
 
   (* Special *)
   | TK_EOF
@@ -241,7 +247,9 @@ let token_category = function
   | TK_EQUAL_EQUAL | TK_NOT_EQUAL
   | TK_BANG | TK_COLONEQUALS | TK_COLONCOLON
   | TK_TILDE | TK_QUESTION | TK_PLUSEQUAL
-  | TK_LETOP | TK_ANDOP -> Operator
+  | TK_LETOP | TK_ANDOP
+  | TK_INFIXOP0 | TK_INFIXOP1 | TK_INFIXOP2 | TK_INFIXOP3 | TK_INFIXOP4
+  | TK_PREFIXOP -> Operator
 
   (* Literals *)
   | TK_INTEGER | TK_FLOAT | TK_STRING -> Literal
