@@ -164,6 +164,9 @@ let builtin_name = function
   | Types.BuiltinBool -> "boolean"
   | Types.BuiltinUnit -> "unit value"
   | Types.BuiltinRef -> "reference"
+  | Types.BuiltinArray -> "array"
+  | Types.BuiltinDict -> "dictionary"
+  | Types.BuiltinSet -> "set"
 
 let explain_short ty =
   match Types.representative ty with

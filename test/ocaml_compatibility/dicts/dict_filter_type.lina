@@ -1,0 +1,9 @@
+(* Test: Dict.filter type inference *)
+(* Expected: ACCEPT *)
+
+let d = Dict.of_list [("a", 1); ("b", 2); ("c", 3)]
+
+(* filter preserves dict type *)
+let filtered = Dict.filter (fun k v -> v > 1) d
+
+let _ = print (Dict.size filtered)

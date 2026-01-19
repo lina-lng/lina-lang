@@ -47,3 +47,13 @@ let pipe x f = f x
 
 (** Ignore a value, returning unit. *)
 let ignore _ = ()
+
+(** {1 Currying} *)
+
+(** [curry f] converts a function taking a pair into a curried function.
+    [curry f a b] is equivalent to [f (a, b)]. *)
+let curry f a b = f (a, b)
+
+(** [uncurry f] converts a curried function into one taking a pair.
+    [uncurry f (a, b)] is equivalent to [f a b]. *)
+let uncurry f (a, b) = f a b

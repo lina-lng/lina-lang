@@ -291,15 +291,15 @@ let initial =
   (* Add list append operator *)
   let env = add_builtin "@" Builtins.list_append_type env in
 
-  (* Add comparison operators *)
-  let env = add_builtin "<" Builtins.comparison_int_type env in
-  let env = add_builtin ">" Builtins.comparison_int_type env in
-  let env = add_builtin "<=" Builtins.comparison_int_type env in
-  let env = add_builtin ">=" Builtins.comparison_int_type env in
-  let env = add_builtin "=" Builtins.comparison_int_type env in
-  let env = add_builtin "==" Builtins.comparison_int_type env in
-  let env = add_builtin "!=" Builtins.comparison_int_type env in
-  let env = add_builtin "<>" Builtins.comparison_int_type env in
+  (* Add comparison operators - polymorphic: 'a -> 'a -> bool *)
+  let env = add_builtin "<" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin ">" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin "<=" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin ">=" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin "=" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin "==" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin "!=" Builtins.polymorphic_comparison_type env in
+  let env = add_builtin "<>" Builtins.polymorphic_comparison_type env in
 
   (* Add print function *)
   let env = add_builtin "print" Builtins.polymorphic_print_type env in
@@ -310,4 +310,32 @@ let initial =
   (* Add short-circuit boolean operators *)
   let env = add_builtin "&&" Builtins.binary_bool_op_type env in
   let env = add_builtin "||" Builtins.binary_bool_op_type env in
+
+  (* Add array primitives *)
+  let env = add_builtin "array_make" Builtins.array_make_type env in
+  let env = add_builtin "array_length" Builtins.array_length_type env in
+  let env = add_builtin "array_unsafe_get" Builtins.array_unsafe_get_type env in
+  let env = add_builtin "array_unsafe_set" Builtins.array_unsafe_set_type env in
+  let env = add_builtin "array_empty" Builtins.array_empty_type env in
+
+  (* Add dict primitives *)
+  let env = add_builtin "dict_empty" Builtins.dict_empty_type env in
+  let env = add_builtin "dict_get" Builtins.dict_get_type env in
+  let env = add_builtin "dict_set" Builtins.dict_set_type env in
+  let env = add_builtin "dict_has" Builtins.dict_has_type env in
+  let env = add_builtin "dict_remove" Builtins.dict_remove_type env in
+  let env = add_builtin "dict_size" Builtins.dict_size_type env in
+  let env = add_builtin "dict_keys" Builtins.dict_keys_type env in
+  let env = add_builtin "dict_entries" Builtins.dict_entries_type env in
+
+  (* Add set primitives *)
+  let env = add_builtin "set_empty" Builtins.set_empty_type env in
+  let env = add_builtin "set_add" Builtins.set_add_type env in
+  let env = add_builtin "set_remove" Builtins.set_remove_type env in
+  let env = add_builtin "set_mem" Builtins.set_mem_type env in
+  let env = add_builtin "set_size" Builtins.set_size_type env in
+  let env = add_builtin "set_elements" Builtins.set_elements_type env in
+
+  (* Add error function *)
+  let env = add_builtin "error" Builtins.error_type env in
   env

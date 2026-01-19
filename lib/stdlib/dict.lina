@@ -1,0 +1,147 @@
+(** Dict utilities for immutable key-value dictionaries.
+
+    Dictionaries map keys to values. Operations are immutable:
+    [set] and [remove] return new dictionaries.
+
+    Keys can be any comparable type (strings, integers, booleans).
+    The dict type is built-in: [('k, 'v) dict] *)
+
+(** {1 Construction} *)
+
+(** The empty dictionary. *)
+let empty () = dict_empty ()
+
+(** Create a dictionary with a single binding. *)
+let singleton key value = dict_set key value (dict_empty ())
+
+(** {1 Querying} *)
+
+(** Get the value for [key], or [None] if not found. O(1) average. *)
+let get key dict = dict_get key dict
+
+(** Get the value for [key], or [default] if not found. *)
+let get_or key default dict =
+  Option.get_or (dict_get key dict) default
+
+(** Return [true] if [key] exists in the dictionary. *)
+let has key dict = dict_has key dict
+
+(** Return the number of bindings. O(n). *)
+let size dict = dict_size dict
+
+(** Return [true] if the dictionary is empty. *)
+let is_empty dict = dict_size dict == 0
+
+(** {1 Modifying} *)
+
+(** Set [key] to [value], returning a new dictionary.
+    Overwrites existing binding if present. O(n). *)
+let set key value dict = dict_set key value dict
+
+(** Remove [key] from the dictionary, returning a new dictionary.
+    No effect if [key] is not present. O(n). *)
+let remove key dict = dict_remove key dict
+
+(** {1 Accessing Collections} *)
+
+(** Return all keys as a list. Order is not guaranteed. *)
+let keys dict = dict_keys dict
+
+(** Return all values as a list. Order is not guaranteed. *)
+let values dict = List.map (fun pair -> match pair with (_, v) -> v) (dict_entries dict)
+
+(** Return all (key, value) pairs as a list. Order is not guaranteed. *)
+let entries dict = dict_entries dict
+
+(** {1 Transformations} *)
+
+(** Apply [f] to each value, returning a new dictionary with same keys. *)
+let map f dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k (f v) acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** Apply [f] to each key-value pair, returning a new dictionary with same keys. *)
+let mapi f dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k (f k v) acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** Keep only bindings where [predicate key value] returns [true]. *)
+let filter predicate dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) ->
+      if predicate k v then dict_set k v acc else acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** Apply [f] to each key-value pair, keeping [Some] results. *)
+let filter_map f dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) ->
+      match f k v with
+      | None -> acc
+      | Some new_v -> dict_set k new_v acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** {1 Folding} *)
+
+(** Fold over all bindings. [fold f dict init] applies [f key value acc]
+    for each binding. Order is not guaranteed. *)
+let fold f dict init =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> f k v acc
+  ) init (dict_entries dict)
+
+(** {1 Iteration} *)
+
+(** Apply [f] to each binding for side effects. Order is not guaranteed. *)
+let iter f dict =
+  List.iter (fun pair -> match pair with (k, v) -> f k v) (dict_entries dict)
+
+(** {1 Merging} *)
+
+(** Merge two dictionaries. Bindings in [dict2] override those in [dict1]. *)
+let merge dict1 dict2 =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k v acc
+  ) dict1 (dict_entries dict2)
+
+(** {1 Conversion} *)
+
+(** Create a dictionary from a list of (key, value) pairs.
+    Later bindings override earlier ones for duplicate keys. *)
+let of_list items =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k v acc
+  ) (dict_empty ()) items
+
+(** Convert to a list of (key, value) pairs. *)
+let to_list dict = dict_entries dict
+
+(** {1 Comparison} *)
+
+(** Test equality using [eq] for values.
+    Two dictionaries are equal if they have the same keys with equal values. *)
+let equal eq dict1 dict2 =
+  if dict_size dict1 != dict_size dict2 then false
+  else
+    List.for_all (fun pair ->
+      match pair with (k, v1) ->
+        match dict_get k dict2 with
+        | None -> false
+        | Some v2 -> eq v1 v2
+    ) (dict_entries dict1)
+
+(** {1 Finding} *)
+
+(** Find the first binding satisfying [predicate], or [None]. *)
+let find predicate dict =
+  List.find (fun pair -> match pair with (k, v) -> predicate k v) (dict_entries dict)
+
+(** Return [true] if any binding satisfies [predicate]. *)
+let exists predicate dict =
+  List.exists (fun pair -> match pair with (k, v) -> predicate k v) (dict_entries dict)
+
+(** Return [true] if all bindings satisfy [predicate]. *)
+let for_all predicate dict =
+  List.for_all (fun pair -> match pair with (k, v) -> predicate k v) (dict_entries dict)

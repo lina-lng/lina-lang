@@ -1,0 +1,8 @@
+(* Test: Basic dict operations type inference *)
+(* Expected: ACCEPT *)
+
+let empty_dict = Dict.empty ()
+let single = Dict.singleton "key" 42
+let with_binding = Dict.set "a" 1 (Dict.empty ())
+
+let _ = print (Dict.size single)

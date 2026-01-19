@@ -23,6 +23,20 @@ let binary_int_op_type =
 let comparison_int_type =
   trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_bool)))
 
+(** Polymorphic comparison: 'a -> 'a -> bool
+    Used for operators like <, >, <=, >=, =, ==, !=, <> that work on any comparable type. *)
+let polymorphic_comparison_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, TypeVariable alpha, TypeArrow (Nolabel, TypeVariable alpha, type_bool));
+  }
+
 (** String concatenation: string -> string -> string *)
 let string_concat_type =
   trivial_scheme (TypeArrow (Nolabel, type_string, TypeArrow (Nolabel, type_string, type_string)))
@@ -60,6 +74,356 @@ let list_append_type =
   {
     quantified_variables = [alpha];
     body = TypeArrow (Nolabel, list_alpha, TypeArrow (Nolabel, list_alpha, list_alpha));
+  }
+
+(** {1 Array Primitives} *)
+
+(** Array make: int -> 'a -> 'a array *)
+let array_make_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let array_alpha = type_array (TypeVariable alpha) in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, TypeVariable alpha, array_alpha));
+  }
+
+(** Array length: 'a array -> int *)
+let array_length_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let array_alpha = type_array (TypeVariable alpha) in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, array_alpha, type_int);
+  }
+
+(** Array unsafe get: 'a array -> int -> 'a (no bounds checking) *)
+let array_unsafe_get_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let array_alpha = type_array (TypeVariable alpha) in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, array_alpha, TypeArrow (Nolabel, type_int, TypeVariable alpha));
+  }
+
+(** Array unsafe set: 'a array -> int -> 'a -> unit (no bounds checking) *)
+let array_unsafe_set_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let array_alpha = type_array (TypeVariable alpha) in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, array_alpha,
+             TypeArrow (Nolabel, type_int,
+               TypeArrow (Nolabel, TypeVariable alpha, type_unit)));
+  }
+
+(** Create an empty array with polymorphic element type: unit -> 'a array *)
+let array_empty_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let array_alpha = type_array (TypeVariable alpha) in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, type_unit, array_alpha);
+  }
+
+(** {1 Dict Primitives} *)
+
+(** Dict empty: unit -> ('k, 'v) dict *)
+let dict_empty_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, type_unit, dict_kv);
+  }
+
+(** Dict get: 'k -> ('k, 'v) dict -> 'v option *)
+let dict_get_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  let option_v = TypeConstructor (PathLocal "option", [TypeVariable val_var]) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, TypeVariable key_var,
+             TypeArrow (Nolabel, dict_kv, option_v));
+  }
+
+(** Dict set: 'k -> 'v -> ('k, 'v) dict -> ('k, 'v) dict *)
+let dict_set_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, TypeVariable key_var,
+             TypeArrow (Nolabel, TypeVariable val_var,
+               TypeArrow (Nolabel, dict_kv, dict_kv)));
+  }
+
+(** Dict has: 'k -> ('k, 'v) dict -> bool *)
+let dict_has_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, TypeVariable key_var,
+             TypeArrow (Nolabel, dict_kv, type_bool));
+  }
+
+(** Dict remove: 'k -> ('k, 'v) dict -> ('k, 'v) dict *)
+let dict_remove_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, TypeVariable key_var,
+             TypeArrow (Nolabel, dict_kv, dict_kv));
+  }
+
+(** Dict size: ('k, 'v) dict -> int *)
+let dict_size_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, dict_kv, type_int);
+  }
+
+(** Dict keys: ('k, 'v) dict -> 'k list *)
+let dict_keys_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  let list_k = TypeConstructor (PathLocal "list", [TypeVariable key_var]) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, dict_kv, list_k);
+  }
+
+(** Dict entries: ('k, 'v) dict -> ('k * 'v) list *)
+let dict_entries_type =
+  let key_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let val_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let dict_kv = type_dict (TypeVariable key_var) (TypeVariable val_var) in
+  let pair_kv = TypeTuple [TypeVariable key_var; TypeVariable val_var] in
+  let list_pairs = TypeConstructor (PathLocal "list", [pair_kv]) in
+  {
+    quantified_variables = [key_var; val_var];
+    body = TypeArrow (Nolabel, dict_kv, list_pairs);
+  }
+
+(** {1 Set Primitives} *)
+
+(** Set empty: unit -> 'a set *)
+let set_empty_type =
+  let elem_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let set_a = type_set (TypeVariable elem_var) in
+  {
+    quantified_variables = [elem_var];
+    body = TypeArrow (Nolabel, type_unit, set_a);
+  }
+
+(** Set add: 'a -> 'a set -> 'a set *)
+let set_add_type =
+  let elem_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let set_a = type_set (TypeVariable elem_var) in
+  {
+    quantified_variables = [elem_var];
+    body = TypeArrow (Nolabel, TypeVariable elem_var,
+             TypeArrow (Nolabel, set_a, set_a));
+  }
+
+(** Set remove: 'a -> 'a set -> 'a set *)
+let set_remove_type =
+  let elem_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let set_a = type_set (TypeVariable elem_var) in
+  {
+    quantified_variables = [elem_var];
+    body = TypeArrow (Nolabel, TypeVariable elem_var,
+             TypeArrow (Nolabel, set_a, set_a));
+  }
+
+(** Set mem: 'a -> 'a set -> bool *)
+let set_mem_type =
+  let elem_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let set_a = type_set (TypeVariable elem_var) in
+  {
+    quantified_variables = [elem_var];
+    body = TypeArrow (Nolabel, TypeVariable elem_var,
+             TypeArrow (Nolabel, set_a, type_bool));
+  }
+
+(** Set size: 'a set -> int *)
+let set_size_type =
+  let elem_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let set_a = type_set (TypeVariable elem_var) in
+  {
+    quantified_variables = [elem_var];
+    body = TypeArrow (Nolabel, set_a, type_int);
+  }
+
+(** Set elements: 'a set -> 'a list *)
+let set_elements_type =
+  let elem_var = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let set_a = type_set (TypeVariable elem_var) in
+  let list_a = TypeConstructor (PathLocal "list", [TypeVariable elem_var]) in
+  {
+    quantified_variables = [elem_var];
+    body = TypeArrow (Nolabel, set_a, list_a);
+  }
+
+(** {1 Error Handling} *)
+
+(** Error function: string -> 'a (raises a runtime error) *)
+let error_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, type_string, TypeVariable alpha);
   }
 
 (** {1 Option Type} *)

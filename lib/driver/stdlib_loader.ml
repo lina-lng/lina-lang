@@ -67,6 +67,103 @@ let pipe x f = f x
 let ignore _ = ()
 |}
 
+let ord_source = {|
+(** Ordering utilities for type-safe comparison.
+
+    Provides a three-valued ordering type as an alternative to integer
+    comparison conventions (-1, 0, 1). *)
+
+type ordering = Less | Equal | Greater
+
+(** {1 Constructors} *)
+
+let less = Less
+let equal_ordering = Equal
+let greater = Greater
+
+(** {1 Conversion} *)
+
+(** Convert an integer comparison result to ordering.
+    Negative -> Less, zero -> Equal, positive -> Greater. *)
+let of_int n =
+  if n < 0 then Less
+  else if n > 0 then Greater
+  else Equal
+
+(** Convert ordering to integer (-1, 0, 1). *)
+let to_int ord = match ord with
+  | Less -> 0 - 1
+  | Equal -> 0
+  | Greater -> 1
+
+(** {1 Predicates} *)
+
+let is_less ord = match ord with
+  | Less -> true
+  | _ -> false
+
+let is_equal ord = match ord with
+  | Equal -> true
+  | _ -> false
+
+let is_greater ord = match ord with
+  | Greater -> true
+  | _ -> false
+
+(** {1 Combinators} *)
+
+(** Reverse an ordering. *)
+let flip ord = match ord with
+  | Less -> Greater
+  | Equal -> Equal
+  | Greater -> Less
+
+(** Chain two orderings: if first is Equal, return second.
+    Useful for lexicographic comparison. *)
+let then_ first second = match first with
+  | Equal -> second
+  | other -> other
+
+(** {1 Comparison Helpers} *)
+
+(** Compare two integers. *)
+let int_compare a b =
+  if a < b then Less
+  else if a > b then Greater
+  else Equal
+
+(** Compare two booleans (false < true). *)
+let bool_compare a b = match (a, b) with
+  | (false, false) -> Equal
+  | (true, true) -> Equal
+  | (false, true) -> Less
+  | (true, false) -> Greater
+
+(** Compare two strings lexicographically. *)
+let string_compare a b =
+  if a < b then Less
+  else if a > b then Greater
+  else Equal
+
+(** {1 Self-Comparison} *)
+
+(** Compare two orderings (Less < Equal < Greater). *)
+let compare ord1 ord2 =
+  let rank ord = match ord with
+    | Less -> 0
+    | Equal -> 1
+    | Greater -> 2
+  in
+  int_compare (rank ord1) (rank ord2)
+
+(** Check equality of two orderings. *)
+let equal ord1 ord2 = match (ord1, ord2) with
+  | (Less, Less) -> true
+  | (Equal, Equal) -> true
+  | (Greater, Greater) -> true
+  | _ -> false
+|}
+
 let result_source = {|
 (** Result utilities for error handling.
 
@@ -662,13 +759,646 @@ let intersperse separator lst = match lst with
       Cons (x, go xs)
 |}
 
+let array_source = {|
+(** Mutable array utilities.
+
+    Arrays are 0-indexed, fixed-size, mutable sequences backed by Lua tables.
+    For immutable sequences, use the List module instead.
+
+    The array type is built-in: ['a array] *)
+
+(** {1 Construction} *)
+
+(** Create an array of [n] elements, all initialized to [value].
+    Returns empty array if [n <= 0]. *)
+let make n value =
+  if n <= 0 then array_make 0 value
+  else array_make n value
+
+(** Create an array of length [n] where element at index [i] is [f i].
+    Returns empty array if [n <= 0]. Note: [f 0] is always called. *)
+let init n f =
+  let first = f 0 in
+  if n <= 0 then array_make 0 first
+  else
+    let arr = array_make n first in
+    for i = 1 to n - 1 do
+      let _ = array_unsafe_set arr i (f i) in ()
+    done;
+    arr
+
+(** The empty array. Note: each call creates a fresh empty array. *)
+let empty () = array_make 0 ()
+
+(** {1 Basic Operations} *)
+
+(** Return the length of the array. O(1). *)
+let length arr = array_length arr
+
+(** Return [true] if the array is empty. *)
+let is_empty arr = array_length arr == 0
+
+(** Get element at index [i], or [None] if out of bounds. O(1). *)
+let get arr i =
+  if i < 0 || i >= array_length arr then None
+  else Some (array_unsafe_get arr i)
+
+(** Get element at index [i], raising on out of bounds. O(1). *)
+let get_exn arr i =
+  if i < 0 || i >= array_length arr then
+    error "Array.get_exn: index out of bounds"
+  else
+    array_unsafe_get arr i
+
+(** Set element at index [i] to [v]. Does nothing if out of bounds. O(1). *)
+let set arr i v =
+  if i >= 0 && i < array_length arr then
+    array_unsafe_set arr i v
+  else
+    ()
+
+(** Set element at index [i] to [v], raising on out of bounds. O(1). *)
+let set_exn arr i v =
+  if i < 0 || i >= array_length arr then
+    error "Array.set_exn: index out of bounds"
+  else
+    array_unsafe_set arr i v
+
+(** {1 Transformations} *)
+
+(** Create a new array by applying [f] to each element. *)
+let map f arr =
+  let len = array_length arr in
+  if len == 0 then array_empty ()
+  else
+    let result = array_make len (f (array_unsafe_get arr 0)) in
+    for i = 1 to len - 1 do
+      let _ = array_unsafe_set result i (f (array_unsafe_get arr i)) in ()
+    done;
+    result
+
+(** Create a new array by applying [f] to each element with its index. *)
+let mapi f arr =
+  let len = array_length arr in
+  if len == 0 then array_empty ()
+  else
+    let result = array_make len (f 0 (array_unsafe_get arr 0)) in
+    for i = 1 to len - 1 do
+      let _ = array_unsafe_set result i (f i (array_unsafe_get arr i)) in ()
+    done;
+    result
+
+(** Create a copy of the array. *)
+let copy arr = map (fun x -> x) arr
+
+(** {1 Folding} *)
+
+(** Left fold: [fold_left f init arr] applies [f] to each element from left to right. *)
+let fold_left f acc arr =
+  let len = array_length arr in
+  let result = ref acc in
+  for i = 0 to len - 1 do
+    result := f !result (array_unsafe_get arr i)
+  done;
+  !result
+
+(** Right fold: [fold_right f arr init] applies [f] to each element from right to left. *)
+let fold_right f arr acc =
+  let len = array_length arr in
+  let result = ref acc in
+  for i = 0 to len - 1 do
+    let idx = len - 1 - i in
+    result := f (array_unsafe_get arr idx) !result
+  done;
+  !result
+
+(** {1 Iteration} *)
+
+(** Apply [f] to each element for side effects. *)
+let iter f arr =
+  let len = array_length arr in
+  for i = 0 to len - 1 do
+    let _ = f (array_unsafe_get arr i) in ()
+  done
+
+(** Apply [f] to each element with its index for side effects. *)
+let iteri f arr =
+  let len = array_length arr in
+  for i = 0 to len - 1 do
+    let _ = f i (array_unsafe_get arr i) in ()
+  done
+
+(** {1 Searching} *)
+
+(** Return [true] if any element satisfies [predicate]. *)
+let exists predicate arr =
+  let len = array_length arr in
+  let found = ref false in
+  let i = ref 0 in
+  while !i < len && not !found do
+    if predicate (array_unsafe_get arr !i) then
+      found := true
+    else
+      i := !i + 1
+  done;
+  !found
+
+(** Return [true] if all elements satisfy [predicate]. *)
+let for_all predicate arr =
+  let len = array_length arr in
+  let ok = ref true in
+  let i = ref 0 in
+  while !i < len && !ok do
+    if not (predicate (array_unsafe_get arr !i)) then
+      ok := false
+    else
+      i := !i + 1
+  done;
+  !ok
+
+(** Find the first element satisfying [predicate], or [None]. *)
+let find predicate arr =
+  let len = array_length arr in
+  let result = ref None in
+  let i = ref 0 in
+  while !i < len && Option.is_none !result do
+    let elem = array_unsafe_get arr !i in
+    if predicate elem then
+      result := Some elem
+    else
+      i := !i + 1
+  done;
+  !result
+
+(** Find the index of the first element satisfying [predicate], or [None]. *)
+let find_index predicate arr =
+  let len = array_length arr in
+  let result = ref None in
+  let i = ref 0 in
+  while !i < len && Option.is_none !result do
+    if predicate (array_unsafe_get arr !i) then
+      result := Some !i
+    else
+      i := !i + 1
+  done;
+  !result
+
+(** Return [true] if [element] is in the array. Uses [==] for comparison. *)
+let mem element arr = exists (fun x -> x == element) arr
+
+(** {1 Conversion} *)
+
+(** Create an array from a list. *)
+let of_list lst =
+  match lst with
+  | Nil -> array_empty ()
+  | Cons (first, _) ->
+      let len = List.length lst in
+      let arr = array_make len first in
+      let _ = List.fold_left (fun i x ->
+        let _ = array_unsafe_set arr i x in
+        i + 1
+      ) 0 lst in
+      arr
+
+(** Convert an array to a list. *)
+let to_list arr =
+  fold_right (fun x acc -> Cons (x, acc)) arr Nil
+
+(** {1 Comparison} *)
+
+(** Compare two arrays element by element using [cmp].
+    Returns negative if [arr1 < arr2], 0 if equal, positive if [arr1 > arr2]. *)
+let compare cmp arr1 arr2 =
+  let len1 = array_length arr1 in
+  let len2 = array_length arr2 in
+  let min_len = if len1 < len2 then len1 else len2 in
+  let result = ref 0 in
+  let i = ref 0 in
+  while !i < min_len && !result == 0 do
+    result := cmp (array_unsafe_get arr1 !i) (array_unsafe_get arr2 !i);
+    i := !i + 1
+  done;
+  if !result != 0 then !result
+  else if len1 < len2 then 0 - 1
+  else if len1 > len2 then 1
+  else 0
+
+(** Test equality of two arrays using [eq] for elements. *)
+let equal eq arr1 arr2 =
+  let len1 = array_length arr1 in
+  let len2 = array_length arr2 in
+  if len1 != len2 then false
+  else
+    let ok = ref true in
+    let i = ref 0 in
+    while !i < len1 && !ok do
+      if not (eq (array_unsafe_get arr1 !i) (array_unsafe_get arr2 !i)) then
+        ok := false
+      else
+        i := !i + 1
+    done;
+    !ok
+|}
+
+let dict_source = {|
+(** Dict utilities for immutable key-value dictionaries.
+
+    Dictionaries map keys to values. Operations are immutable:
+    [set] and [remove] return new dictionaries.
+
+    Keys can be any comparable type (strings, integers, booleans).
+    The dict type is built-in: [('k, 'v) dict] *)
+
+(** {1 Construction} *)
+
+(** The empty dictionary. *)
+let empty () = dict_empty ()
+
+(** Create a dictionary with a single binding. *)
+let singleton key value = dict_set key value (dict_empty ())
+
+(** {1 Querying} *)
+
+(** Get the value for [key], or [None] if not found. O(1) average. *)
+let get key dict = dict_get key dict
+
+(** Get the value for [key], or [default] if not found. *)
+let get_or key default dict =
+  Option.get_or (dict_get key dict) default
+
+(** Return [true] if [key] exists in the dictionary. *)
+let has key dict = dict_has key dict
+
+(** Return the number of bindings. O(n). *)
+let size dict = dict_size dict
+
+(** Return [true] if the dictionary is empty. *)
+let is_empty dict = dict_size dict == 0
+
+(** {1 Modifying} *)
+
+(** Set [key] to [value], returning a new dictionary.
+    Overwrites existing binding if present. O(n). *)
+let set key value dict = dict_set key value dict
+
+(** Remove [key] from the dictionary, returning a new dictionary.
+    No effect if [key] is not present. O(n). *)
+let remove key dict = dict_remove key dict
+
+(** {1 Accessing Collections} *)
+
+(** Return all keys as a list. Order is not guaranteed. *)
+let keys dict = dict_keys dict
+
+(** Return all values as a list. Order is not guaranteed. *)
+let values dict = List.map (fun pair -> match pair with (_, v) -> v) (dict_entries dict)
+
+(** Return all (key, value) pairs as a list. Order is not guaranteed. *)
+let entries dict = dict_entries dict
+
+(** {1 Transformations} *)
+
+(** Apply [f] to each value, returning a new dictionary with same keys. *)
+let map f dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k (f v) acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** Apply [f] to each key-value pair, returning a new dictionary with same keys. *)
+let mapi f dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k (f k v) acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** Keep only bindings where [predicate key value] returns [true]. *)
+let filter predicate dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) ->
+      if predicate k v then dict_set k v acc else acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** Apply [f] to each key-value pair, keeping [Some] results. *)
+let filter_map f dict =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) ->
+      match f k v with
+      | None -> acc
+      | Some new_v -> dict_set k new_v acc
+  ) (dict_empty ()) (dict_entries dict)
+
+(** {1 Folding} *)
+
+(** Fold over all bindings. [fold f dict init] applies [f key value acc]
+    for each binding. Order is not guaranteed. *)
+let fold f dict init =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> f k v acc
+  ) init (dict_entries dict)
+
+(** {1 Iteration} *)
+
+(** Apply [f] to each binding for side effects. Order is not guaranteed. *)
+let iter f dict =
+  List.iter (fun pair -> match pair with (k, v) -> f k v) (dict_entries dict)
+
+(** {1 Merging} *)
+
+(** Merge two dictionaries. Bindings in [dict2] override those in [dict1]. *)
+let merge dict1 dict2 =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k v acc
+  ) dict1 (dict_entries dict2)
+
+(** {1 Conversion} *)
+
+(** Create a dictionary from a list of (key, value) pairs.
+    Later bindings override earlier ones for duplicate keys. *)
+let of_list items =
+  List.fold_left (fun acc pair ->
+    match pair with (k, v) -> dict_set k v acc
+  ) (dict_empty ()) items
+
+(** Convert to a list of (key, value) pairs. *)
+let to_list dict = dict_entries dict
+
+(** {1 Comparison} *)
+
+(** Test equality using [eq] for values.
+    Two dictionaries are equal if they have the same keys with equal values. *)
+let equal eq dict1 dict2 =
+  if dict_size dict1 != dict_size dict2 then false
+  else
+    List.for_all (fun pair ->
+      match pair with (k, v1) ->
+        match dict_get k dict2 with
+        | None -> false
+        | Some v2 -> eq v1 v2
+    ) (dict_entries dict1)
+
+(** {1 Finding} *)
+
+(** Find the first binding satisfying [predicate], or [None]. *)
+let find predicate dict =
+  List.find (fun pair -> match pair with (k, v) -> predicate k v) (dict_entries dict)
+
+(** Return [true] if any binding satisfies [predicate]. *)
+let exists predicate dict =
+  List.exists (fun pair -> match pair with (k, v) -> predicate k v) (dict_entries dict)
+
+(** Return [true] if all bindings satisfy [predicate]. *)
+let for_all predicate dict =
+  List.for_all (fun pair -> match pair with (k, v) -> predicate k v) (dict_entries dict)
+|}
+
+let tuple_source = {|
+(** Tuple utilities for pairs (2-tuples).
+
+    A pair [(a, b)] is a product type containing two values of potentially
+    different types. This module provides functions for accessing, transforming,
+    and comparing pairs without requiring pattern matching. *)
+
+(** {1 Construction} *)
+
+(** [make a b] creates a pair [(a, b)]. *)
+let make a b = (a, b)
+
+(** {1 Accessors} *)
+
+(** [fst pair] returns the first element of [pair]. *)
+let fst pair = match pair with (a, _) -> a
+
+(** [snd pair] returns the second element of [pair]. *)
+let snd pair = match pair with (_, b) -> b
+
+(** {1 Transforming} *)
+
+(** [swap pair] exchanges the elements: [(a, b)] becomes [(b, a)]. *)
+let swap pair = match pair with (a, b) -> (b, a)
+
+(** [map_fst f pair] applies [f] to the first element.
+    [map_fst f (a, b)] is [(f a, b)]. *)
+let map_fst f pair = match pair with (a, b) -> (f a, b)
+
+(** [map_snd f pair] applies [f] to the second element.
+    [map_snd f (a, b)] is [(a, f b)]. *)
+let map_snd f pair = match pair with (a, b) -> (a, f b)
+
+(** [map f g pair] applies [f] to the first element and [g] to the second.
+    [map f g (a, b)] is [(f a, g b)]. *)
+let map f g pair = match pair with (a, b) -> (f a, g b)
+
+(** {1 Folding} *)
+
+(** [fold f pair] combines both elements using [f].
+    [fold f (a, b)] is [f a b]. *)
+let fold f pair = match pair with (a, b) -> f a b
+
+(** {1 Iteration} *)
+
+(** [iter f pair] applies [f] to both elements for side effects.
+    Both elements must have the same type. *)
+let iter f pair = match pair with
+  (a, b) ->
+    let _ = f a in
+    let _ = f b in
+    ()
+
+(** {1 Comparison} *)
+
+(** [equal eq_fst eq_snd p1 p2] returns [true] if pairs are equal.
+    Uses [eq_fst] to compare first elements and [eq_snd] for second. *)
+let equal eq_fst eq_snd p1 p2 = match (p1, p2) with
+  ((a1, b1), (a2, b2)) -> eq_fst a1 a2 && eq_snd b1 b2
+
+(** [compare cmp_fst cmp_snd p1 p2] compares pairs lexicographically.
+    First compares first elements; if equal, compares second elements.
+    Returns negative if [p1 < p2], 0 if equal, positive if [p1 > p2]. *)
+let compare cmp_fst cmp_snd p1 p2 = match (p1, p2) with
+  ((a1, b1), (a2, b2)) ->
+    let c = cmp_fst a1 a2 in
+    if c != 0 then c
+    else cmp_snd b1 b2
+
+(** {1 Conversion} *)
+
+(** [to_list pair] converts a pair to a two-element list.
+    Both elements must have the same type. *)
+let to_list pair = match pair with (a, b) -> [a; b]
+|}
+
+let set_source = {|
+(** Set utilities for immutable sets of unique values.
+
+    Sets are collections of unique elements. Operations are immutable:
+    [add] and [remove] return new sets.
+
+    Elements can be any comparable type (strings, integers, booleans).
+    The set type is built-in: ['a set] *)
+
+(** {1 Construction} *)
+
+(** The empty set. *)
+let empty () = set_empty ()
+
+(** Create a set with a single element. *)
+let singleton elem = set_add elem (set_empty ())
+
+(** {1 Querying} *)
+
+(** Return [true] if [elem] is in the set. O(1) average. *)
+let mem elem set = set_mem elem set
+
+(** Alias for [mem]. *)
+let has elem set = set_mem elem set
+
+(** Return the number of elements. O(n). *)
+let size set = set_size set
+
+(** Return [true] if the set is empty. *)
+let is_empty set = set_size set == 0
+
+(** {1 Modifying} *)
+
+(** Add [elem] to the set, returning a new set.
+    No effect if [elem] is already present. O(n). *)
+let add elem set = set_add elem set
+
+(** Remove [elem] from the set, returning a new set.
+    No effect if [elem] is not present. O(n). *)
+let remove elem set = set_remove elem set
+
+(** {1 Set Operations} *)
+
+(** Return the union of two sets (elements in either). *)
+let union set1 set2 =
+  List.fold_left (fun acc elem -> set_add elem acc) set1 (set_elements set2)
+
+(** Return the intersection of two sets (elements in both). *)
+let inter set1 set2 =
+  List.fold_left (fun acc elem ->
+    if set_mem elem set2 then set_add elem acc else acc
+  ) (set_empty ()) (set_elements set1)
+
+(** Return the difference of two sets (elements in first but not second). *)
+let diff set1 set2 =
+  List.fold_left (fun acc elem ->
+    if set_mem elem set2 then acc else set_add elem acc
+  ) (set_empty ()) (set_elements set1)
+
+(** Return the symmetric difference (elements in exactly one set). *)
+let sym_diff set1 set2 =
+  let in_only_set1 = diff set1 set2 in
+  let in_only_set2 = diff set2 set1 in
+  union in_only_set1 in_only_set2
+
+(** {1 Predicates} *)
+
+(** Return [true] if [set1] is a subset of [set2]. *)
+let subset set1 set2 =
+  List.for_all (fun elem -> set_mem elem set2) (set_elements set1)
+
+(** Return [true] if the sets have no elements in common. *)
+let disjoint set1 set2 =
+  List.for_all (fun elem -> not (set_mem elem set2)) (set_elements set1)
+
+(** Return [true] if any element satisfies [predicate]. *)
+let exists predicate set =
+  List.exists predicate (set_elements set)
+
+(** Return [true] if all elements satisfy [predicate]. *)
+let for_all predicate set =
+  List.for_all predicate (set_elements set)
+
+(** {1 Transformations} *)
+
+(** Apply [f] to each element, returning a new set. *)
+let map f set =
+  List.fold_left (fun acc elem -> set_add (f elem) acc) (set_empty ()) (set_elements set)
+
+(** Keep only elements satisfying [predicate]. *)
+let filter predicate set =
+  List.fold_left (fun acc elem ->
+    if predicate elem then set_add elem acc else acc
+  ) (set_empty ()) (set_elements set)
+
+(** Apply [f] to each element and keep [Some] results. *)
+let filter_map f set =
+  List.fold_left (fun acc elem ->
+    match f elem with
+    | None -> acc
+    | Some new_elem -> set_add new_elem acc
+  ) (set_empty ()) (set_elements set)
+
+(** Partition elements by predicate: [(satisfying, not_satisfying)]. *)
+let partition predicate set =
+  List.fold_left (fun pair elem ->
+    match pair with (yes, no) ->
+      if predicate elem then (set_add elem yes, no)
+      else (yes, set_add elem no)
+  ) (set_empty (), set_empty ()) (set_elements set)
+
+(** {1 Folding} *)
+
+(** Fold over all elements. [fold f set init] applies [f elem acc]
+    for each element. Order is not guaranteed. *)
+let fold f set init =
+  List.fold_left (fun acc elem -> f elem acc) init (set_elements set)
+
+(** {1 Iteration} *)
+
+(** Apply [f] to each element for side effects. Order is not guaranteed. *)
+let iter f set =
+  List.iter f (set_elements set)
+
+(** {1 Searching} *)
+
+(** Find an element satisfying [predicate], or [None]. *)
+let find predicate set =
+  List.find predicate (set_elements set)
+
+(** {1 Conversion} *)
+
+(** Return all elements as a list. Order is not guaranteed. *)
+let elements set = set_elements set
+
+(** Alias for [elements]. *)
+let to_list set = set_elements set
+
+(** Create a set from a list of elements.
+    Duplicates are automatically removed. *)
+let of_list items =
+  List.fold_left (fun acc elem -> set_add elem acc) (set_empty ()) items
+
+(** {1 Comparison} *)
+
+(** Test equality of two sets. *)
+let equal set1 set2 =
+  if set_size set1 != set_size set2 then false
+  else
+    List.for_all (fun elem -> set_mem elem set2) (set_elements set1)
+
+(** Compare set sizes. Returns negative if smaller, 0 if equal, positive if larger. *)
+let compare set1 set2 =
+  let s1 = set_size set1 in
+  let s2 = set_size set2 in
+  if s1 < s2 then 0 - 1
+  else if s1 > s2 then 1
+  else 0
+|}
+
 (** All stdlib modules in load order.
     Order matters if there are dependencies between modules. *)
 let stdlib_modules = [
   { name = "Fn"; source = fn_source };
+  { name = "Ord"; source = ord_source };
   { name = "Result"; source = result_source };
   { name = "Option"; source = option_source };
   { name = "List"; source = list_source };
+  { name = "Array"; source = array_source };
+  { name = "Tuple"; source = tuple_source };
+  { name = "Dict"; source = dict_source };
+  { name = "Set"; source = set_source };
 ]
 
 (** Use the existing signature extraction from Structure_infer *)

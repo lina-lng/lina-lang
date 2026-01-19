@@ -1,0 +1,6 @@
+(* Tuple: fold operation *)
+(* Expected: ACCEPT - fold combines elements *)
+
+let pair = (3, 7)
+let sum = Tuple.fold (fun a b -> a + b) pair
+let _ = print sum

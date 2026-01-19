@@ -1,0 +1,6 @@
+(* Tuple: fold with type change *)
+(* Expected: ACCEPT - fold can produce different type *)
+
+let pair = (5, 3)
+let combined = Tuple.fold (fun a b -> a * 10 + b) pair
+let _ = print combined

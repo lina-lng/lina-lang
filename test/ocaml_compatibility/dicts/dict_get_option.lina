@@ -1,0 +1,12 @@
+(* Test: Dict.get returns option type *)
+(* Expected: ACCEPT *)
+
+let d = Dict.singleton "a" 42
+
+let result = Dict.get "a" d
+
+let value = match result with
+  | Some v -> v
+  | None -> 0
+
+let _ = print value

@@ -1,0 +1,9 @@
+(* Test: Nested dict types *)
+(* Expected: ACCEPT *)
+
+(* Dict of dicts *)
+let inner1 = Dict.singleton "x" 1
+let inner2 = Dict.singleton "y" 2
+let outer = Dict.of_list [("a", inner1); ("b", inner2)]
+
+let _ = print (Dict.size outer)

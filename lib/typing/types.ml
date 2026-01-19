@@ -91,7 +91,10 @@ and builtin_type =
   | BuiltinString
   | BuiltinBool
   | BuiltinUnit
-  | BuiltinRef  (** Mutable reference type *)
+  | BuiltinRef    (** Mutable reference type *)
+  | BuiltinArray  (** Mutable array type *)
+  | BuiltinDict   (** Immutable dictionary type *)
+  | BuiltinSet    (** Immutable set type *)
 
 (** Variance of a type parameter.
 
@@ -122,6 +125,15 @@ let type_unit = TypeConstructor (PathBuiltin BuiltinUnit, [])
 
 (** [type_ref content_type] creates a reference type [content_type ref]. *)
 let type_ref content_type = TypeConstructor (PathBuiltin BuiltinRef, [content_type])
+
+(** [type_array element_type] creates an array type [element_type array]. *)
+let type_array element_type = TypeConstructor (PathBuiltin BuiltinArray, [element_type])
+
+(** [type_dict key_type value_type] creates a dictionary type [(key_type, value_type) dict]. *)
+let type_dict key_type value_type = TypeConstructor (PathBuiltin BuiltinDict, [key_type; value_type])
+
+(** [type_set element_type] creates a set type [element_type set]. *)
+let type_set element_type = TypeConstructor (PathBuiltin BuiltinSet, [element_type])
 
 (** [type_record_closed fields] creates a closed record type.
     The record has exactly the given fields and no others. *)
@@ -235,6 +247,9 @@ let rec path_to_string = function
   | PathBuiltin BuiltinBool -> "bool"
   | PathBuiltin BuiltinUnit -> "unit"
   | PathBuiltin BuiltinRef -> "ref"
+  | PathBuiltin BuiltinArray -> "array"
+  | PathBuiltin BuiltinDict -> "dict"
+  | PathBuiltin BuiltinSet -> "set"
   | PathLocal name -> name
   | PathIdent id -> Common.Identifier.name id
   | PathDot (parent, name) -> path_to_string parent ^ "." ^ name

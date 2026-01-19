@@ -12,6 +12,9 @@ val binary_int_op_type : Types.type_scheme
 (** Integer comparison: int -> int -> bool *)
 val comparison_int_type : Types.type_scheme
 
+(** Polymorphic comparison: 'a -> 'a -> bool *)
+val polymorphic_comparison_type : Types.type_scheme
+
 (** String concatenation: string -> string -> string *)
 val string_concat_type : Types.type_scheme
 
@@ -26,6 +29,74 @@ val binary_bool_op_type : Types.type_scheme
 
 (** List append: 'a list -> 'a list -> 'a list *)
 val list_append_type : Types.type_scheme
+
+(** {1 Array Primitives} *)
+
+(** Array make: int -> 'a -> 'a array *)
+val array_make_type : Types.type_scheme
+
+(** Array length: 'a array -> int *)
+val array_length_type : Types.type_scheme
+
+(** Array unsafe get: 'a array -> int -> 'a (no bounds checking) *)
+val array_unsafe_get_type : Types.type_scheme
+
+(** Array unsafe set: 'a array -> int -> 'a -> unit (no bounds checking) *)
+val array_unsafe_set_type : Types.type_scheme
+
+(** Create an empty array with polymorphic element type: unit -> 'a array *)
+val array_empty_type : Types.type_scheme
+
+(** {1 Dict Primitives} *)
+
+(** Dict empty: unit -> ('k, 'v) dict *)
+val dict_empty_type : Types.type_scheme
+
+(** Dict get: 'k -> ('k, 'v) dict -> 'v option *)
+val dict_get_type : Types.type_scheme
+
+(** Dict set: 'k -> 'v -> ('k, 'v) dict -> ('k, 'v) dict *)
+val dict_set_type : Types.type_scheme
+
+(** Dict has: 'k -> ('k, 'v) dict -> bool *)
+val dict_has_type : Types.type_scheme
+
+(** Dict remove: 'k -> ('k, 'v) dict -> ('k, 'v) dict *)
+val dict_remove_type : Types.type_scheme
+
+(** Dict size: ('k, 'v) dict -> int *)
+val dict_size_type : Types.type_scheme
+
+(** Dict keys: ('k, 'v) dict -> 'k list *)
+val dict_keys_type : Types.type_scheme
+
+(** Dict entries: ('k, 'v) dict -> ('k * 'v) list *)
+val dict_entries_type : Types.type_scheme
+
+(** {1 Set Primitives} *)
+
+(** Set empty: unit -> 'a set *)
+val set_empty_type : Types.type_scheme
+
+(** Set add: 'a -> 'a set -> 'a set *)
+val set_add_type : Types.type_scheme
+
+(** Set remove: 'a -> 'a set -> 'a set *)
+val set_remove_type : Types.type_scheme
+
+(** Set mem: 'a -> 'a set -> bool *)
+val set_mem_type : Types.type_scheme
+
+(** Set size: 'a set -> int *)
+val set_size_type : Types.type_scheme
+
+(** Set elements: 'a set -> 'a list *)
+val set_elements_type : Types.type_scheme
+
+(** {1 Error Handling} *)
+
+(** Error function: string -> 'a (raises a runtime error) *)
+val error_type : Types.type_scheme
 
 (** {1 Option Type} *)
 

@@ -1,0 +1,126 @@
+(* Dict module integration tests *)
+
+(* Construction *)
+let d_empty = Dict.empty ()
+let _ = print (Dict.is_empty d_empty)  (* Expected: true *)
+
+let d_single = Dict.singleton "a" 1
+let _ = print (Dict.size d_single)  (* Expected: 1 *)
+
+(* Basic operations *)
+let d = Dict.of_list [("a", 1); ("b", 2); ("c", 3)]
+let _ = print (Dict.size d)  (* Expected: 3 *)
+let _ = print (Dict.has "a" d)  (* Expected: true *)
+let _ = print (Dict.has "z" d)  (* Expected: false *)
+let _ = print (Dict.is_empty d)  (* Expected: false *)
+
+(* Get operations *)
+let _ = match Dict.get "a" d with
+  | Some v -> print v  (* Expected: 1 *)
+  | None -> print "not found"
+
+let _ = match Dict.get "z" d with
+  | Some v -> print v
+  | None -> print "not found"  (* Expected: not found *)
+
+let _ = print (Dict.get_or "z" 99 d)  (* Expected: 99 *)
+let _ = print (Dict.get_or "b" 99 d)  (* Expected: 2 *)
+
+(* Modification - immutable semantics *)
+let d2 = Dict.set "d" 4 d
+let _ = print (Dict.size d2)  (* Expected: 4 *)
+let _ = print (Dict.size d)   (* Expected: 3 - original unchanged *)
+let _ = print (Dict.has "d" d2)  (* Expected: true *)
+let _ = print (Dict.has "d" d)   (* Expected: false *)
+
+(* Update existing key *)
+let d3 = Dict.set "a" 100 d
+let _ = print (Dict.get_or "a" 0 d3)  (* Expected: 100 *)
+let _ = print (Dict.get_or "a" 0 d)   (* Expected: 1 - original unchanged *)
+
+(* Remove *)
+let d4 = Dict.remove "a" d
+let _ = print (Dict.size d4)  (* Expected: 2 *)
+let _ = print (Dict.has "a" d4)  (* Expected: false *)
+let _ = print (Dict.has "b" d4)  (* Expected: true *)
+
+(* Remove non-existent key - no effect *)
+let d5 = Dict.remove "z" d
+let _ = print (Dict.size d5)  (* Expected: 3 *)
+
+(* Keys - note: order is not guaranteed, so we check count *)
+let ks = Dict.keys d
+let _ = print (List.length ks)  (* Expected: 3 *)
+
+(* Transformations *)
+let doubled = Dict.map (fun v -> v * 2) d
+let _ = print (Dict.get_or "a" 0 doubled)  (* Expected: 2 *)
+let _ = print (Dict.get_or "b" 0 doubled)  (* Expected: 4 *)
+let _ = print (Dict.get_or "c" 0 doubled)  (* Expected: 6 *)
+
+(* Filter *)
+let filtered = Dict.filter (fun k v -> v > 1) d
+let _ = print (Dict.size filtered)  (* Expected: 2 *)
+let _ = print (Dict.has "a" filtered)  (* Expected: false *)
+let _ = print (Dict.has "b" filtered)  (* Expected: true *)
+
+(* Folding *)
+let sum = Dict.fold (fun k v acc -> acc + v) d 0
+let _ = print sum  (* Expected: 6 *)
+
+(* Iteration *)
+let _ = print "iterating:"
+let _ = Dict.iter (fun k v -> print v) d  (* Prints 1, 2, 3 in some order *)
+
+(* Merging *)
+let d6 = Dict.of_list [("b", 20); ("e", 5)]
+let merged = Dict.merge d d6
+let _ = print (Dict.get_or "b" 0 merged)  (* Expected: 20 - d6 overrides *)
+let _ = print (Dict.get_or "a" 0 merged)  (* Expected: 1 - from d *)
+let _ = print (Dict.get_or "e" 0 merged)  (* Expected: 5 - from d6 *)
+let _ = print (Dict.size merged)  (* Expected: 4 *)
+
+(* Equality *)
+let d7 = Dict.of_list [("a", 1); ("b", 2); ("c", 3)]
+let _ = print (Dict.equal (fun a b -> a == b) d d7)  (* Expected: true *)
+
+let d8 = Dict.of_list [("a", 1); ("b", 99)]
+let _ = print (Dict.equal (fun a b -> a == b) d d8)  (* Expected: false *)
+
+(* Different sizes *)
+let d9 = Dict.of_list [("a", 1)]
+let _ = print (Dict.equal (fun a b -> a == b) d d9)  (* Expected: false *)
+
+(* Exists and for_all *)
+let _ = print (Dict.exists (fun k v -> v > 2) d)  (* Expected: true *)
+let _ = print (Dict.exists (fun k v -> v > 10) d)  (* Expected: false *)
+let _ = print (Dict.for_all (fun k v -> v > 0) d)  (* Expected: true *)
+let _ = print (Dict.for_all (fun k v -> v > 1) d)  (* Expected: false *)
+
+(* Conversion round-trip *)
+let lst = Dict.to_list d
+let _ = print (List.length lst)  (* Expected: 3 *)
+
+(* filter_map *)
+let fm = Dict.filter_map (fun k v -> if v > 1 then Some (v * 10) else None) d
+let _ = print (Dict.size fm)  (* Expected: 2 *)
+let _ = print (Dict.get_or "b" 0 fm)  (* Expected: 20 *)
+let _ = print (Dict.get_or "c" 0 fm)  (* Expected: 30 *)
+let _ = print (Dict.has "a" fm)  (* Expected: false *)
+
+(* mapi *)
+let mi = Dict.mapi (fun k v -> v + 10) d
+let _ = print (Dict.get_or "a" 0 mi)  (* Expected: 11 *)
+
+(* Integer keys *)
+let int_dict = Dict.of_list [(1, "one"); (2, "two"); (3, "three")]
+let _ = print (Dict.get_or 2 "none" int_dict)  (* Expected: two *)
+let _ = print (Dict.size int_dict)  (* Expected: 3 *)
+
+(* Boolean keys *)
+let bool_dict = Dict.singleton true "yes"
+let bool_dict = Dict.set false "no" bool_dict
+let _ = print (Dict.get_or true "?" bool_dict)  (* Expected: yes *)
+let _ = print (Dict.get_or false "?" bool_dict)  (* Expected: no *)
+
+let _ = print "done"

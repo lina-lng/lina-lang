@@ -112,6 +112,32 @@ Tests locally abstract type syntax and semantics.
 | `with_annotation` | `type a.` annotation | ACCEPT |
 | `rigid_unification` | Rigid type doesn't unify | REJECT |
 
+### Arrays (19 tests)
+
+Tests mutable array operations and type invariance.
+
+| Test | Description | Expected |
+|------|-------------|----------|
+| `basic_make` | Array.make creates arrays | ACCEPT |
+| `basic_init` | Array.init with initializer function | ACCEPT |
+| `basic_get_set` | Array get and set operations | ACCEPT |
+| `array_invariant` | Arrays are invariant (mutable) | REJECT |
+| `polymorphic_array_function` | Polymorphic functions over arrays | ACCEPT |
+| `map_type` | Array.map type inference | ACCEPT |
+| `mapi_type` | Array.mapi type inference | ACCEPT |
+| `fold_left_type` | Array.fold_left type inference | ACCEPT |
+| `fold_right_type` | Array.fold_right type inference | ACCEPT |
+| `iter_type` | Array.iter type inference | ACCEPT |
+| `iteri_type` | Array.iteri type inference | ACCEPT |
+| `exists_forall_type` | Array.exists/for_all types | ACCEPT |
+| `nested_arrays` | Arrays containing arrays | ACCEPT |
+| `array_of_functions` | Arrays of functions | ACCEPT |
+| `type_mismatch_set` | Wrong type in set | REJECT |
+| `type_mismatch_get` | Wrong type annotation on get | REJECT |
+| `type_mismatch_init` | Wrong type in init function | REJECT |
+| `type_mismatch_map` | Wrong type in map result | REJECT |
+| `type_mismatch_fold` | Wrong type in fold function | REJECT |
+
 ### Result (16 tests)
 
 Tests the built-in result type `('a, 'e) result = Ok of 'a | Error of 'e`.
@@ -229,5 +255,11 @@ All tests passed!
 | Level Propagation | 5 |
 | Toplevel Expressions | 9 |
 | Result | 16 |
+| Lists | 10 |
+| Arrays | 19 |
 | Error Cases | 14 |
-| **Total** | **156** |
+| Binding Operators | 10 |
+| Loops | 8 |
+| Strings | 5 |
+| Imperative | 4 |
+| **Total** | **229** |

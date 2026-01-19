@@ -1,0 +1,10 @@
+(** Test: Array.mapi type inference
+    Expected: ACCEPT
+
+    Verifies Array.mapi has type (int -> 'a -> 'b) -> 'a array -> 'b array *)
+
+let arr = Array.make 3 10
+let indexed = Array.mapi (fun i x -> i + x) arr
+
+let _ = print (Array.get_exn indexed 0)
+let _ = print (Array.get_exn indexed 2)

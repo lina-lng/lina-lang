@@ -1,0 +1,8 @@
+(* Tuple: equal operation *)
+(* Expected: ACCEPT - equal compares pairs *)
+
+let int_eq a b = a == b
+let p1 = (1, 2)
+let p2 = (1, 2)
+let eq = Tuple.equal int_eq int_eq p1 p2
+let _ = print (if eq then 1 else 0)

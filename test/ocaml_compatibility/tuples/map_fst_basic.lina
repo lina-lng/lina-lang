@@ -1,0 +1,7 @@
+(* Tuple: map_fst operation *)
+(* Expected: ACCEPT - map_fst transforms first element *)
+
+let pair = (5, 10)
+let mapped = Tuple.map_fst (fun x -> x * 2) pair
+let x = Tuple.fst mapped
+let _ = print x

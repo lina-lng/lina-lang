@@ -1,0 +1,7 @@
+(* Tuple: iter requires same type *)
+(* Expected: ACCEPT - iter works on homogeneous pairs *)
+
+let pair = (1, 2)
+let result = ref 0
+let _ = Tuple.iter (fun x -> result := !result + x) pair
+let _ = print !result

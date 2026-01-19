@@ -158,7 +158,10 @@ and builtin_type =
   | BuiltinString
   | BuiltinBool
   | BuiltinUnit
-  | BuiltinRef  (** Mutable reference type *)
+  | BuiltinRef    (** Mutable reference type *)
+  | BuiltinArray  (** Mutable array type *)
+  | BuiltinDict   (** Immutable dictionary type *)
+  | BuiltinSet    (** Immutable set type *)
 
 (** {1 Variance} *)
 
@@ -207,6 +210,15 @@ val type_unit : type_expression
 
 (** [type_ref content_type] creates a reference type [content_type ref]. *)
 val type_ref : type_expression -> type_expression
+
+(** [type_array element_type] creates an array type [element_type array]. *)
+val type_array : type_expression -> type_expression
+
+(** [type_dict key_type value_type] creates a dictionary type [(key_type, value_type) dict]. *)
+val type_dict : type_expression -> type_expression -> type_expression
+
+(** [type_set element_type] creates a set type [element_type set]. *)
+val type_set : type_expression -> type_expression
 
 (** {1 Record Type Constructors} *)
 

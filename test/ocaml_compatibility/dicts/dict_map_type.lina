@@ -1,0 +1,7 @@
+(* Test: Dict.map type inference *)
+(* Expected: ACCEPT *)
+
+let d = Dict.of_list [("a", 1); ("b", 2); ("c", 3)]
+let doubled = Dict.map (fun v -> v * 2) d
+
+let _ = print (Dict.get_or "a" 0 doubled)

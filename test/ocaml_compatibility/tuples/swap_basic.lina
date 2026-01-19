@@ -1,0 +1,7 @@
+(* Tuple: swap operation *)
+(* Expected: ACCEPT - swap exchanges elements *)
+
+let pair = (1, 2)
+let swapped = Tuple.swap pair
+let x = Tuple.fst swapped
+let _ = print x

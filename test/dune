@@ -319,3 +319,11 @@
  (modules test_result)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Dict type and module tests
+(library
+ (name test_dict)
+ (libraries parsing typing lambda lua driver common)
+ (modules test_dict)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

@@ -1,0 +1,7 @@
+(* Tuple: iter operation *)
+(* Expected: ACCEPT - iter applies function to both elements *)
+
+let counter = ref 0
+let pair = (10, 20)
+let _ = Tuple.iter (fun x -> counter := !counter + x) pair
+let _ = print !counter

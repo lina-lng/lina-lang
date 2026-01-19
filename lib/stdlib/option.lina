@@ -141,6 +141,16 @@ let of_result result = match result with
   | Ok value -> Some value
   | Error _ -> None
 
+(** [to_list opt] returns [[x]] if [Some x], [[]] if [None]. *)
+let to_list opt = match opt with
+  | Some x -> [x]
+  | None -> []
+
+(** [to_array opt] returns a singleton array if [Some x], empty array if [None]. *)
+let to_array opt = match opt with
+  | Some x -> Array.make 1 x
+  | None -> Array.empty ()
+
 (** {1 Binding Operators} *)
 
 let ( let* ) opt f = flat_map f opt

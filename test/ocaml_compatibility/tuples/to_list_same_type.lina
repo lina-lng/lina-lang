@@ -1,0 +1,7 @@
+(* Tuple: to_list requires same type *)
+(* Expected: ACCEPT - to_list works on homogeneous pairs *)
+
+let pair = (10, 20)
+let lst = Tuple.to_list pair
+let first = match List.head lst with Some x -> x | None -> 0
+let _ = print first

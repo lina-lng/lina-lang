@@ -1,0 +1,5 @@
+(* Test: Dict key type mismatch *)
+(* Expected: REJECT - cannot use int key with string-keyed dict *)
+
+let d = Dict.singleton "a" 1
+let v = Dict.get 42 d

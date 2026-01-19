@@ -1,0 +1,12 @@
+(* Test: Dict is covariant - relaxed value restriction *)
+(* Expected: ACCEPT - Dict applied to id should be usable polymorphically *)
+
+let id x = x
+let empty = id (Dict.empty ())
+
+(* The dict type is covariant, so this should work *)
+let d1 = Dict.set "a" 1 empty
+let d2 = Dict.set true "yes" empty
+
+let _ = print (Dict.size d1)
+let _ = print (Dict.size d2)

@@ -1,0 +1,157 @@
+(** Set utilities for immutable sets of unique values.
+
+    Sets are collections of unique elements. Operations are immutable:
+    [add] and [remove] return new sets.
+
+    Elements can be any comparable type (strings, integers, booleans).
+    The set type is built-in: ['a set] *)
+
+(** {1 Construction} *)
+
+(** The empty set. *)
+let empty () = set_empty ()
+
+(** Create a set with a single element. *)
+let singleton elem = set_add elem (set_empty ())
+
+(** {1 Querying} *)
+
+(** Return [true] if [elem] is in the set. O(1) average. *)
+let mem elem set = set_mem elem set
+
+(** Alias for [mem]. *)
+let has elem set = set_mem elem set
+
+(** Return the number of elements. O(n). *)
+let size set = set_size set
+
+(** Return [true] if the set is empty. *)
+let is_empty set = set_size set == 0
+
+(** {1 Modifying} *)
+
+(** Add [elem] to the set, returning a new set.
+    No effect if [elem] is already present. O(n). *)
+let add elem set = set_add elem set
+
+(** Remove [elem] from the set, returning a new set.
+    No effect if [elem] is not present. O(n). *)
+let remove elem set = set_remove elem set
+
+(** {1 Set Operations} *)
+
+(** Return the union of two sets (elements in either). *)
+let union set1 set2 =
+  List.fold_left (fun acc elem -> set_add elem acc) set1 (set_elements set2)
+
+(** Return the intersection of two sets (elements in both). *)
+let inter set1 set2 =
+  List.fold_left (fun acc elem ->
+    if set_mem elem set2 then set_add elem acc else acc
+  ) (set_empty ()) (set_elements set1)
+
+(** Return the difference of two sets (elements in first but not second). *)
+let diff set1 set2 =
+  List.fold_left (fun acc elem ->
+    if set_mem elem set2 then acc else set_add elem acc
+  ) (set_empty ()) (set_elements set1)
+
+(** Return the symmetric difference (elements in exactly one set). *)
+let sym_diff set1 set2 =
+  let in_only_set1 = diff set1 set2 in
+  let in_only_set2 = diff set2 set1 in
+  union in_only_set1 in_only_set2
+
+(** {1 Predicates} *)
+
+(** Return [true] if [set1] is a subset of [set2]. *)
+let subset set1 set2 =
+  List.for_all (fun elem -> set_mem elem set2) (set_elements set1)
+
+(** Return [true] if the sets have no elements in common. *)
+let disjoint set1 set2 =
+  List.for_all (fun elem -> not (set_mem elem set2)) (set_elements set1)
+
+(** Return [true] if any element satisfies [predicate]. *)
+let exists predicate set =
+  List.exists predicate (set_elements set)
+
+(** Return [true] if all elements satisfy [predicate]. *)
+let for_all predicate set =
+  List.for_all predicate (set_elements set)
+
+(** {1 Transformations} *)
+
+(** Apply [f] to each element, returning a new set. *)
+let map f set =
+  List.fold_left (fun acc elem -> set_add (f elem) acc) (set_empty ()) (set_elements set)
+
+(** Keep only elements satisfying [predicate]. *)
+let filter predicate set =
+  List.fold_left (fun acc elem ->
+    if predicate elem then set_add elem acc else acc
+  ) (set_empty ()) (set_elements set)
+
+(** Apply [f] to each element and keep [Some] results. *)
+let filter_map f set =
+  List.fold_left (fun acc elem ->
+    match f elem with
+    | None -> acc
+    | Some new_elem -> set_add new_elem acc
+  ) (set_empty ()) (set_elements set)
+
+(** Partition elements by predicate: [(satisfying, not_satisfying)]. *)
+let partition predicate set =
+  List.fold_left (fun pair elem ->
+    match pair with (yes, no) ->
+      if predicate elem then (set_add elem yes, no)
+      else (yes, set_add elem no)
+  ) (set_empty (), set_empty ()) (set_elements set)
+
+(** {1 Folding} *)
+
+(** Fold over all elements. [fold f set init] applies [f elem acc]
+    for each element. Order is not guaranteed. *)
+let fold f set init =
+  List.fold_left (fun acc elem -> f elem acc) init (set_elements set)
+
+(** {1 Iteration} *)
+
+(** Apply [f] to each element for side effects. Order is not guaranteed. *)
+let iter f set =
+  List.iter f (set_elements set)
+
+(** {1 Searching} *)
+
+(** Find an element satisfying [predicate], or [None]. *)
+let find predicate set =
+  List.find predicate (set_elements set)
+
+(** {1 Conversion} *)
+
+(** Return all elements as a list. Order is not guaranteed. *)
+let elements set = set_elements set
+
+(** Alias for [elements]. *)
+let to_list set = set_elements set
+
+(** Create a set from a list of elements.
+    Duplicates are automatically removed. *)
+let of_list items =
+  List.fold_left (fun acc elem -> set_add elem acc) (set_empty ()) items
+
+(** {1 Comparison} *)
+
+(** Test equality of two sets. *)
+let equal set1 set2 =
+  if set_size set1 != set_size set2 then false
+  else
+    List.for_all (fun elem -> set_mem elem set2) (set_elements set1)
+
+(** Compare set sizes. Returns negative if smaller, 0 if equal, positive if larger. *)
+let compare set1 set2 =
+  let s1 = set_size set1 in
+  let s2 = set_size set2 in
+  if s1 < s2 then 0 - 1
+  else if s1 > s2 then 1
+  else 0

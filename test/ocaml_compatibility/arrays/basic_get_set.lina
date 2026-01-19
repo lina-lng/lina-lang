@@ -1,0 +1,9 @@
+(** Test: Array get and set operations
+    Expected: ACCEPT
+
+    Verifies array access operations have correct types. *)
+
+let arr = Array.make 3 0
+let _ = Array.set_exn arr 0 42
+let x = Array.get_exn arr 0
+let _ = print x

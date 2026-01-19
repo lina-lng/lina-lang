@@ -1,0 +1,180 @@
+(* Set module integration tests *)
+
+(* Construction *)
+let s_empty = Set.empty ()
+let _ = print (Set.is_empty s_empty)  (* Expected: true *)
+
+let s_single = Set.singleton 42
+let _ = print (Set.size s_single)  (* Expected: 1 *)
+let _ = print (Set.mem 42 s_single)  (* Expected: true *)
+
+(* Basic operations *)
+let s = Set.of_list [1; 2; 3; 4; 5]
+let _ = print (Set.size s)  (* Expected: 5 *)
+let _ = print (Set.mem 3 s)  (* Expected: true *)
+let _ = print (Set.mem 99 s)  (* Expected: false *)
+let _ = print (Set.is_empty s)  (* Expected: false *)
+
+(* has is an alias for mem *)
+let _ = print (Set.has 3 s)  (* Expected: true *)
+let _ = print (Set.has 99 s)  (* Expected: false *)
+
+(* Add - immutable semantics *)
+let s2 = Set.add 6 s
+let _ = print (Set.size s2)  (* Expected: 6 *)
+let _ = print (Set.size s)   (* Expected: 5 - original unchanged *)
+let _ = print (Set.mem 6 s2)  (* Expected: true *)
+let _ = print (Set.mem 6 s)   (* Expected: false *)
+
+(* Add existing element - idempotent *)
+let s3 = Set.add 3 s
+let _ = print (Set.size s3)  (* Expected: 5 - same size *)
+
+(* Remove *)
+let s4 = Set.remove 3 s
+let _ = print (Set.size s4)  (* Expected: 4 *)
+let _ = print (Set.mem 3 s4)  (* Expected: false *)
+let _ = print (Set.mem 2 s4)  (* Expected: true *)
+
+(* Remove non-existent element - no effect *)
+let s5 = Set.remove 99 s
+let _ = print (Set.size s5)  (* Expected: 5 *)
+
+(* Remove is immutable *)
+let _ = print (Set.size s)  (* Expected: 5 - original unchanged *)
+
+(* Union *)
+let a = Set.of_list [1; 2; 3]
+let b = Set.of_list [3; 4; 5]
+let u = Set.union a b
+let _ = print (Set.size u)  (* Expected: 5 *)
+let _ = print (Set.mem 1 u)  (* Expected: true *)
+let _ = print (Set.mem 3 u)  (* Expected: true *)
+let _ = print (Set.mem 5 u)  (* Expected: true *)
+
+(* Intersection *)
+let i = Set.inter a b
+let _ = print (Set.size i)  (* Expected: 1 *)
+let _ = print (Set.mem 3 i)  (* Expected: true *)
+let _ = print (Set.mem 1 i)  (* Expected: false *)
+
+(* Difference *)
+let d = Set.diff a b
+let _ = print (Set.size d)  (* Expected: 2 *)
+let _ = print (Set.mem 1 d)  (* Expected: true *)
+let _ = print (Set.mem 2 d)  (* Expected: true *)
+let _ = print (Set.mem 3 d)  (* Expected: false *)
+
+(* Symmetric difference *)
+let sd = Set.sym_diff a b
+let _ = print (Set.size sd)  (* Expected: 4 - {1, 2, 4, 5} *)
+let _ = print (Set.mem 1 sd)  (* Expected: true *)
+let _ = print (Set.mem 3 sd)  (* Expected: false - in both *)
+let _ = print (Set.mem 4 sd)  (* Expected: true *)
+
+(* Subset *)
+let small = Set.of_list [1; 2]
+let large = Set.of_list [1; 2; 3; 4]
+let _ = print (Set.subset small large)  (* Expected: true *)
+let _ = print (Set.subset large small)  (* Expected: false *)
+let _ = print (Set.subset small small)  (* Expected: true - reflexive *)
+
+(* Disjoint *)
+let disjoint1 = Set.of_list [1; 2]
+let disjoint2 = Set.of_list [3; 4]
+let overlapping = Set.of_list [2; 3]
+let _ = print (Set.disjoint disjoint1 disjoint2)  (* Expected: true *)
+let _ = print (Set.disjoint disjoint1 overlapping)  (* Expected: false *)
+
+(* Map transformation *)
+let doubled = Set.map (fun x -> x * 2) a
+let _ = print (Set.mem 2 doubled)  (* Expected: true - was 1 *)
+let _ = print (Set.mem 4 doubled)  (* Expected: true - was 2 *)
+let _ = print (Set.mem 6 doubled)  (* Expected: true - was 3 *)
+let _ = print (Set.mem 1 doubled)  (* Expected: false *)
+let _ = print (Set.size doubled)  (* Expected: 3 *)
+
+(* Filter *)
+let evens = Set.filter (fun x -> x mod 2 == 0) s
+let _ = print (Set.size evens)  (* Expected: 2 - {2, 4} *)
+let _ = print (Set.mem 2 evens)  (* Expected: true *)
+let _ = print (Set.mem 4 evens)  (* Expected: true *)
+let _ = print (Set.mem 1 evens)  (* Expected: false *)
+
+(* Filter_map *)
+let fm = Set.filter_map (fun x -> if x > 3 then Some (x * 10) else None) s
+let _ = print (Set.size fm)  (* Expected: 2 - {40, 50} *)
+let _ = print (Set.mem 40 fm)  (* Expected: true *)
+let _ = print (Set.mem 50 fm)  (* Expected: true *)
+
+(* Partition *)
+let pair = Set.partition (fun x -> x > 3) s
+let _ = match pair with (above, below) ->
+  let _ = print (Set.size above) in  (* Expected: 2 - {4, 5} *)
+  print (Set.size below)  (* Expected: 3 - {1, 2, 3} *)
+
+(* Fold *)
+let sum = Set.fold (fun x acc -> acc + x) s 0
+let _ = print sum  (* Expected: 15 - 1+2+3+4+5 *)
+
+(* Iteration *)
+let _ = print "iterating:"
+let _ = Set.iter (fun x -> print x) a  (* Prints 1, 2, 3 in some order *)
+
+(* Exists *)
+let _ = print (Set.exists (fun x -> x > 4) s)  (* Expected: true *)
+let _ = print (Set.exists (fun x -> x > 10) s)  (* Expected: false *)
+
+(* For_all *)
+let _ = print (Set.for_all (fun x -> x > 0) s)  (* Expected: true *)
+let _ = print (Set.for_all (fun x -> x > 2) s)  (* Expected: false *)
+
+(* Find *)
+let _ = match Set.find (fun x -> x > 4) s with
+  | Some v -> print v  (* Expected: 5 *)
+  | None -> print "not found"
+
+let _ = match Set.find (fun x -> x > 10) s with
+  | Some v -> print v
+  | None -> print "not found"  (* Expected: not found *)
+
+(* Equality *)
+let eq1 = Set.of_list [1; 2; 3]
+let eq2 = Set.of_list [3; 1; 2]  (* Same elements, different order *)
+let eq3 = Set.of_list [1; 2]
+let _ = print (Set.equal eq1 eq2)  (* Expected: true *)
+let _ = print (Set.equal eq1 eq3)  (* Expected: false *)
+
+(* Compare (size-based) *)
+let _ = print (Set.compare small large < 0)  (* Expected: true - small has fewer *)
+let _ = print (Set.compare large small > 0)  (* Expected: true *)
+let _ = print (Set.compare small small == 0)  (* Expected: true *)
+
+(* Conversion round-trip *)
+let elems = Set.elements s
+let _ = print (List.length elems)  (* Expected: 5 *)
+
+let s_round = Set.of_list elems
+let _ = print (Set.equal s s_round)  (* Expected: true *)
+
+(* to_list is an alias for elements *)
+let elems2 = Set.to_list s
+let _ = print (List.length elems2)  (* Expected: 5 *)
+
+(* of_list removes duplicates *)
+let with_dups = Set.of_list [1; 1; 2; 2; 3; 3]
+let _ = print (Set.size with_dups)  (* Expected: 3 *)
+
+(* String elements *)
+let str_set = Set.of_list ["apple"; "banana"; "cherry"]
+let _ = print (Set.mem "apple" str_set)  (* Expected: true *)
+let _ = print (Set.mem "date" str_set)  (* Expected: false *)
+let _ = print (Set.size str_set)  (* Expected: 3 *)
+
+(* Boolean elements *)
+let bool_set = Set.of_list [true; false; true]
+let _ = print (Set.size bool_set)  (* Expected: 2 *)
+let _ = print (Set.mem true bool_set)  (* Expected: true *)
+let _ = print (Set.mem false bool_set)  (* Expected: true *)
+
+let _ = print "done"

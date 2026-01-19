@@ -1,0 +1,7 @@
+(* Tuple: map_snd operation *)
+(* Expected: ACCEPT - map_snd transforms second element *)
+
+let pair = (5, 10)
+let mapped = Tuple.map_snd (fun x -> x + 1) pair
+let y = Tuple.snd mapped
+let _ = print y

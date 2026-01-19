@@ -123,7 +123,13 @@ let binary_primitives = [
   Lambda.PrimitiveIntLessEqual, OpLessEqual;
   Lambda.PrimitiveIntGreaterEqual, OpGreaterEqual;
   Lambda.PrimitiveStringEqual, OpEqual;
+  Lambda.PrimitiveStringLess, OpLess;
+  Lambda.PrimitiveStringGreater, OpGreater;
+  Lambda.PrimitiveStringLessEqual, OpLessEqual;
+  Lambda.PrimitiveStringGreaterEqual, OpGreaterEqual;
   Lambda.PrimitiveStringConcat, OpConcat;
+  Lambda.PrimitiveBoolEqual, OpEqual;
+  Lambda.PrimitiveBoolNotEqual, OpNotEqual;
   Lambda.PrimitiveBoolAnd, OpAnd;
   Lambda.PrimitiveBoolOr, OpOr;
 ]
@@ -141,6 +147,28 @@ let translate_primitive prim args =
     | Some op, [operand] -> ExpressionUnaryOp (op, operand)
     | _ ->
       match prim, args with
+      (* Boolean comparisons: Lua doesn't support <, >, <=, >= on booleans.
+         We use logical equivalents based on false < true convention:
+         - a < b  = not a and b     (only false < true is true)
+         - a > b  = a and not b     (only true > false is true)
+         - a <= b = not a or b      (all except true > false)
+         - a >= b = a or not b      (all except false < true) *)
+      | Lambda.PrimitiveBoolLess, [left; right] ->
+          ExpressionBinaryOp (OpAnd,
+            ExpressionUnaryOp (OpNot, left),
+            right)
+      | Lambda.PrimitiveBoolGreater, [left; right] ->
+          ExpressionBinaryOp (OpAnd,
+            left,
+            ExpressionUnaryOp (OpNot, right))
+      | Lambda.PrimitiveBoolLessEqual, [left; right] ->
+          ExpressionBinaryOp (OpOr,
+            ExpressionUnaryOp (OpNot, left),
+            right)
+      | Lambda.PrimitiveBoolGreaterEqual, [left; right] ->
+          ExpressionBinaryOp (OpOr,
+            left,
+            ExpressionUnaryOp (OpNot, right))
       | Lambda.PrimitivePrint, [arg] ->
           ExpressionCall (ExpressionVariable "print", [arg])
       | Lambda.PrimError, [msg] ->
@@ -196,6 +224,304 @@ let translate_primitive prim args =
           let call_append = StatementReturn [ExpressionCall (ExpressionVariable append_name, [xs; ys])] in
 
           make_iife [append_func; call_append]
+
+      | Lambda.PrimitiveArrayMake, [size; init] ->
+          (* Generate IIFE:
+             (function()
+               local _arr = {}
+               local _init = init
+               for _idx = 1, size do
+                 _arr[_idx] = _init
+               end
+               return _arr
+             end)() *)
+          let arr_name = "_arr" in
+          let init_name = "_init" in
+          let idx_name = "_idx" in
+
+          let arr_decl = StatementLocal ([arr_name], [ExpressionTable []]) in
+          let init_decl = StatementLocal ([init_name], [init]) in
+          let assign = StatementAssign (
+            [LvalueIndex (ExpressionVariable arr_name, ExpressionVariable idx_name)],
+            [ExpressionVariable init_name]
+          ) in
+          let for_loop = StatementForNum (idx_name,
+            ExpressionNumber 1.0, size, None, [assign]) in
+          let return_arr = StatementReturn [ExpressionVariable arr_name] in
+
+          make_iife [arr_decl; init_decl; for_loop; return_arr]
+
+      | Lambda.PrimitiveArrayLength, [arr] ->
+          (* #arr *)
+          ExpressionUnaryOp (OpLength, arr)
+
+      | Lambda.PrimitiveArrayUnsafeGet, [arr; index] ->
+          (* arr[index + 1] - Lina is 0-indexed, Lua is 1-indexed *)
+          ExpressionIndex (arr, ExpressionBinaryOp (OpAdd, index, ExpressionNumber 1.0))
+
+      | Lambda.PrimitiveArrayUnsafeSet, [arr; index; value] ->
+          (* (function() arr[index + 1] = value; return nil end)() *)
+          let lua_index = ExpressionBinaryOp (OpAdd, index, ExpressionNumber 1.0) in
+          make_assignment_iife [LvalueIndex (arr, lua_index)] [value]
+
+      | Lambda.PrimitiveArrayEmpty, [_unit] ->
+          (* {} - empty array, typed polymorphically *)
+          ExpressionTable []
+
+      | Lambda.PrimitiveDictEmpty, [_unit] ->
+          (* {} - empty dict *)
+          ExpressionTable []
+
+      | Lambda.PrimitiveDictGet, [key; dict] ->
+          (* (function()
+               local _v = dict[key]
+               if _v == nil then return {_tag = 0} else return {_tag = 1, _0 = _v} end
+             end)() *)
+          let val_name = "_v" in
+          let val_var = ExpressionVariable val_name in
+          let val_decl = StatementLocal ([val_name], [ExpressionIndex (dict, key)]) in
+          let nil_check = ExpressionBinaryOp (OpEqual, val_var, ExpressionNil) in
+          let none_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 0.0)
+          ] in
+          let some_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 1.0);
+            FieldNamed (Codegen_constants.variant_arg_field, val_var)
+          ] in
+          let return_none = StatementReturn [none_table] in
+          let return_some = StatementReturn [some_table] in
+          let if_stmt = StatementIf ([(nil_check, [return_none])], Some [return_some]) in
+          make_iife [val_decl; if_stmt]
+
+      | Lambda.PrimitiveDictSet, [key; value; dict] ->
+          (* (function()
+               local _result = {}
+               for _k, _v in pairs(dict) do _result[_k] = _v end
+               _result[key] = value
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let result_decl = StatementLocal ([result_name], [ExpressionTable []]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let val_name = Codegen_constants.pair_value_name in
+          let copy_assign = StatementAssign (
+            [LvalueIndex (result_var, ExpressionVariable key_name)],
+            [ExpressionVariable val_name]
+          ) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [dict]) in
+          let for_loop = StatementForIn ([key_name; val_name], [pairs_call], [copy_assign]) in
+          let set_new = StatementAssign ([LvalueIndex (result_var, key)], [value]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; set_new; return_result]
+
+      | Lambda.PrimitiveDictHas, [key; dict] ->
+          (* dict[key] ~= nil *)
+          ExpressionBinaryOp (OpNotEqual, ExpressionIndex (dict, key), ExpressionNil)
+
+      | Lambda.PrimitiveDictRemove, [key; dict] ->
+          (* (function()
+               local _result = {}
+               for _k, _v in pairs(dict) do
+                 if _k ~= key then _result[_k] = _v end
+               end
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let result_decl = StatementLocal ([result_name], [ExpressionTable []]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let val_name = Codegen_constants.pair_value_name in
+          let key_check = ExpressionBinaryOp (OpNotEqual, ExpressionVariable key_name, key) in
+          let copy_assign = StatementAssign (
+            [LvalueIndex (result_var, ExpressionVariable key_name)],
+            [ExpressionVariable val_name]
+          ) in
+          let if_stmt = StatementIf ([(key_check, [copy_assign])], None) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [dict]) in
+          let for_loop = StatementForIn ([key_name; val_name], [pairs_call], [if_stmt]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; return_result]
+
+      | Lambda.PrimitiveDictSize, [dict] ->
+          (* (function()
+               local _count = 0
+               for _ in pairs(dict) do _count = _count + 1 end
+               return _count
+             end)() *)
+          let count_name = "_count" in
+          let count_var = ExpressionVariable count_name in
+          let count_decl = StatementLocal ([count_name], [ExpressionNumber 0.0]) in
+          let increment = StatementAssign (
+            [LvalueVariable count_name],
+            [ExpressionBinaryOp (OpAdd, count_var, ExpressionNumber 1.0)]
+          ) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [dict]) in
+          let for_loop = StatementForIn (["_"], [pairs_call], [increment]) in
+          let return_count = StatementReturn [count_var] in
+          make_iife [count_decl; for_loop; return_count]
+
+      | Lambda.PrimitiveDictKeys, [dict] ->
+          (* (function()
+               local _result = {_tag = 0}  -- Nil
+               for _k, _ in pairs(dict) do
+                 _result = {_tag = 1, _0 = {_k, _result}}  -- Cons
+               end
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let nil_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 0.0)
+          ] in
+          let result_decl = StatementLocal ([result_name], [nil_table]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let cons_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 1.0);
+            FieldNamed (Codegen_constants.variant_arg_field, ExpressionTable [
+              FieldArray (ExpressionVariable key_name);
+              FieldArray result_var
+            ])
+          ] in
+          let cons_assign = StatementAssign ([LvalueVariable result_name], [cons_table]) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [dict]) in
+          let for_loop = StatementForIn ([key_name; "_"], [pairs_call], [cons_assign]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; return_result]
+
+      | Lambda.PrimitiveDictEntries, [dict] ->
+          (* (function()
+               local _result = {_tag = 0}  -- Nil
+               for _k, _v in pairs(dict) do
+                 _result = {_tag = 1, _0 = {{_k, _v}, _result}}  -- Cons of tuple
+               end
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let nil_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 0.0)
+          ] in
+          let result_decl = StatementLocal ([result_name], [nil_table]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let val_name = Codegen_constants.pair_value_name in
+          let pair_tuple = ExpressionTable [
+            FieldArray (ExpressionVariable key_name);
+            FieldArray (ExpressionVariable val_name)
+          ] in
+          let cons_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 1.0);
+            FieldNamed (Codegen_constants.variant_arg_field, ExpressionTable [
+              FieldArray pair_tuple;
+              FieldArray result_var
+            ])
+          ] in
+          let cons_assign = StatementAssign ([LvalueVariable result_name], [cons_table]) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [dict]) in
+          let for_loop = StatementForIn ([key_name; val_name], [pairs_call], [cons_assign]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; return_result]
+
+      | Lambda.PrimitiveSetEmpty, [_unit] ->
+          (* {} - empty set *)
+          ExpressionTable []
+
+      | Lambda.PrimitiveSetAdd, [elem; set] ->
+          (* (function()
+               local _result = {}
+               for _k, _v in pairs(set) do _result[_k] = _v end
+               _result[elem] = true
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let result_decl = StatementLocal ([result_name], [ExpressionTable []]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let val_name = Codegen_constants.pair_value_name in
+          let copy_assign = StatementAssign (
+            [LvalueIndex (result_var, ExpressionVariable key_name)],
+            [ExpressionVariable val_name]
+          ) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [set]) in
+          let for_loop = StatementForIn ([key_name; val_name], [pairs_call], [copy_assign]) in
+          let set_new = StatementAssign ([LvalueIndex (result_var, elem)], [ExpressionBool true]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; set_new; return_result]
+
+      | Lambda.PrimitiveSetRemove, [elem; set] ->
+          (* (function()
+               local _result = {}
+               for _k, _v in pairs(set) do
+                 if _k ~= elem then _result[_k] = _v end
+               end
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let result_decl = StatementLocal ([result_name], [ExpressionTable []]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let val_name = Codegen_constants.pair_value_name in
+          let key_check = ExpressionBinaryOp (OpNotEqual, ExpressionVariable key_name, elem) in
+          let copy_assign = StatementAssign (
+            [LvalueIndex (result_var, ExpressionVariable key_name)],
+            [ExpressionVariable val_name]
+          ) in
+          let if_stmt = StatementIf ([(key_check, [copy_assign])], None) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [set]) in
+          let for_loop = StatementForIn ([key_name; val_name], [pairs_call], [if_stmt]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; return_result]
+
+      | Lambda.PrimitiveSetMem, [elem; set] ->
+          (* set[elem] ~= nil *)
+          ExpressionBinaryOp (OpNotEqual, ExpressionIndex (set, elem), ExpressionNil)
+
+      | Lambda.PrimitiveSetSize, [set] ->
+          (* (function()
+               local _count = 0
+               for _ in pairs(set) do _count = _count + 1 end
+               return _count
+             end)() *)
+          let count_name = "_count" in
+          let count_var = ExpressionVariable count_name in
+          let count_decl = StatementLocal ([count_name], [ExpressionNumber 0.0]) in
+          let increment = StatementAssign (
+            [LvalueVariable count_name],
+            [ExpressionBinaryOp (OpAdd, count_var, ExpressionNumber 1.0)]
+          ) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [set]) in
+          let for_loop = StatementForIn (["_"], [pairs_call], [increment]) in
+          let return_count = StatementReturn [count_var] in
+          make_iife [count_decl; for_loop; return_count]
+
+      | Lambda.PrimitiveSetElements, [set] ->
+          (* (function()
+               local _result = {_tag = 0}  -- Nil
+               for _k, _ in pairs(set) do
+                 _result = {_tag = 1, _0 = {_k, _result}}  -- Cons
+               end
+               return _result
+             end)() *)
+          let result_name = Codegen_constants.record_update_result_name in
+          let result_var = ExpressionVariable result_name in
+          let nil_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 0.0)
+          ] in
+          let result_decl = StatementLocal ([result_name], [nil_table]) in
+          let key_name = Codegen_constants.pair_key_name in
+          let cons_table = ExpressionTable [
+            FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 1.0);
+            FieldNamed (Codegen_constants.variant_arg_field, ExpressionTable [
+              FieldArray (ExpressionVariable key_name);
+              FieldArray result_var
+            ])
+          ] in
+          let cons_assign = StatementAssign ([LvalueVariable result_name], [cons_table]) in
+          let pairs_call = ExpressionCall (ExpressionVariable "pairs", [set]) in
+          let for_loop = StatementForIn ([key_name; "_"], [pairs_call], [cons_assign]) in
+          let return_result = StatementReturn [result_var] in
+          make_iife [result_decl; for_loop; return_result]
+
       | _ -> ExpressionNil
 
 (** Wrap the last argument with table.unpack() for variadic FFI calls.

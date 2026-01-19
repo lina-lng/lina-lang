@@ -1,0 +1,353 @@
+(* Comprehensive tests for comparison operators across all comparable types *)
+(* Tests: <, >, <=, >=, =, ==, !=, <> for int, string, bool *)
+
+let check name condition =
+  if condition then print ("OK: " ^ name)
+  else print ("FAIL: " ^ name)
+
+(* ========================================
+   Section 1: Integer Comparisons
+   ======================================== *)
+
+let test_int_less () =
+  let _ = print "=== Integer < (less than) ===" in
+  let _ = check "int: 0 < 1" (0 < 1) in
+  let _ = check "int: 1 < 2" (1 < 2) in
+  let _ = check "int: -5 < 0" ((0-5) < 0) in
+  let _ = check "int: -10 < -5" ((0-10) < (0-5)) in
+  let _ = check "int: not 1 < 1" (not (1 < 1)) in
+  let _ = check "int: not 2 < 1" (not (2 < 1)) in
+  check "int: not 0 < -1" (not (0 < (0-1)))
+
+let test_int_greater () =
+  let _ = print "=== Integer > (greater than) ===" in
+  let _ = check "int: 1 > 0" (1 > 0) in
+  let _ = check "int: 2 > 1" (2 > 1) in
+  let _ = check "int: 0 > -5" (0 > (0-5)) in
+  let _ = check "int: -5 > -10" ((0-5) > (0-10)) in
+  let _ = check "int: not 1 > 1" (not (1 > 1)) in
+  let _ = check "int: not 1 > 2" (not (1 > 2)) in
+  check "int: not -1 > 0" (not ((0-1) > 0))
+
+let test_int_leq () =
+  let _ = print "=== Integer <= (less or equal) ===" in
+  let _ = check "int: 0 <= 1" (0 <= 1) in
+  let _ = check "int: 1 <= 1" (1 <= 1) in
+  let _ = check "int: -5 <= -5" ((0-5) <= (0-5)) in
+  let _ = check "int: -10 <= 0" ((0-10) <= 0) in
+  let _ = check "int: not 2 <= 1" (not (2 <= 1)) in
+  check "int: not 0 <= -1" (not (0 <= (0-1)))
+
+let test_int_geq () =
+  let _ = print "=== Integer >= (greater or equal) ===" in
+  let _ = check "int: 1 >= 0" (1 >= 0) in
+  let _ = check "int: 1 >= 1" (1 >= 1) in
+  let _ = check "int: 0 >= -5" (0 >= (0-5)) in
+  let _ = check "int: -5 >= -5" ((0-5) >= (0-5)) in
+  let _ = check "int: not 1 >= 2" (not (1 >= 2)) in
+  check "int: not -1 >= 0" (not ((0-1) >= 0))
+
+let test_int_eq () =
+  let _ = print "=== Integer = and == ===" in
+  let _ = check "int: 0 = 0" (0 = 0) in
+  let _ = check "int: 1 = 1" (1 = 1) in
+  let _ = check "int: -5 = -5" ((0-5) = (0-5)) in
+  let _ = check "int: 100 = 100" (100 = 100) in
+  let _ = check "int: not 0 = 1" (not (0 = 1)) in
+  let _ = check "int: 0 == 0" (0 == 0) in
+  let _ = check "int: 1 == 1" (1 == 1) in
+  check "int: not 0 == 1" (not (0 == 1))
+
+let test_int_neq () =
+  let _ = print "=== Integer != and <> ===" in
+  let _ = check "int: 0 != 1" (0 != 1) in
+  let _ = check "int: 1 != 2" (1 != 2) in
+  let _ = check "int: -5 != 5" ((0-5) != 5) in
+  let _ = check "int: not 1 != 1" (not (1 != 1)) in
+  let _ = check "int: 0 <> 1" (0 <> 1) in
+  check "int: not 1 <> 1" (not (1 <> 1))
+
+(* ========================================
+   Section 2: String Comparisons
+   ======================================== *)
+
+let test_str_less () =
+  let _ = print "=== String < (lexicographic less) ===" in
+  let _ = check "str: a < b" ("a" < "b") in
+  let _ = check "str: aa < ab" ("aa" < "ab") in
+  let _ = check "str: abc < abd" ("abc" < "abd") in
+  let _ = check "str: empty < a" ("" < "a") in
+  let _ = check "str: a < aa" ("a" < "aa") in
+  let _ = check "str: ab < abc" ("ab" < "abc") in
+  let _ = check "str: A < a" ("A" < "a") in
+  let _ = check "str: not b < a" (not ("b" < "a")) in
+  let _ = check "str: not a < a" (not ("a" < "a")) in
+  check "str: not aa < a" (not ("aa" < "a"))
+
+let test_str_greater () =
+  let _ = print "=== String > (lexicographic greater) ===" in
+  let _ = check "str: b > a" ("b" > "a") in
+  let _ = check "str: ab > aa" ("ab" > "aa") in
+  let _ = check "str: abd > abc" ("abd" > "abc") in
+  let _ = check "str: a > empty" ("a" > "") in
+  let _ = check "str: aa > a" ("aa" > "a") in
+  let _ = check "str: abc > ab" ("abc" > "ab") in
+  let _ = check "str: a > A" ("a" > "A") in
+  let _ = check "str: not a > b" (not ("a" > "b")) in
+  check "str: not a > a" (not ("a" > "a"))
+
+let test_str_leq () =
+  let _ = print "=== String <= (lexicographic less or equal) ===" in
+  let _ = check "str: a <= b" ("a" <= "b") in
+  let _ = check "str: a <= a" ("a" <= "a") in
+  let _ = check "str: empty <= empty" ("" <= "") in
+  let _ = check "str: hello <= hello" ("hello" <= "hello") in
+  let _ = check "str: ab <= abc" ("ab" <= "abc") in
+  let _ = check "str: not b <= a" (not ("b" <= "a")) in
+  check "str: not abc <= ab" (not ("abc" <= "ab"))
+
+let test_str_geq () =
+  let _ = print "=== String >= (lexicographic greater or equal) ===" in
+  let _ = check "str: b >= a" ("b" >= "a") in
+  let _ = check "str: a >= a" ("a" >= "a") in
+  let _ = check "str: empty >= empty" ("" >= "") in
+  let _ = check "str: hello >= hello" ("hello" >= "hello") in
+  let _ = check "str: abc >= ab" ("abc" >= "ab") in
+  let _ = check "str: not a >= b" (not ("a" >= "b")) in
+  check "str: not ab >= abc" (not ("ab" >= "abc"))
+
+let test_str_eq () =
+  let _ = print "=== String = and == ===" in
+  let _ = check "str: empty = empty" ("" = "") in
+  let _ = check "str: a = a" ("a" = "a") in
+  let _ = check "str: hello = hello" ("hello" = "hello") in
+  let _ = check "str: long = long" ("abcdefghij" = "abcdefghij") in
+  let _ = check "str: not a = b" (not ("a" = "b")) in
+  let _ = check "str: empty == empty" ("" == "") in
+  let _ = check "str: a == a" ("a" == "a") in
+  check "str: not a == b" (not ("a" == "b"))
+
+let test_str_neq () =
+  let _ = print "=== String != and <> ===" in
+  let _ = check "str: a != b" ("a" != "b") in
+  let _ = check "str: hello != world" ("hello" != "world") in
+  let _ = check "str: a != aa" ("a" != "aa") in
+  let _ = check "str: not a != a" (not ("a" != "a")) in
+  let _ = check "str: a <> b" ("a" <> "b") in
+  check "str: not a <> a" (not ("a" <> "a"))
+
+(* ========================================
+   Section 3: Boolean Comparisons
+   ======================================== *)
+
+let test_bool_less () =
+  let _ = print "=== Boolean < (false < true) ===" in
+  let _ = check "bool: false < true" (false < true) in
+  let _ = check "bool: not false < false" (not (false < false)) in
+  let _ = check "bool: not true < true" (not (true < true)) in
+  check "bool: not true < false" (not (true < false))
+
+let test_bool_greater () =
+  let _ = print "=== Boolean > (true > false) ===" in
+  let _ = check "bool: true > false" (true > false) in
+  let _ = check "bool: not false > false" (not (false > false)) in
+  let _ = check "bool: not true > true" (not (true > true)) in
+  check "bool: not false > true" (not (false > true))
+
+let test_bool_leq () =
+  let _ = print "=== Boolean <= ===" in
+  let _ = check "bool: false <= false" (false <= false) in
+  let _ = check "bool: false <= true" (false <= true) in
+  let _ = check "bool: true <= true" (true <= true) in
+  check "bool: not true <= false" (not (true <= false))
+
+let test_bool_geq () =
+  let _ = print "=== Boolean >= ===" in
+  let _ = check "bool: false >= false" (false >= false) in
+  let _ = check "bool: true >= false" (true >= false) in
+  let _ = check "bool: true >= true" (true >= true) in
+  check "bool: not false >= true" (not (false >= true))
+
+let test_bool_eq () =
+  let _ = print "=== Boolean = and == ===" in
+  let _ = check "bool: false = false" (false = false) in
+  let _ = check "bool: true = true" (true = true) in
+  let _ = check "bool: not false = true" (not (false = true)) in
+  let _ = check "bool: false == false" (false == false) in
+  let _ = check "bool: true == true" (true == true) in
+  check "bool: not false == true" (not (false == true))
+
+let test_bool_neq () =
+  let _ = print "=== Boolean != and <> ===" in
+  let _ = check "bool: false != true" (false != true) in
+  let _ = check "bool: true != false" (true != false) in
+  let _ = check "bool: not false != false" (not (false != false)) in
+  let _ = check "bool: false <> true" (false <> true) in
+  check "bool: not false <> false" (not (false <> false))
+
+(* ========================================
+   Section 4: Edge Cases
+   ======================================== *)
+
+let test_edge_cases () =
+  let _ = print "=== Edge cases ===" in
+  let _ = check "int: 1000000 < 1000001" (1000000 < 1000001) in
+  let _ = check "int: 1000000 = 1000000" (1000000 = 1000000) in
+  let _ = check "str: space < a" (" " < "a") in
+  let _ = check "str: 0 < a" ("0" < "a") in
+  let _ = check "str: 9 < a" ("9" < "a") in
+  check "str: Z < a" ("Z" < "a")
+
+(* ========================================
+   Section 5: Variables
+   ======================================== *)
+
+let test_variables () =
+  let _ = print "=== Variables ===" in
+  let x = 5 in
+  let y = 10 in
+  let _ = check "var: x < y" (x < y) in
+  let _ = check "var: y > x" (y > x) in
+  let _ = check "var: x <= x" (x <= x) in
+  let _ = check "var: x = x" (x = x) in
+  let s1 = "hello" in
+  let s2 = "world" in
+  let _ = check "var: s1 < s2" (s1 < s2) in
+  let _ = check "var: s2 > s1" (s2 > s1) in
+  let _ = check "var: s1 = s1" (s1 = s1) in
+  let b1 = false in
+  let b2 = true in
+  let _ = check "var: b1 < b2" (b1 < b2) in
+  let _ = check "var: b2 > b1" (b2 > b1) in
+  check "var: b1 = b1" (b1 = b1)
+
+(* ========================================
+   Section 6: Expressions
+   ======================================== *)
+
+let test_expressions () =
+  let _ = print "=== In expressions ===" in
+  let max_int a b = if a > b then a else b in
+  let _ = check "max_int 3 5 = 5" (max_int 3 5 = 5) in
+  let _ = check "max_int 7 2 = 7" (max_int 7 2 = 7) in
+  let _ = check "max_int 4 4 = 4" (max_int 4 4 = 4) in
+  let min_int a b = if a < b then a else b in
+  let _ = check "min_int 3 5 = 3" (min_int 3 5 = 3) in
+  let _ = check "min_int 7 2 = 2" (min_int 7 2 = 2) in
+  let both_positive a b = a > 0 && b > 0 in
+  let _ = check "both_positive 1 2" (both_positive 1 2) in
+  let _ = check "not both_positive -1 2" (not (both_positive (0-1) 2)) in
+  let either_positive a b = a > 0 || b > 0 in
+  let _ = check "either_positive 1 -2" (either_positive 1 (0-2)) in
+  check "either_positive -1 2" (either_positive (0-1) 2)
+
+(* ========================================
+   Section 7: Polymorphic Behavior
+   ======================================== *)
+
+(* Note: Polymorphic comparisons work directly but NOT through wrapper functions.
+   This is because type-specialized primitives are selected at compile time,
+   and polymorphic function bodies don't have concrete type information.
+
+   Direct comparison works: false < true (concrete types known)
+   Through wrapper fails: let f a b = a < b; f false true (type is 'a at compilation) *)
+
+let test_polymorphic () =
+  let _ = print "=== Polymorphic usage ===" in
+
+  (* Direct comparisons with different types work *)
+  let _ = check "direct int <" (1 < 2) in
+  let _ = check "direct str <" ("a" < "b") in
+  let _ = check "direct bool <" (false < true) in
+
+  let _ = check "direct int =" (5 = 5) in
+  let _ = check "direct str =" ("hi" = "hi") in
+  let _ = check "direct bool =" (true = true) in
+
+  (* Polymorphic equality (=, ==, !=) works through wrapper since Lua's == handles all types *)
+  let is_equal a b = a = b in
+  let _ = check "poly equal int" (is_equal 5 5) in
+  let _ = check "poly equal str" (is_equal "hi" "hi") in
+  let _ = check "poly equal bool" (is_equal true true) in
+  let _ = check "poly not equal int" (not (is_equal 5 6)) in
+  let _ = check "poly not equal str" (not (is_equal "hi" "bye")) in
+  check "poly not equal bool" (not (is_equal true false))
+
+(* ========================================
+   Section 8: Transitivity
+   ======================================== *)
+
+let test_transitivity () =
+  let _ = print "=== Transitivity ===" in
+  let test_trans a b c = if a < b && b < c then a < c else true in
+  let _ = check "trans: 1 < 2 < 3" (test_trans 1 2 3) in
+  let _ = check "trans: -5 < 0 < 5" (test_trans (0-5) 0 5) in
+  check "trans: a < b < c" (test_trans "a" "b" "c")
+
+(* ========================================
+   Section 9: Reflexivity and Symmetry
+   ======================================== *)
+
+let test_reflexivity () =
+  let _ = print "=== Reflexivity and Symmetry ===" in
+  let _ = check "reflex: 42 = 42" (42 = 42) in
+  let _ = check "reflex: hello = hello" ("hello" = "hello") in
+  let _ = check "reflex: true = true" (true = true) in
+  let _ = check "reflex: 42 <= 42" (42 <= 42) in
+  let _ = check "reflex: hello <= hello" ("hello" <= "hello") in
+  let _ = check "reflex: 42 >= 42" (42 >= 42) in
+  let _ = check "asym: 1<2 implies not 2<1" (if 1 < 2 then not (2 < 1) else true) in
+  check "asym: a<b implies not b<a" (if "a" < "b" then not ("b" < "a") else true)
+
+(* ========================================
+   Section 10: Operator Consistency
+   ======================================== *)
+
+let test_consistency () =
+  let _ = print "=== Operator consistency ===" in
+  let _ = check "(1 < 2) = not (1 >= 2)" ((1 < 2) = not (1 >= 2)) in
+  let _ = check "(2 < 1) = not (2 >= 1)" ((2 < 1) = not (2 >= 1)) in
+  let _ = check "(2 > 1) = not (2 <= 1)" ((2 > 1) = not (2 <= 1)) in
+  let _ = check "(1 > 2) = not (1 <= 2)" ((1 > 2) = not (1 <= 2)) in
+  let _ = check "(1 <= 2) = (1<2 || 1=2)" ((1 <= 2) = (1 < 2 || 1 = 2)) in
+  let _ = check "(2 <= 2) = (2<2 || 2=2)" ((2 <= 2) = (2 < 2 || 2 = 2)) in
+  let _ = check "(3 <= 2) = (3<2 || 3=2)" ((3 <= 2) = (3 < 2 || 3 = 2)) in
+  let _ = check "(2 >= 1) = (2>1 || 2=1)" ((2 >= 1) = (2 > 1 || 2 = 1)) in
+  let _ = check "(1 != 2) = not (1 = 2)" ((1 != 2) = not (1 = 2)) in
+  let _ = check "(1 != 1) = not (1 = 1)" ((1 != 1) = not (1 = 1)) in
+  let _ = check "(1 <> 2) = (1 != 2)" ((1 <> 2) = (1 != 2)) in
+  let _ = check "(5 = 5) = (5 == 5)" ((5 = 5) = (5 == 5)) in
+  let _ = check "(hi = hi) = (hi == hi)" (("hi" = "hi") = ("hi" == "hi")) in
+  check "(true = true) = (true == true)" ((true = true) = (true == true))
+
+(* Run all tests *)
+let _ = test_int_less ()
+let _ = test_int_greater ()
+let _ = test_int_leq ()
+let _ = test_int_geq ()
+let _ = test_int_eq ()
+let _ = test_int_neq ()
+
+let _ = test_str_less ()
+let _ = test_str_greater ()
+let _ = test_str_leq ()
+let _ = test_str_geq ()
+let _ = test_str_eq ()
+let _ = test_str_neq ()
+
+let _ = test_bool_less ()
+let _ = test_bool_greater ()
+let _ = test_bool_leq ()
+let _ = test_bool_geq ()
+let _ = test_bool_eq ()
+let _ = test_bool_neq ()
+
+let _ = test_edge_cases ()
+let _ = test_variables ()
+let _ = test_expressions ()
+let _ = test_polymorphic ()
+let _ = test_transitivity ()
+let _ = test_reflexivity ()
+let _ = test_consistency ()
+
+let _ = print "=== All comparison operator tests complete ==="

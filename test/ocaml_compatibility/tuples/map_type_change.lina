@@ -1,0 +1,7 @@
+(* Tuple: map changes types *)
+(* Expected: ACCEPT - map can change element types *)
+
+let pair = (42, 10)
+let mapped = Tuple.map (fun n -> n > 0) (fun n -> n * 2) pair
+let b = Tuple.fst mapped
+let _ = print (if b then 1 else 0)

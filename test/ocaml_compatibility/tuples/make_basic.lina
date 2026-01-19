@@ -1,0 +1,7 @@
+(* Tuple: make constructor *)
+(* Expected: ACCEPT - make creates a pair *)
+
+let pair = Tuple.make 1 2
+let x = Tuple.fst pair
+let y = Tuple.snd pair
+let _ = print (x + y)

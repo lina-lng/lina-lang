@@ -1,0 +1,10 @@
+(* Test: Dict.equal type inference *)
+(* Expected: ACCEPT *)
+
+let d1 = Dict.of_list [("a", 1); ("b", 2)]
+let d2 = Dict.of_list [("a", 1); ("b", 2)]
+
+(* equal takes a value equality function *)
+let eq = Dict.equal (fun a b -> a == b) d1 d2
+
+let _ = print eq

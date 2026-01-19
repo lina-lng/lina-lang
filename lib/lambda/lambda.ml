@@ -14,11 +14,40 @@ type primitive =
   | PrimitiveIntLessEqual
   | PrimitiveIntGreaterEqual
   | PrimitiveStringEqual
+  | PrimitiveStringLess
+  | PrimitiveStringGreater
+  | PrimitiveStringLessEqual
+  | PrimitiveStringGreaterEqual
   | PrimitiveStringConcat
   | PrimitiveBoolNot
+  | PrimitiveBoolEqual
+  | PrimitiveBoolNotEqual
+  | PrimitiveBoolLess        (** false < true *)
+  | PrimitiveBoolGreater     (** true > false *)
+  | PrimitiveBoolLessEqual   (** false <= true, true <= true *)
+  | PrimitiveBoolGreaterEqual (** true >= false, false >= false *)
   | PrimitiveBoolAnd  (** Short-circuit boolean AND (&&) *)
   | PrimitiveBoolOr   (** Short-circuit boolean OR (||) *)
   | PrimitiveListAppend (** List concatenation (@) *)
+  | PrimitiveArrayMake     (** array_make n init -> creates array of n elements *)
+  | PrimitiveArrayLength   (** array_length arr -> int *)
+  | PrimitiveArrayUnsafeGet (** array_unsafe_get arr i -> value (no bounds check) *)
+  | PrimitiveArrayUnsafeSet (** array_unsafe_set arr i v -> unit (no bounds check) *)
+  | PrimitiveArrayEmpty    (** array_empty () -> empty array of any type *)
+  | PrimitiveDictEmpty     (** dict_empty () -> empty dict of any type *)
+  | PrimitiveDictGet       (** dict_get key dict -> option *)
+  | PrimitiveDictSet       (** dict_set key value dict -> new dict *)
+  | PrimitiveDictHas       (** dict_has key dict -> bool *)
+  | PrimitiveDictRemove    (** dict_remove key dict -> new dict *)
+  | PrimitiveDictSize      (** dict_size dict -> int *)
+  | PrimitiveDictKeys      (** dict_keys dict -> key list *)
+  | PrimitiveDictEntries   (** dict_entries dict -> (key * value) list *)
+  | PrimitiveSetEmpty      (** set_empty () -> empty set of any type *)
+  | PrimitiveSetAdd        (** set_add elem set -> new set with elem *)
+  | PrimitiveSetRemove     (** set_remove elem set -> new set without elem *)
+  | PrimitiveSetMem        (** set_mem elem set -> bool *)
+  | PrimitiveSetSize       (** set_size set -> int *)
+  | PrimitiveSetElements   (** set_elements set -> elem list *)
   | PrimitiveMakeBlock of int
   | PrimitiveGetField of int
   | PrimitivePrint
@@ -97,26 +126,82 @@ type categorized_switch_cases = {
 let module_binding_name (binding : module_binding) : string =
   Identifier.name binding.mb_id
 
+(** Check if a type is a specific built-in type. *)
+let is_builtin_type builtin ty =
+  match Typing.Types.representative ty with
+  | Typing.Types.TypeConstructor (Typing.Types.PathBuiltin b, []) -> b = builtin
+  | _ -> false
+
+let is_bool_type = is_builtin_type Typing.Types.BuiltinBool
+let is_string_type = is_builtin_type Typing.Types.BuiltinString
+
+(** Get the primitive for a comparison operator based on argument type. *)
+let comparison_primitive_for_type op arg_type =
+  if is_bool_type arg_type then
+    match op with
+    | "=" | "==" -> Some PrimitiveBoolEqual
+    | "!=" | "<>" -> Some PrimitiveBoolNotEqual
+    | "<" -> Some PrimitiveBoolLess
+    | ">" -> Some PrimitiveBoolGreater
+    | "<=" -> Some PrimitiveBoolLessEqual
+    | ">=" -> Some PrimitiveBoolGreaterEqual
+    | _ -> None
+  else if is_string_type arg_type then
+    match op with
+    | "=" | "==" -> Some PrimitiveStringEqual
+    | "!=" | "<>" -> Some PrimitiveIntNotEqual  (* Lua ~= works for strings *)
+    | "<" -> Some PrimitiveStringLess
+    | ">" -> Some PrimitiveStringGreater
+    | "<=" -> Some PrimitiveStringLessEqual
+    | ">=" -> Some PrimitiveStringGreaterEqual
+    | _ -> None
+  else
+    match op with
+    | "=" | "==" -> Some PrimitiveIntEqual
+    | "!=" | "<>" -> Some PrimitiveIntNotEqual
+    | "<" -> Some PrimitiveIntLess
+    | ">" -> Some PrimitiveIntGreater
+    | "<=" -> Some PrimitiveIntLessEqual
+    | ">=" -> Some PrimitiveIntGreaterEqual
+    | _ -> None
+
+(** Check if an operator is a comparison operator. *)
+let is_comparison_operator = function
+  | "=" | "==" | "!=" | "<>" | "<" | ">" | "<=" | ">=" -> true
+  | _ -> false
+
 let primitive_of_operator = function
   | "+" -> Some PrimitiveAddInt
   | "-" -> Some PrimitiveSubInt
   | "*" -> Some PrimitiveMulInt
   | "/" -> Some PrimitiveDivInt
   | "mod" -> Some PrimitiveModInt
-  | "=" -> Some PrimitiveIntEqual
-  | "==" -> Some PrimitiveIntEqual
-  | "!=" -> Some PrimitiveIntNotEqual
-  | "<>" -> Some PrimitiveIntNotEqual
-  | "<" -> Some PrimitiveIntLess
-  | ">" -> Some PrimitiveIntGreater
-  | "<=" -> Some PrimitiveIntLessEqual
-  | ">=" -> Some PrimitiveIntGreaterEqual
   | "^" -> Some PrimitiveStringConcat
   | "@" -> Some PrimitiveListAppend
   | "print" -> Some PrimitivePrint
   | "not" -> Some PrimitiveBoolNot
   | "&&" -> Some PrimitiveBoolAnd
   | "||" -> Some PrimitiveBoolOr
+  | "array_make" -> Some PrimitiveArrayMake
+  | "array_length" -> Some PrimitiveArrayLength
+  | "array_unsafe_get" -> Some PrimitiveArrayUnsafeGet
+  | "array_unsafe_set" -> Some PrimitiveArrayUnsafeSet
+  | "array_empty" -> Some PrimitiveArrayEmpty
+  | "dict_empty" -> Some PrimitiveDictEmpty
+  | "dict_get" -> Some PrimitiveDictGet
+  | "dict_set" -> Some PrimitiveDictSet
+  | "dict_has" -> Some PrimitiveDictHas
+  | "dict_remove" -> Some PrimitiveDictRemove
+  | "dict_size" -> Some PrimitiveDictSize
+  | "dict_keys" -> Some PrimitiveDictKeys
+  | "dict_entries" -> Some PrimitiveDictEntries
+  | "set_empty" -> Some PrimitiveSetEmpty
+  | "set_add" -> Some PrimitiveSetAdd
+  | "set_remove" -> Some PrimitiveSetRemove
+  | "set_mem" -> Some PrimitiveSetMem
+  | "set_size" -> Some PrimitiveSetSize
+  | "set_elements" -> Some PrimitiveSetElements
+  | "error" -> Some PrimError
   | _ -> None
 
 let translate_constant = function
@@ -643,10 +728,19 @@ and translate_expression (expr : Typing.Typed_tree.typed_expression) : lambda =
     begin match func with
     | LambdaVariable id ->
       let name = Identifier.name id in
-      begin match primitive_of_operator name with
-      | Some prim -> LambdaPrimitive (prim, args)
-      | None -> LambdaApply (func, args)
-      end
+      if is_comparison_operator name then
+        match labeled_arg_exprs with
+        | (_, first_arg) :: _ ->
+            begin match comparison_primitive_for_type name first_arg.expression_type with
+            | Some prim -> LambdaPrimitive (prim, args)
+            | None -> LambdaApply (func, args)
+            end
+        | [] -> LambdaApply (func, args)
+      else
+        begin match primitive_of_operator name with
+        | Some prim -> LambdaPrimitive (prim, args)
+        | None -> LambdaApply (func, args)
+        end
     | _ -> LambdaApply (func, args)
     end
 

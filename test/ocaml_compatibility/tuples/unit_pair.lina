@@ -1,0 +1,6 @@
+(* Tuple: pair of units *)
+(* Expected: ACCEPT - can create pair of unit values *)
+
+let pair = ((), ())
+let x = Tuple.fst pair
+let _ = print 1

@@ -1,0 +1,7 @@
+(* Tuple: swap with different types *)
+(* Expected: ACCEPT - swap works on heterogeneous pairs *)
+
+let pair = (42, "hello")
+let swapped = Tuple.swap pair
+let s = Tuple.fst swapped
+let _ = print s

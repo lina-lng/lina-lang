@@ -1,0 +1,13 @@
+(** Test: Array.make basic usage
+    Expected: ACCEPT
+
+    Verifies that Array.make has type int -> 'a -> 'a array
+    and works with different element types. *)
+
+let arr_int = Array.make 5 0
+let arr_str = Array.make 3 "hello"
+let arr_bool = Array.make 2 true
+
+let _ = print (Array.length arr_int)
+let _ = print (Array.length arr_str)
+let _ = print (Array.length arr_bool)

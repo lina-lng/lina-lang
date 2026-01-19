@@ -32,6 +32,12 @@ let get_error_or r default = match r with
   | Ok _ -> default
   | Error e -> e
 
+(** [get_exn r] returns the value if [r] is [Ok v], raises error if [Error].
+    Use only when you are certain the result is Ok. *)
+let get_exn r = match r with
+  | Ok x -> x
+  | Error _ -> error "Result.get_exn: called on Error"
+
 (** {1 Transforming} *)
 
 let map f r = match r with
@@ -98,6 +104,19 @@ let equal ok_eq err_eq r1 r2 = match (r1, r2) with
   | (Ok x1, Ok x2) -> ok_eq x1 x2
   | (Error e1, Error e2) -> err_eq e1 e2
   | _ -> false
+
+(** {1 Sequencing} *)
+
+(** [sequence results] converts a list of results into a result of list.
+    Returns [Ok] with all values if all are [Ok], or first [Error] encountered. *)
+let sequence results =
+  let rec go acc lst = match lst with
+    | [] -> Ok (List.reverse acc)
+    | r :: rest -> match r with
+      | Ok x -> go (x :: acc) rest
+      | Error e -> Error e
+  in
+  go [] results
 
 (** {1 Binding Operators} *)
 

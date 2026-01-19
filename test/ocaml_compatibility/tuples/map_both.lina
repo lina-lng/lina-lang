@@ -1,0 +1,8 @@
+(* Tuple: map operation on both elements *)
+(* Expected: ACCEPT - map transforms both elements *)
+
+let pair = (3, 4)
+let mapped = Tuple.map (fun x -> x * 2) (fun y -> y * 3) pair
+let x = Tuple.fst mapped
+let y = Tuple.snd mapped
+let _ = print (x + y)

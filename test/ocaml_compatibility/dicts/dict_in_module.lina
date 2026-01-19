@@ -1,0 +1,21 @@
+(* Test: Dict in module signature *)
+(* Expected: ACCEPT *)
+
+module type CACHE = sig
+  val get : string -> int option
+  val set : string -> int -> unit
+end
+
+module Cache : CACHE = struct
+  let cache = ref (Dict.empty ())
+
+  let get key = Dict.get key !cache
+
+  let set key value =
+    cache := Dict.set key value !cache
+end
+
+let _ = Cache.set "x" 42
+let _ = match Cache.get "x" with
+  | Some v -> print v
+  | None -> print 0

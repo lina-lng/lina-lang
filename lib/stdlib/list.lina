@@ -322,3 +322,11 @@ let intersperse separator lst = match lst with
         | Cons (y, rest) -> Cons (separator, Cons (y, go rest))
       in
       Cons (x, go xs)
+
+(** {1 Array Conversion} *)
+
+(** [to_array lst] converts list to array. O(n). *)
+let to_array lst = Array.of_list lst
+
+(** [of_array arr] converts array to list. O(n). *)
+let of_array arr = Array.to_list arr

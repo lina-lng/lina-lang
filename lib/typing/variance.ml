@@ -89,6 +89,15 @@ let get_constructor_variances (path : Types.path) (param_count : int) : t list =
   | Types.PathBuiltin Types.BuiltinRef ->
     (* ref is invariant - both reading and writing *)
     [Invariant]
+  | Types.PathBuiltin Types.BuiltinArray ->
+    (* array is invariant - mutable container *)
+    [Invariant]
+  | Types.PathBuiltin Types.BuiltinDict ->
+    (* dict is covariant in both key and value - immutable container *)
+    [Covariant; Covariant]
+  | Types.PathBuiltin Types.BuiltinSet ->
+    (* set is covariant - immutable container *)
+    [Covariant]
   | Types.PathBuiltin _ ->
     (* Other builtins have no type parameters *)
     []

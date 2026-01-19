@@ -1,0 +1,6 @@
+(* Tuple: fst only works on pairs *)
+(* Expected: REJECT - cannot use fst on triple *)
+
+let triple = (1, 2, 3)
+let x = Tuple.fst triple
+let _ = print x

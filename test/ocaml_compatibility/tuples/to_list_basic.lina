@@ -1,0 +1,7 @@
+(* Tuple: to_list conversion *)
+(* Expected: ACCEPT - to_list converts pair to list *)
+
+let pair = (1, 2)
+let lst = Tuple.to_list pair
+let len = List.length lst
+let _ = print len

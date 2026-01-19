@@ -1,0 +1,212 @@
+(* Comprehensive tests for Ord module - ordering utilities *)
+
+(* Helper to check if test passes *)
+let check name condition =
+  if condition then print ("OK: " ^ name)
+  else print ("FAIL: " ^ name)
+
+(* ========================================
+   Section 1: Type and Constructors
+   ======================================== *)
+
+let _ = print "=== Constructors and to_int ==="
+
+let _ = check "Less to_int" (Ord.to_int Ord.Less == 0 - 1)
+let _ = check "Equal to_int" (Ord.to_int Ord.Equal == 0)
+let _ = check "Greater to_int" (Ord.to_int Ord.Greater == 1)
+
+let _ = check "less alias" (Ord.to_int Ord.less == 0 - 1)
+let _ = check "equal_ordering alias" (Ord.to_int Ord.equal_ordering == 0)
+let _ = check "greater alias" (Ord.to_int Ord.greater == 1)
+
+(* ========================================
+   Section 2: of_int conversion
+   ======================================== *)
+
+let _ = print "=== of_int conversion ==="
+
+let _ = check "of_int negative" (Ord.to_int (Ord.of_int (0 - 100)) == 0 - 1)
+let _ = check "of_int -1" (Ord.to_int (Ord.of_int (0 - 1)) == 0 - 1)
+let _ = check "of_int 0" (Ord.to_int (Ord.of_int 0) == 0)
+let _ = check "of_int 1" (Ord.to_int (Ord.of_int 1) == 1)
+let _ = check "of_int positive" (Ord.to_int (Ord.of_int 100) == 1)
+
+(* ========================================
+   Section 3: Predicates
+   ======================================== *)
+
+let _ = print "=== Predicates ==="
+
+let _ = check "is_less Less" (Ord.is_less Ord.Less)
+let _ = check "is_less Equal" (not (Ord.is_less Ord.Equal))
+let _ = check "is_less Greater" (not (Ord.is_less Ord.Greater))
+
+let _ = check "is_equal Less" (not (Ord.is_equal Ord.Less))
+let _ = check "is_equal Equal" (Ord.is_equal Ord.Equal)
+let _ = check "is_equal Greater" (not (Ord.is_equal Ord.Greater))
+
+let _ = check "is_greater Less" (not (Ord.is_greater Ord.Less))
+let _ = check "is_greater Equal" (not (Ord.is_greater Ord.Equal))
+let _ = check "is_greater Greater" (Ord.is_greater Ord.Greater)
+
+(* ========================================
+   Section 4: flip combinator
+   ======================================== *)
+
+let _ = print "=== flip combinator ==="
+
+let _ = check "flip Less" (Ord.to_int (Ord.flip Ord.Less) == 1)
+let _ = check "flip Equal" (Ord.to_int (Ord.flip Ord.Equal) == 0)
+let _ = check "flip Greater" (Ord.to_int (Ord.flip Ord.Greater) == 0 - 1)
+
+let _ = check "flip flip identity Less" (Ord.equal (Ord.flip (Ord.flip Ord.Less)) Ord.Less)
+let _ = check "flip flip identity Equal" (Ord.equal (Ord.flip (Ord.flip Ord.Equal)) Ord.Equal)
+let _ = check "flip flip identity Greater" (Ord.equal (Ord.flip (Ord.flip Ord.Greater)) Ord.Greater)
+
+(* ========================================
+   Section 5: then_ combinator (chaining)
+   ======================================== *)
+
+let _ = print "=== then_ combinator ==="
+
+(* When first is Equal, return second *)
+let _ = check "then_ Equal Less" (Ord.to_int (Ord.then_ Ord.Equal Ord.Less) == 0 - 1)
+let _ = check "then_ Equal Equal" (Ord.to_int (Ord.then_ Ord.Equal Ord.Equal) == 0)
+let _ = check "then_ Equal Greater" (Ord.to_int (Ord.then_ Ord.Equal Ord.Greater) == 1)
+
+(* When first is not Equal, return first *)
+let _ = check "then_ Less Less" (Ord.to_int (Ord.then_ Ord.Less Ord.Less) == 0 - 1)
+let _ = check "then_ Less Equal" (Ord.to_int (Ord.then_ Ord.Less Ord.Equal) == 0 - 1)
+let _ = check "then_ Less Greater" (Ord.to_int (Ord.then_ Ord.Less Ord.Greater) == 0 - 1)
+
+let _ = check "then_ Greater Less" (Ord.to_int (Ord.then_ Ord.Greater Ord.Less) == 1)
+let _ = check "then_ Greater Equal" (Ord.to_int (Ord.then_ Ord.Greater Ord.Equal) == 1)
+let _ = check "then_ Greater Greater" (Ord.to_int (Ord.then_ Ord.Greater Ord.Greater) == 1)
+
+(* ========================================
+   Section 6: int_compare
+   ======================================== *)
+
+let _ = print "=== int_compare ==="
+
+let _ = check "int_compare 0 0" (Ord.is_equal (Ord.int_compare 0 0))
+let _ = check "int_compare 1 1" (Ord.is_equal (Ord.int_compare 1 1))
+let _ = check "int_compare -5 -5" (Ord.is_equal (Ord.int_compare (0-5) (0-5)))
+
+let _ = check "int_compare 1 2" (Ord.is_less (Ord.int_compare 1 2))
+let _ = check "int_compare -10 5" (Ord.is_less (Ord.int_compare (0-10) 5))
+let _ = check "int_compare 0 1" (Ord.is_less (Ord.int_compare 0 1))
+
+let _ = check "int_compare 2 1" (Ord.is_greater (Ord.int_compare 2 1))
+let _ = check "int_compare 5 -10" (Ord.is_greater (Ord.int_compare 5 (0-10)))
+let _ = check "int_compare 1 0" (Ord.is_greater (Ord.int_compare 1 0))
+
+(* ========================================
+   Section 7: bool_compare
+   ======================================== *)
+
+let _ = print "=== bool_compare ==="
+
+(* Equality *)
+let _ = check "bool_compare false false" (Ord.is_equal (Ord.bool_compare false false))
+let _ = check "bool_compare true true" (Ord.is_equal (Ord.bool_compare true true))
+
+(* false < true *)
+let _ = check "bool_compare false true" (Ord.is_less (Ord.bool_compare false true))
+let _ = check "bool_compare true false" (Ord.is_greater (Ord.bool_compare true false))
+
+(* ========================================
+   Section 8: string_compare
+   ======================================== *)
+
+let _ = print "=== string_compare ==="
+
+(* Equality *)
+let _ = check "string_compare empty" (Ord.is_equal (Ord.string_compare "" ""))
+let _ = check "string_compare same" (Ord.is_equal (Ord.string_compare "hello" "hello"))
+let _ = check "string_compare same long" (Ord.is_equal (Ord.string_compare "abcdefghij" "abcdefghij"))
+
+(* Less than *)
+let _ = check "string_compare a b" (Ord.is_less (Ord.string_compare "a" "b"))
+let _ = check "string_compare aa ab" (Ord.is_less (Ord.string_compare "aa" "ab"))
+let _ = check "string_compare abc abd" (Ord.is_less (Ord.string_compare "abc" "abd"))
+let _ = check "string_compare empty nonempty" (Ord.is_less (Ord.string_compare "" "a"))
+let _ = check "string_compare prefix longer" (Ord.is_less (Ord.string_compare "ab" "abc"))
+
+(* Greater than *)
+let _ = check "string_compare b a" (Ord.is_greater (Ord.string_compare "b" "a"))
+let _ = check "string_compare ab aa" (Ord.is_greater (Ord.string_compare "ab" "aa"))
+let _ = check "string_compare nonempty empty" (Ord.is_greater (Ord.string_compare "a" ""))
+let _ = check "string_compare longer prefix" (Ord.is_greater (Ord.string_compare "abc" "ab"))
+
+(* ========================================
+   Section 9: Ord.compare (self-comparison)
+   ======================================== *)
+
+let _ = print "=== Ord.compare (ordering comparison) ==="
+
+(* Equal cases *)
+let _ = check "compare Less Less" (Ord.is_equal (Ord.compare Ord.Less Ord.Less))
+let _ = check "compare Equal Equal" (Ord.is_equal (Ord.compare Ord.Equal Ord.Equal))
+let _ = check "compare Greater Greater" (Ord.is_equal (Ord.compare Ord.Greater Ord.Greater))
+
+(* Less < Equal < Greater *)
+let _ = check "compare Less Equal" (Ord.is_less (Ord.compare Ord.Less Ord.Equal))
+let _ = check "compare Less Greater" (Ord.is_less (Ord.compare Ord.Less Ord.Greater))
+let _ = check "compare Equal Greater" (Ord.is_less (Ord.compare Ord.Equal Ord.Greater))
+
+let _ = check "compare Equal Less" (Ord.is_greater (Ord.compare Ord.Equal Ord.Less))
+let _ = check "compare Greater Less" (Ord.is_greater (Ord.compare Ord.Greater Ord.Less))
+let _ = check "compare Greater Equal" (Ord.is_greater (Ord.compare Ord.Greater Ord.Equal))
+
+(* ========================================
+   Section 10: Ord.equal
+   ======================================== *)
+
+let _ = print "=== Ord.equal ==="
+
+let _ = check "equal Less Less" (Ord.equal Ord.Less Ord.Less)
+let _ = check "equal Equal Equal" (Ord.equal Ord.Equal Ord.Equal)
+let _ = check "equal Greater Greater" (Ord.equal Ord.Greater Ord.Greater)
+
+let _ = check "not equal Less Equal" (not (Ord.equal Ord.Less Ord.Equal))
+let _ = check "not equal Less Greater" (not (Ord.equal Ord.Less Ord.Greater))
+let _ = check "not equal Equal Less" (not (Ord.equal Ord.Equal Ord.Less))
+let _ = check "not equal Equal Greater" (not (Ord.equal Ord.Equal Ord.Greater))
+let _ = check "not equal Greater Less" (not (Ord.equal Ord.Greater Ord.Less))
+let _ = check "not equal Greater Equal" (not (Ord.equal Ord.Greater Ord.Equal))
+
+(* ========================================
+   Section 11: Practical applications
+   ======================================== *)
+
+let _ = print "=== Practical applications ==="
+
+(* Lexicographic comparison of pairs *)
+let compare_pair cmp_fst cmp_snd (a1, a2) (b1, b2) =
+  Ord.then_ (cmp_fst a1 b1) (cmp_snd a2 b2)
+
+let _ = check "pair (1,a) (1,b)" (Ord.is_less (compare_pair Ord.int_compare Ord.string_compare (1, "a") (1, "b")))
+let _ = check "pair (1,a) (2,a)" (Ord.is_less (compare_pair Ord.int_compare Ord.string_compare (1, "a") (2, "a")))
+let _ = check "pair (1,a) (1,a)" (Ord.is_equal (compare_pair Ord.int_compare Ord.string_compare (1, "a") (1, "a")))
+let _ = check "pair (2,a) (1,b)" (Ord.is_greater (compare_pair Ord.int_compare Ord.string_compare (2, "a") (1, "b")))
+
+(* Lexicographic comparison of triples *)
+let compare_triple cmp1 cmp2 cmp3 (a1, a2, a3) (b1, b2, b3) =
+  Ord.then_ (cmp1 a1 b1) (Ord.then_ (cmp2 a2 b2) (cmp3 a3 b3))
+
+let _ = check "triple (1,2,3) (1,2,4)" (Ord.is_less (compare_triple Ord.int_compare Ord.int_compare Ord.int_compare (1, 2, 3) (1, 2, 4)))
+let _ = check "triple (1,2,3) (1,2,3)" (Ord.is_equal (compare_triple Ord.int_compare Ord.int_compare Ord.int_compare (1, 2, 3) (1, 2, 3)))
+
+(* Reverse comparison using flip *)
+let reverse_compare cmp x y = Ord.flip (cmp x y)
+
+let _ = check "reverse int 1 2" (Ord.is_greater (reverse_compare Ord.int_compare 1 2))
+let _ = check "reverse int 2 1" (Ord.is_less (reverse_compare Ord.int_compare 2 1))
+let _ = check "reverse int 1 1" (Ord.is_equal (reverse_compare Ord.int_compare 1 1))
+
+(* Chained comparisons *)
+let _ = check "chained then_ all equal" (Ord.is_equal (Ord.then_ (Ord.then_ Ord.Equal Ord.Equal) Ord.Equal))
+let _ = check "chained then_ first decides" (Ord.is_less (Ord.then_ (Ord.then_ Ord.Less Ord.Greater) Ord.Greater))
+
+let _ = print "=== All Ord tests complete ==="

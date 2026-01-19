@@ -1,0 +1,245 @@
+(** Integration tests for Array module.
+
+    Tests cover:
+    - Array construction (make, init, empty)
+    - Basic operations (length, is_empty, get, set)
+    - Transformations (map, mapi, copy)
+    - Folding (fold_left, fold_right)
+    - Iteration (iter, iteri)
+    - Searching (exists, for_all, find, find_index, mem)
+    - Conversion (of_list, to_list)
+    - Comparison (compare, equal) *)
+
+let _ = print "=== Array Construction ==="
+
+(* Test make *)
+let arr1 = Array.make 3 0
+let _ = print (Array.length arr1)
+(* Expected: 3 *)
+
+(* Test make with negative size returns empty *)
+let arr_empty = Array.make (-5) 42
+let _ = print (Array.length arr_empty)
+(* Expected: 0 *)
+
+(* Test init *)
+let arr2 = Array.init 5 (fun i -> i * 2)
+let _ = print (Array.get_exn arr2 0)
+(* Expected: 0 *)
+let _ = print (Array.get_exn arr2 2)
+(* Expected: 4 *)
+let _ = print (Array.get_exn arr2 4)
+(* Expected: 8 *)
+
+(* Test empty *)
+let arr_mt = Array.empty ()
+let _ = print (Array.length arr_mt)
+(* Expected: 0 *)
+
+let _ = print "=== Basic Operations ==="
+
+(* Test length *)
+let arr3 = Array.make 10 "x"
+let _ = print (Array.length arr3)
+(* Expected: 10 *)
+
+(* Test is_empty *)
+let _ = print (Array.is_empty arr_mt)
+(* Expected: true *)
+let _ = print (Array.is_empty arr3)
+(* Expected: false *)
+
+(* Test get with valid index *)
+let arr4 = Array.init 3 (fun i -> i + 100)
+let _ = match Array.get arr4 1 with
+  | Some v -> print v
+  | None -> print "none"
+(* Expected: 101 *)
+
+(* Test get with invalid index *)
+let _ = match Array.get arr4 10 with
+  | Some v -> print v
+  | None -> print "out of bounds"
+(* Expected: out of bounds *)
+
+let _ = match Array.get arr4 (-1) with
+  | Some v -> print v
+  | None -> print "negative index"
+(* Expected: negative index *)
+
+(* Test get_exn *)
+let _ = print (Array.get_exn arr4 0)
+(* Expected: 100 *)
+
+(* Test set *)
+let arr5 = Array.make 3 0
+let _ = Array.set arr5 1 42
+let _ = print (Array.get_exn arr5 1)
+(* Expected: 42 *)
+
+(* Test set with invalid index does nothing *)
+let _ = Array.set arr5 100 999
+let _ = print (Array.length arr5)
+(* Expected: 3 *)
+
+(* Test set_exn *)
+let arr6 = Array.make 2 0
+let _ = Array.set_exn arr6 0 10
+let _ = Array.set_exn arr6 1 20
+let _ = print (Array.get_exn arr6 0)
+(* Expected: 10 *)
+let _ = print (Array.get_exn arr6 1)
+(* Expected: 20 *)
+
+let _ = print "=== Transformations ==="
+
+(* Test map *)
+let arr7 = Array.init 4 (fun i -> i + 1)
+let arr7_doubled = Array.map (fun x -> x * 2) arr7
+let _ = print (Array.get_exn arr7_doubled 0)
+(* Expected: 2 *)
+let _ = print (Array.get_exn arr7_doubled 3)
+(* Expected: 8 *)
+
+(* Test mapi *)
+let arr8 = Array.make 3 10
+let arr8_indexed = Array.mapi (fun i x -> i + x) arr8
+let _ = print (Array.get_exn arr8_indexed 0)
+(* Expected: 10 *)
+let _ = print (Array.get_exn arr8_indexed 2)
+(* Expected: 12 *)
+
+(* Test copy *)
+let arr9 = Array.init 3 (fun i -> i)
+let arr9_copy = Array.copy arr9
+let _ = Array.set arr9 0 999
+let _ = print (Array.get_exn arr9_copy 0)
+(* Expected: 0 (copy should be independent) *)
+
+let _ = print "=== Folding ==="
+
+(* Test fold_left - sum of elements *)
+let arr10 = Array.of_list (Cons (1, Cons (2, Cons (3, Cons (4, Cons (5, Nil))))))
+let sum = Array.fold_left (fun acc x -> acc + x) 0 arr10
+let _ = print sum
+(* Expected: 15 *)
+
+(* Test fold_left - string concatenation *)
+let arr_str = Array.of_list (Cons ("a", Cons ("b", Cons ("c", Nil))))
+let concat = Array.fold_left (fun acc x -> acc ^ x) "" arr_str
+let _ = print concat
+(* Expected: abc *)
+
+(* Test fold_right *)
+let arr11 = Array.of_list (Cons (1, Cons (2, Cons (3, Nil))))
+let diff = Array.fold_right (fun x acc -> x - acc) arr11 0
+let _ = print diff
+(* Expected: 2 (1 - (2 - (3 - 0)) = 1 - (2 - 3) = 1 - (-1) = 2) *)
+
+let _ = print "=== Iteration ==="
+
+(* Test iter - print each element *)
+let arr12 = Array.of_list (Cons (10, Cons (20, Cons (30, Nil))))
+let _ = print "iter:"
+let _ = Array.iter (fun x -> print x) arr12
+(* Expected: iter: 10 20 30 (each on separate line) *)
+
+(* Test iteri - print index and element *)
+let _ = print "iteri:"
+let _ = Array.iteri (fun i x -> print (i + x)) arr12
+(* Expected: iteri: 10 21 32 (i + element) *)
+
+let _ = print "=== Searching ==="
+
+(* Test exists *)
+let arr13 = Array.of_list (Cons (1, Cons (2, Cons (3, Cons (4, Cons (5, Nil))))))
+let _ = print (Array.exists (fun x -> x > 3) arr13)
+(* Expected: true *)
+let _ = print (Array.exists (fun x -> x > 10) arr13)
+(* Expected: false *)
+
+(* Test for_all *)
+let _ = print (Array.for_all (fun x -> x > 0) arr13)
+(* Expected: true *)
+let _ = print (Array.for_all (fun x -> x > 3) arr13)
+(* Expected: false *)
+
+(* Test find *)
+let _ = match Array.find (fun x -> x > 3) arr13 with
+  | Some v -> print v
+  | None -> print "not found"
+(* Expected: 4 *)
+
+let _ = match Array.find (fun x -> x > 100) arr13 with
+  | Some v -> print v
+  | None -> print "not found"
+(* Expected: not found *)
+
+(* Test find_index *)
+let _ = match Array.find_index (fun x -> x == 3) arr13 with
+  | Some i -> print i
+  | None -> print "not found"
+(* Expected: 2 *)
+
+(* Test mem *)
+let _ = print (Array.mem 3 arr13)
+(* Expected: true *)
+let _ = print (Array.mem 100 arr13)
+(* Expected: false *)
+
+let _ = print "=== Conversion ==="
+
+(* Test of_list and to_list roundtrip *)
+let original = Cons (1, Cons (2, Cons (3, Nil)))
+let arr14 = Array.of_list original
+let back = Array.to_list arr14
+let _ = match back with
+  | Cons (a, Cons (b, Cons (c, Nil))) ->
+      let _ = print a in
+      let _ = print b in
+      print c
+  | _ -> print "ERROR"
+(* Expected: 1 2 3 *)
+
+(* Test of_list with empty list *)
+let arr15 = Array.of_list Nil
+let _ = print (Array.length arr15)
+(* Expected: 0 *)
+
+let _ = print "=== Comparison ==="
+
+(* Test compare *)
+let arr_a = Array.of_list (Cons (1, Cons (2, Cons (3, Nil))))
+let arr_b = Array.of_list (Cons (1, Cons (2, Cons (3, Nil))))
+let arr_c = Array.of_list (Cons (1, Cons (2, Cons (4, Nil))))
+let arr_d = Array.of_list (Cons (1, Cons (2, Nil)))
+
+let cmp_int a b = if a < b then 0 - 1 else if a > b then 1 else 0
+
+let _ = print (Array.compare cmp_int arr_a arr_b)
+(* Expected: 0 (equal) *)
+let _ = print (if Array.compare cmp_int arr_a arr_c < 0 then "less" else "not less")
+(* Expected: less (3 < 4) *)
+let _ = print (if Array.compare cmp_int arr_a arr_d > 0 then "greater" else "not greater")
+(* Expected: greater (longer array) *)
+
+(* Test equal *)
+let _ = print (Array.equal (fun a b -> a == b) arr_a arr_b)
+(* Expected: true *)
+let _ = print (Array.equal (fun a b -> a == b) arr_a arr_c)
+(* Expected: false *)
+let _ = print (Array.equal (fun a b -> a == b) arr_a arr_d)
+(* Expected: false (different lengths) *)
+
+let _ = print "=== Mutation ==="
+
+(* Test that arrays are mutable *)
+let arr16 = Array.make 3 0
+let _ = Array.set arr16 0 1
+let _ = Array.set arr16 1 2
+let _ = Array.set arr16 2 3
+let sum16 = Array.fold_left (fun acc x -> acc + x) 0 arr16
+let _ = print sum16
+(* Expected: 6 *)
+
+let _ = print "=== All tests passed ==="
