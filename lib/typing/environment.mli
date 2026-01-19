@@ -69,6 +69,20 @@ val ok_constructor : Types.constructor_info
     Re-exported from {!Builtins} for convenience. *)
 val error_constructor : Types.constructor_info
 
+(** {1 Built-in List Type}
+
+    The list type is built-in for immutable linked lists.
+    [Nil] represents the empty list.
+    [Cons (x, xs)] creates a new list by prepending element [x] to list [xs]. *)
+
+(** Constructor info for [Nil : 'a list].
+    Re-exported from {!Builtins} for convenience. *)
+val nil_constructor : Types.constructor_info
+
+(** Constructor info for [Cons : 'a * 'a list -> 'a list].
+    Re-exported from {!Builtins} for convenience. *)
+val cons_constructor : Types.constructor_info
+
 (** {1 Value Bindings} *)
 
 (** [add_value name id scheme location env] adds a value binding.

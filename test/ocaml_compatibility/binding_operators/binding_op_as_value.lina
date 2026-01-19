@@ -12,5 +12,5 @@ let my_bind = ( let* )
 let result = my_bind (Some 42) (fun x -> Some (x + 1))
 
 let _ = match result with
-  | None -> print_endline "none"
-  | Some n -> print_int n
+  | None -> print "none"
+  | Some n -> print n

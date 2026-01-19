@@ -27,3 +27,23 @@ let ( << ) f g x = f (g x)
 let tap f x =
   let _ = f x in
   x
+
+(** Forward composition: [compose f g x] is [g (f x)].
+    Named version of [>>]. *)
+let compose f g x = g (f x)
+
+(** Backward composition: [compose_left f g x] is [f (g x)].
+    Named version of [<<]. *)
+let compose_left f g x = f (g x)
+
+(** Negate a predicate. *)
+let negate pred x = if pred x then false else true
+
+(** Apply a function to a value. *)
+let apply f x = f x
+
+(** Pipe a value through a function. Named version of [|>]. *)
+let pipe x f = f x
+
+(** Ignore a value, returning unit. *)
+let ignore _ = ()

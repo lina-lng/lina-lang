@@ -1,0 +1,18 @@
+(* Recursive list functions: fold, reverse, etc *)
+(* Expected: ACCEPT - recursive list processing should work *)
+
+let rec fold_left f acc lst =
+  match lst with
+  | [] -> acc
+  | x :: xs -> fold_left f (f acc x) xs
+
+let rec reverse_acc acc lst =
+  match lst with
+  | [] -> acc
+  | x :: xs -> reverse_acc (x :: acc) xs
+
+let reverse lst = reverse_acc [] lst
+
+let sum = fold_left (fun a b -> a + b) 0 [1; 2; 3; 4; 5]
+
+let () = print_string "ok"

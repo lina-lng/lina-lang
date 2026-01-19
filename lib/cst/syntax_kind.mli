@@ -78,6 +78,7 @@ type t =
   | TK_PLUS
   | TK_MINUS
   | TK_SLASH
+  | TK_MOD           (** mod integer modulo *)
   | TK_CARET         (** ^ string concatenation *)
   | TK_LESS
   | TK_GREATER

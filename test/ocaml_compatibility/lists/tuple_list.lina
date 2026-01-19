@@ -1,0 +1,12 @@
+(* List of tuples: pairs and triples *)
+(* Expected: ACCEPT - list of tuples should work *)
+
+let pairs : (int * string) list = [(1, "one"); (2, "two")]
+let triples = [(1, 2, 3); (4, 5, 6)]
+
+let first_pair lst =
+  match lst with
+  | (a, b) :: _ -> a
+  | [] -> 0
+
+let _ = print "ok"

@@ -1,0 +1,8 @@
+(* Singleton list: list with one element *)
+(* Expected: ACCEPT - [x] syntax should work *)
+
+let single_int = [42]
+let single_str = ["hello"]
+let single_bool = [true]
+
+let _ = print "ok"

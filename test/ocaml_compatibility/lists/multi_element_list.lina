@@ -1,0 +1,8 @@
+(* Multi-element list: semicolon-separated elements *)
+(* Expected: ACCEPT - [a; b; c] syntax should work *)
+
+let nums = [1; 2; 3; 4; 5]
+let strs = ["a"; "b"; "c"]
+let bools = [true; false; true]
+
+let _ = print "ok"

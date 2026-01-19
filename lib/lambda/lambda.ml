@@ -5,6 +5,7 @@ type primitive =
   | PrimitiveSubInt
   | PrimitiveMulInt
   | PrimitiveDivInt
+  | PrimitiveModInt
   | PrimitiveNegInt
   | PrimitiveIntEqual
   | PrimitiveIntNotEqual
@@ -15,6 +16,9 @@ type primitive =
   | PrimitiveStringEqual
   | PrimitiveStringConcat
   | PrimitiveBoolNot
+  | PrimitiveBoolAnd  (** Short-circuit boolean AND (&&) *)
+  | PrimitiveBoolOr   (** Short-circuit boolean OR (||) *)
+  | PrimitiveListAppend (** List concatenation (@) *)
   | PrimitiveMakeBlock of int
   | PrimitiveGetField of int
   | PrimitivePrint
@@ -98,6 +102,7 @@ let primitive_of_operator = function
   | "-" -> Some PrimitiveSubInt
   | "*" -> Some PrimitiveMulInt
   | "/" -> Some PrimitiveDivInt
+  | "mod" -> Some PrimitiveModInt
   | "=" -> Some PrimitiveIntEqual
   | "==" -> Some PrimitiveIntEqual
   | "!=" -> Some PrimitiveIntNotEqual
@@ -107,8 +112,11 @@ let primitive_of_operator = function
   | "<=" -> Some PrimitiveIntLessEqual
   | ">=" -> Some PrimitiveIntGreaterEqual
   | "^" -> Some PrimitiveStringConcat
+  | "@" -> Some PrimitiveListAppend
   | "print" -> Some PrimitivePrint
   | "not" -> Some PrimitiveBoolNot
+  | "&&" -> Some PrimitiveBoolAnd
+  | "||" -> Some PrimitiveBoolOr
   | _ -> None
 
 let translate_constant = function

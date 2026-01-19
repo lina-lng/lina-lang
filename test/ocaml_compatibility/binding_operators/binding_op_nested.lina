@@ -15,5 +15,5 @@ let result =
   Some (a + b + c + d)
 
 let _ = match result with
-  | None -> print_endline "none"
-  | Some n -> print_int n
+  | None -> print "none"
+  | Some n -> print n

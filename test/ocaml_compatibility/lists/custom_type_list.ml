@@ -1,0 +1,16 @@
+(* Lists of custom types *)
+(* Expected: ACCEPT - lists of user-defined types should work *)
+
+type color = Red | Green | Blue
+
+type person = { name : string; age : int }
+
+let colors : color list = [Red; Green; Blue]
+let people = [{ name = "Alice"; age = 30 }; { name = "Bob"; age = 25 }]
+
+let first_color lst =
+  match lst with
+  | c :: _ -> c
+  | [] -> Red
+
+let () = print_string "ok"

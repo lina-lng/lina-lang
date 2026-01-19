@@ -28,6 +28,10 @@ let get_or_else r f = match r with
   | Ok x -> x
   | Error e -> f e
 
+let get_error_or r default = match r with
+  | Ok _ -> default
+  | Error e -> e
+
 (** {1 Transforming} *)
 
 let map f r = match r with
@@ -87,6 +91,13 @@ let to_option r = match r with
 let of_option opt error_value = match opt with
   | Some x -> Ok x
   | None -> Error error_value
+
+(** {1 Comparison} *)
+
+let equal ok_eq err_eq r1 r2 = match (r1, r2) with
+  | (Ok x1, Ok x2) -> ok_eq x1 x2
+  | (Error e1, Error e2) -> err_eq e1 e2
+  | _ -> false
 
 (** {1 Binding Operators} *)
 

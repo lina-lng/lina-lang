@@ -44,6 +44,24 @@ let polymorphic_print_type =
 let bool_not_type =
   trivial_scheme (TypeArrow (Nolabel, type_bool, type_bool))
 
+(** Binary boolean operation: bool -> bool -> bool *)
+let binary_bool_op_type =
+  trivial_scheme (TypeArrow (Nolabel, type_bool, TypeArrow (Nolabel, type_bool, type_bool)))
+
+(** List append: 'a list -> 'a list -> 'a list *)
+let list_append_type =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+  let list_alpha = TypeConstructor (PathLocal "list", [TypeVariable alpha]) in
+  {
+    quantified_variables = [alpha];
+    body = TypeArrow (Nolabel, list_alpha, TypeArrow (Nolabel, list_alpha, list_alpha));
+  }
+
 (** {1 Option Type} *)
 
 (** Built-in option type: type 'a option = None | Some of 'a *)
@@ -146,3 +164,52 @@ let result_type_declaration, ok_constructor, error_constructor =
   } in
 
   (result_decl, ok_ctor, error_ctor)
+
+(** {1 List Type} *)
+
+(** Built-in list type: type 'a list = Nil | Cons of 'a * 'a list *)
+let list_type_declaration, nil_constructor, cons_constructor =
+  let alpha = match new_type_variable_at_level generic_level with
+    | TypeVariable tv -> tv
+    | _ ->
+        Common.Compiler_error.internal_error
+          "new_type_variable_at_level did not return TypeVariable"
+  in
+
+  let list_type = TypeConstructor (PathLocal "list", [TypeVariable alpha]) in
+
+  let nil_ctor = {
+    constructor_name = "Nil";
+    constructor_tag_index = 0;
+    constructor_type_name = "list";
+    constructor_argument_type = None;
+    constructor_result_type = list_type;
+    constructor_type_parameters = [alpha];
+    constructor_is_gadt = false;
+    constructor_existentials = [];
+  } in
+
+  let cons_arg_type = TypeTuple [TypeVariable alpha; list_type] in
+  let cons_ctor = {
+    constructor_name = "Cons";
+    constructor_tag_index = 1;
+    constructor_type_name = "list";
+    constructor_argument_type = Some cons_arg_type;
+    constructor_result_type = list_type;
+    constructor_type_parameters = [alpha];
+    constructor_is_gadt = false;
+    constructor_existentials = [];
+  } in
+
+  let list_decl = {
+    declaration_name = "list";
+    declaration_parameters = [alpha];
+    declaration_variances = [Covariant];
+    declaration_injectivities = [true];
+    declaration_manifest = None;
+    declaration_kind = DeclarationVariant [nil_ctor; cons_ctor];
+    declaration_private = false;
+    declaration_constraints = [];
+  } in
+
+  (list_decl, nil_ctor, cons_ctor)

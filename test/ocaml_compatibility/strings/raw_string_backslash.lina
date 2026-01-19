@@ -4,4 +4,4 @@
 let s = {|path\to\file|}
 let t = {|C:\Users\name|}
 let u = {|\n\t\r|}
-let _ = print_endline s
+let _ = print s

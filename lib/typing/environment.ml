@@ -257,6 +257,8 @@ let none_constructor = Builtins.none_constructor
 let some_constructor = Builtins.some_constructor
 let ok_constructor = Builtins.ok_constructor
 let error_constructor = Builtins.error_constructor
+let nil_constructor = Builtins.nil_constructor
+let cons_constructor = Builtins.cons_constructor
 
 let initial =
   let env = empty in
@@ -271,14 +273,23 @@ let initial =
   let env = add_constructor "Ok" Builtins.ok_constructor env in
   let env = add_constructor "Error" Builtins.error_constructor env in
 
+  (* Add list type and its constructors *)
+  let env = add_type "list" Builtins.list_type_declaration env in
+  let env = add_constructor "Nil" Builtins.nil_constructor env in
+  let env = add_constructor "Cons" Builtins.cons_constructor env in
+
   (* Add arithmetic operators *)
   let env = add_builtin "+" Builtins.binary_int_op_type env in
   let env = add_builtin "-" Builtins.binary_int_op_type env in
   let env = add_builtin "*" Builtins.binary_int_op_type env in
   let env = add_builtin "/" Builtins.binary_int_op_type env in
+  let env = add_builtin "mod" Builtins.binary_int_op_type env in
 
   (* Add string concatenation operator *)
   let env = add_builtin "^" Builtins.string_concat_type env in
+
+  (* Add list append operator *)
+  let env = add_builtin "@" Builtins.list_append_type env in
 
   (* Add comparison operators *)
   let env = add_builtin "<" Builtins.comparison_int_type env in
@@ -295,4 +306,8 @@ let initial =
 
   (* Add boolean negation *)
   let env = add_builtin "not" Builtins.bool_not_type env in
+
+  (* Add short-circuit boolean operators *)
+  let env = add_builtin "&&" Builtins.binary_bool_op_type env in
+  let env = add_builtin "||" Builtins.binary_bool_op_type env in
   env

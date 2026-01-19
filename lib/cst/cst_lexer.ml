@@ -75,6 +75,7 @@ let token_metadata : Lexer.token -> Syntax_kind.t * string = function
   | Lexer.PLUS -> (Syntax_kind.TK_PLUS, "+")
   | Lexer.MINUS -> (Syntax_kind.TK_MINUS, "-")
   | Lexer.SLASH -> (Syntax_kind.TK_SLASH, "/")
+  | Lexer.MOD -> (Syntax_kind.TK_MOD, "mod")
   | Lexer.CARET -> (Syntax_kind.TK_CARET, "^")
   | Lexer.LESS -> (Syntax_kind.TK_LESS, "<")
   | Lexer.GREATER -> (Syntax_kind.TK_GREATER, ">")

@@ -12,8 +12,8 @@ let process () =
       ()
     done
   in
-  ignore loop_result;
-  ignore while_result;
+  let _ = loop_result in
+  let _ = while_result in
   42
 
-let _ = print_int (process ())
+let _ = print (process ())

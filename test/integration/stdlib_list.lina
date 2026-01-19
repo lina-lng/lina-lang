@@ -1,0 +1,290 @@
+(* Test List stdlib module *)
+
+(* Helper to print test result *)
+let test name result =
+  let _ = print name in
+  let _ = print (if result then "  PASS" else "  FAIL") in
+  ()
+
+(* ==========================================================
+   Test 1: List Literals and Basic Syntax
+   ========================================================== *)
+
+let _ = print "=== List Literals and Basic Syntax ==="
+
+let empty_list = []
+let single = [42]
+let multiple = [1; 2; 3]
+
+let _ = test "empty list is empty" (List.is_empty empty_list)
+let _ = test "single element list not empty" (not (List.is_empty single))
+let _ = test "length of empty" (List.length empty_list == 0)
+let _ = test "length of single" (List.length single == 1)
+let _ = test "length of multiple" (List.length multiple == 3)
+
+(* ==========================================================
+   Test 2: Cons Operator
+   ========================================================== *)
+
+let _ = print "=== Cons Operator ==="
+
+let cons_list = 1 :: 2 :: 3 :: []
+let _ = test "cons builds list" (List.length cons_list == 3)
+
+let head_result = match cons_list with
+  | Cons (h, _) -> h
+  | Nil -> 0
+
+let _ = test "cons pattern match head" (head_result == 1)
+
+let head_result2 = match cons_list with
+  | x :: _ -> x
+  | [] -> 0
+
+let _ = test ":: pattern match head" (head_result2 == 1)
+
+(* ==========================================================
+   Test 3: Construction Functions
+   ========================================================== *)
+
+let _ = print "=== Construction Functions ==="
+
+let _ = test "List.empty is empty" (List.is_empty List.empty)
+let _ = test "singleton length" (List.length (List.singleton 5) == 1)
+let _ = test "cons function" (List.length (List.cons 1 [2; 3]) == 3)
+let _ = test "range length" (List.length (List.range 1 5) == 5)
+let _ = test "range empty when start > stop" (List.is_empty (List.range 10 5))
+let _ = test "replicate length" (List.length (List.replicate 4 "x") == 4)
+let _ = test "replicate empty when n <= 0" (List.is_empty (List.replicate 0 "x"))
+let _ = test "init length" (List.length (List.init 3 (fun i -> i)) == 3)
+
+(* ==========================================================
+   Test 4: Basic Operations
+   ========================================================== *)
+
+let _ = print "=== Basic Operations ==="
+
+let lst = [10; 20; 30]
+
+let head_opt = List.head lst
+let head_val = match head_opt with Some h -> h | None -> 0
+let _ = test "head returns first" (head_val == 10)
+
+let head_empty = List.head []
+let _ = test "head of empty is None" (Option.is_none head_empty)
+
+let tail_opt = List.tail lst
+let tail_len = match tail_opt with Some t -> List.length t | None -> 0
+let _ = test "tail length" (tail_len == 2)
+
+let last_val = match List.last lst with Some l -> l | None -> 0
+let _ = test "last returns last" (last_val == 30)
+
+let nth_val = match List.nth 1 lst with Some n -> n | None -> 0
+let _ = test "nth returns correct" (nth_val == 20)
+
+let nth_oob = List.nth 10 lst
+let _ = test "nth out of bounds is None" (Option.is_none nth_oob)
+
+let nth_neg = List.nth (0 - 1) lst
+let _ = test "nth negative is None" (Option.is_none nth_neg)
+
+(* ==========================================================
+   Test 5: Transformations
+   ========================================================== *)
+
+let _ = print "=== Transformations ==="
+
+let doubled = List.map (fun x -> x * 2) [1; 2; 3]
+let doubled_sum = List.fold_left (fun acc x -> acc + x) 0 doubled
+let _ = test "map doubles values" (doubled_sum == 12)
+
+let indexed = List.mapi (fun i x -> i + x) [10; 20; 30]
+let indexed_sum = List.fold_left (fun acc x -> acc + x) 0 indexed
+let _ = test "mapi adds indices" (indexed_sum == 63)
+
+let filtered = List.filter (fun x -> x > 2) [1; 2; 3; 4; 5]
+let _ = test "filter keeps matching" (List.length filtered == 3)
+
+let filter_mapped = List.filter_map (fun x -> if x > 2 then Some (x * 2) else None) [1; 2; 3; 4]
+let _ = test "filter_map length" (List.length filter_mapped == 2)
+
+let reversed = List.reverse [1; 2; 3]
+let rev_head = match List.head reversed with Some h -> h | None -> 0
+let _ = test "reverse reverses" (rev_head == 3)
+
+let appended = List.append [1; 2] [3; 4]
+let _ = test "append combines" (List.length appended == 4)
+
+let concatenated = List.concat [[1; 2]; [3]; [4; 5]]
+let _ = test "concat flattens" (List.length concatenated == 5)
+
+let flat_mapped = List.flat_map (fun x -> [x; x]) [1; 2]
+let _ = test "flat_map flattens" (List.length flat_mapped == 4)
+
+(* ==========================================================
+   Test 6: Folding
+   ========================================================== *)
+
+let _ = print "=== Folding ==="
+
+let sum = List.fold_left (fun acc x -> acc + x) 0 [1; 2; 3; 4]
+let _ = test "fold_left sum" (sum == 10)
+
+let right_sum = List.fold_right (fun x acc -> x + acc) [1; 2; 3; 4] 0
+let _ = test "fold_right sum" (right_sum == 10)
+
+(* fold_left is left-to-right: ((0 - 1) - 2) - 3 = -6 *)
+let left_sub = List.fold_left (fun acc x -> acc - x) 0 [1; 2; 3]
+let _ = test "fold_left left-to-right" (left_sub == 0 - 6)
+
+(* fold_right is right-to-left: 1 - (2 - (3 - 0)) = 2 *)
+let right_sub = List.fold_right (fun x acc -> x - acc) [1; 2; 3] 0
+let _ = test "fold_right right-to-left" (right_sub == 2)
+
+(* ==========================================================
+   Test 7: Searching
+   ========================================================== *)
+
+let _ = print "=== Searching ==="
+
+let found = List.find (fun x -> x > 2) [1; 2; 3; 4]
+let found_val = match found with Some f -> f | None -> 0
+let _ = test "find returns first match" (found_val == 3)
+
+let not_found = List.find (fun x -> x > 10) [1; 2; 3]
+let _ = test "find returns None when not found" (Option.is_none not_found)
+
+let idx = List.find_index (fun x -> x > 2) [1; 2; 3; 4]
+let idx_val = match idx with Some i -> i | None -> 0 - 1
+let _ = test "find_index returns correct index" (idx_val == 2)
+
+let _ = test "exists finds match" (List.exists (fun x -> x == 2) [1; 2; 3])
+let _ = test "exists returns false when none" (not (List.exists (fun x -> x == 10) [1; 2; 3]))
+
+let _ = test "for_all true when all match" (List.for_all (fun x -> x > 0) [1; 2; 3])
+let _ = test "for_all false when one fails" (not (List.for_all (fun x -> x > 2) [1; 2; 3]))
+
+let _ = test "mem finds element" (List.mem 2 [1; 2; 3])
+let _ = test "mem returns false when not found" (not (List.mem 10 [1; 2; 3]))
+
+(* ==========================================================
+   Test 8: Sorting
+   ========================================================== *)
+
+let _ = print "=== Sorting ==="
+
+let compare_int a b = if a < b then 0 - 1 else if a > b then 1 else 0
+let sorted = List.sort compare_int [3; 1; 4; 1; 5; 9; 2; 6]
+let sorted_head = match List.head sorted with Some h -> h | None -> 0
+let sorted_last = match List.last sorted with Some l -> l | None -> 0
+let _ = test "sort puts smallest first" (sorted_head == 1)
+let _ = test "sort puts largest last" (sorted_last == 9)
+
+let by_key = List.sort_by (fun x -> 0 - x) [3; 1; 2]
+let by_key_head = match List.head by_key with Some h -> h | None -> 0
+let _ = test "sort_by sorts by key (descending)" (by_key_head == 3)
+
+(* ==========================================================
+   Test 9: Iteration
+   ========================================================== *)
+
+let _ = print "=== Iteration ==="
+
+(* Just verify they don't crash - can't easily test side effects *)
+let _ = List.iter (fun x -> let _ = x + 1 in ()) [1; 2; 3]
+let _ = test "iter completes" true
+
+let _ = List.iteri (fun i x -> let _ = i + x in ()) [1; 2; 3]
+let _ = test "iteri completes" true
+
+(* ==========================================================
+   Test 10: Zipping
+   ========================================================== *)
+
+let _ = print "=== Zipping ==="
+
+let zipped = List.zip [1; 2; 3] ["a"; "b"; "c"]
+let _ = test "zip length" (List.length zipped == 3)
+
+let zipped_short = List.zip [1; 2] ["a"; "b"; "c"]
+let _ = test "zip stops at shorter" (List.length zipped_short == 2)
+
+let pairs = [(1, "a"); (2, "b")]
+let unzip_result = List.unzip pairs
+let fsts = match unzip_result with (a, _) -> a
+let snds = match unzip_result with (_, b) -> b
+let _ = test "unzip first list" (List.length fsts == 2)
+let _ = test "unzip second list" (List.length snds == 2)
+
+(* ==========================================================
+   Test 11: Comparison
+   ========================================================== *)
+
+let _ = print "=== Comparison ==="
+
+let eq a b = a == b
+let _ = test "equal empty lists" (List.equal eq [] [])
+let _ = test "equal same lists" (List.equal eq [1; 2; 3] [1; 2; 3])
+let _ = test "not equal different lists" (not (List.equal eq [1; 2] [1; 3]))
+let _ = test "not equal different lengths" (not (List.equal eq [1; 2] [1; 2; 3]))
+
+let cmp = compare_int
+let _ = test "compare equal" (List.compare cmp [1; 2] [1; 2] == 0)
+let _ = test "compare less" (List.compare cmp [1; 2] [1; 3] < 0)
+let _ = test "compare greater" (List.compare cmp [1; 3] [1; 2] > 0)
+let _ = test "compare shorter less" (List.compare cmp [1] [1; 2] < 0)
+
+(* ==========================================================
+   Test 12: Additional Utilities
+   ========================================================== *)
+
+let _ = print "=== Additional Utilities ==="
+
+let taken = List.take 2 [1; 2; 3; 4]
+let _ = test "take length" (List.length taken == 2)
+let take_head = match List.head taken with Some h -> h | None -> 0
+let _ = test "take first element" (take_head == 1)
+
+let dropped = List.drop 2 [1; 2; 3; 4]
+let _ = test "drop length" (List.length dropped == 2)
+let drop_head = match List.head dropped with Some h -> h | None -> 0
+let _ = test "drop first remaining" (drop_head == 3)
+
+let split_result = List.split_at 2 [1; 2; 3; 4]
+let left = match split_result with (a, _) -> a
+let right = match split_result with (_, b) -> b
+let _ = test "split_at left length" (List.length left == 2)
+let _ = test "split_at right length" (List.length right == 2)
+
+let partition_result = List.partition (fun x -> x mod 2 == 0) [1; 2; 3; 4; 5; 6]
+let evens = match partition_result with (a, _) -> a
+let odds = match partition_result with (_, b) -> b
+let _ = test "partition evens" (List.length evens == 3)
+let _ = test "partition odds" (List.length odds == 3)
+
+let interspersed = List.intersperse 0 [1; 2; 3]
+let _ = test "intersperse length" (List.length interspersed == 5)
+
+(* ==========================================================
+   Test 13: Edge Cases
+   ========================================================== *)
+
+let _ = print "=== Edge Cases ==="
+
+let _ = test "empty list operations" (
+  List.is_empty [] &&
+  List.length [] == 0 &&
+  Option.is_none (List.head []) &&
+  Option.is_none (List.tail []) &&
+  Option.is_none (List.last []) &&
+  Option.is_none (List.nth 0 [])
+)
+
+let _ = test "single element list" (
+  List.length [42] == 1 &&
+  (match List.head [42] with Some h -> h == 42 | None -> false) &&
+  (match List.last [42] with Some l -> l == 42 | None -> false)
+)
+
+let _ = print "=== All List tests completed ==="

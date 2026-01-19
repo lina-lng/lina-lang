@@ -8,4 +8,4 @@ let _ =
     sum := !sum + i
   done
 
-let _ = print_int !sum
+let _ = print !sum

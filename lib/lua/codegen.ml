@@ -27,6 +27,18 @@ let register_singleton ctx type_name tag_index =
 let generate_singleton_preamble ctx =
   Singleton_registry.generate_preamble ctx.singletons
 
+(** Generate a unique name for a temporary variable (like switch scrutinees).
+
+    Uses the context to track which base names are already in use.
+    First occurrence of a name uses it as-is, subsequent occurrences get _1, _2, etc.
+
+    Note: This mutates the context's hashtables for efficiency. *)
+let generate_unique_name ctx base_name : Lua_ast.identifier =
+  let count = Hashtbl.find_opt ctx.used_names base_name |> Option.value ~default:0 in
+  Hashtbl.replace ctx.used_names base_name (count + 1);
+  if count = 0 then base_name
+  else Printf.sprintf "%s_%d" base_name count
+
 (** Generate a readable name for an identifier, only adding suffix when needed.
 
     Uses the context to track which base names are already in use.
@@ -103,6 +115,7 @@ let binary_primitives = [
   Lambda.PrimitiveSubInt, OpSub;
   Lambda.PrimitiveMulInt, OpMul;
   Lambda.PrimitiveDivInt, OpDiv;
+  Lambda.PrimitiveModInt, OpMod;
   Lambda.PrimitiveIntEqual, OpEqual;
   Lambda.PrimitiveIntNotEqual, OpNotEqual;
   Lambda.PrimitiveIntLess, OpLess;
@@ -111,6 +124,8 @@ let binary_primitives = [
   Lambda.PrimitiveIntGreaterEqual, OpGreaterEqual;
   Lambda.PrimitiveStringEqual, OpEqual;
   Lambda.PrimitiveStringConcat, OpConcat;
+  Lambda.PrimitiveBoolAnd, OpAnd;
+  Lambda.PrimitiveBoolOr, OpOr;
 ]
 
 let unary_primitives = [
@@ -134,6 +149,53 @@ let translate_primitive prim args =
           ExpressionTable (List.map (fun field -> FieldArray field) fields)
       | Lambda.PrimitiveGetField index, [obj] ->
           ExpressionIndex (obj, ExpressionNumber (float_of_int (index + 1)))
+      | Lambda.PrimitiveListAppend, [xs; ys] ->
+          (* Generate IIFE with recursive append helper:
+             (function()
+               local function _append(a, b)
+                 if a._tag == 0 then return b end
+                 return {_tag = 1, _0 = {a._0[1], _append(a._0[2], b)}}
+               end
+               return _append(xs, ys)
+             end)() *)
+          let append_name = "_append" in
+          let var_a = ExpressionVariable "a" in
+          let var_b = ExpressionVariable "b" in
+          let tag_field = Codegen_constants.variant_tag_field in
+          let arg_field = Codegen_constants.variant_arg_field in
+
+          (* if a._tag == 0 then return b *)
+          let nil_check = ExpressionBinaryOp (OpEqual,
+            ExpressionField (var_a, tag_field),
+            ExpressionNumber 0.0) in
+          let return_b = StatementReturn [var_b] in
+
+          (* return {_tag = 1, _0 = {a._0[1], _append(a._0[2], b)}} *)
+          let head_access = ExpressionIndex (
+            ExpressionField (var_a, arg_field),
+            ExpressionNumber 1.0) in
+          let tail_access = ExpressionIndex (
+            ExpressionField (var_a, arg_field),
+            ExpressionNumber 2.0) in
+          let recursive_call = ExpressionCall (
+            ExpressionVariable append_name,
+            [tail_access; var_b]) in
+          let cons_table = ExpressionTable [
+            FieldNamed (tag_field, ExpressionNumber 1.0);
+            FieldNamed (arg_field, ExpressionTable [
+              FieldArray head_access;
+              FieldArray recursive_call
+            ])
+          ] in
+          let return_cons = StatementReturn [cons_table] in
+
+          let append_body = [
+            StatementIf ([(nil_check, [return_b])], Some [return_cons])
+          ] in
+          let append_func = StatementLocalFunction (append_name, ["a"; "b"], append_body) in
+          let call_append = StatementReturn [ExpressionCall (ExpressionVariable append_name, [xs; ys])] in
+
+          make_iife [append_func; call_append]
       | _ -> ExpressionNil
 
 (** Wrap the last argument with table.unpack() for variadic FFI calls.
@@ -664,7 +726,7 @@ and translate_to_statements ctx (lambda : Lambda.lambda) : block * context =
 
   | Lambda.LambdaSwitch (scrutinee, cases, default) ->
     let scrutinee_expr, ctx = translate_expression ctx scrutinee in
-    let temp_name = Codegen_constants.switch_scrutinee_name in
+    let temp_name = generate_unique_name ctx Codegen_constants.switch_scrutinee_name in
     let local_stmt = StatementLocal ([temp_name], [scrutinee_expr]) in
     let tag_access = ExpressionField (ExpressionVariable temp_name, Codegen_constants.variant_tag_field) in
     let num_cases = List.length cases in

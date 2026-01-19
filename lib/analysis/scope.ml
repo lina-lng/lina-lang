@@ -30,7 +30,7 @@ type reference = {
 type binding = {
   bind_name : string;
   bind_id : Common.Identifier.t;
-  bind_kind : binding_kind;
+  mutable bind_kind : binding_kind;
   bind_location : Common.Location.t;
   bind_type : Typing.Types.type_expression option;
   mutable bind_references : reference list;

@@ -106,7 +106,7 @@ let%expect_test "pipeline combines multiple diagnostics" =
     (has_diagnostic_code Error_code.w_dead_code result);
   (* Note: count includes unused y parameter and unused z inside M *)
   [%expect {|
-    Diagnostic count: 6
+    Diagnostic count: 5
     Has unused x: true
     Has unused f: true
     Has unused M: true

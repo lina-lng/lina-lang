@@ -24,6 +24,16 @@ let escape_string s =
   ) s;
   Buffer.contents buf
 
+let is_valid_lua_identifier name =
+  let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
+  let is_digit c = c >= '0' && c <= '9' in
+  let is_ident_char c = is_alpha c || is_digit c || c = '_' in
+  let is_ident_start c = is_alpha c || c = '_' in
+
+  String.length name > 0
+  && is_ident_start name.[0]
+  && String.for_all is_ident_char name
+
 let binary_operator_to_string = function
   | OpAdd -> "+"
   | OpSub -> "-"
@@ -98,8 +108,14 @@ let rec print_expression_prec_to_buf buf level prec expr =
     Buffer.add_char buf ']'
   | ExpressionField (obj, field) ->
     print_expression_prec_to_buf buf level 100 obj;
-    Buffer.add_char buf '.';
-    Buffer.add_string buf field
+    if is_valid_lua_identifier field then begin
+      Buffer.add_char buf '.';
+      Buffer.add_string buf field
+    end else begin
+      Buffer.add_string buf "[\"";
+      Buffer.add_string buf (escape_string field);
+      Buffer.add_string buf "\"]"
+    end
   | ExpressionCall (func, args) ->
     begin match func with
     | ExpressionFunction _ ->
@@ -178,8 +194,14 @@ and print_lvalue_to_buf buf level lvalue =
     Buffer.add_char buf ']'
   | LvalueField (obj, field) ->
     print_expression_to_buf buf level obj;
-    Buffer.add_char buf '.';
-    Buffer.add_string buf field
+    if is_valid_lua_identifier field then begin
+      Buffer.add_char buf '.';
+      Buffer.add_string buf field
+    end else begin
+      Buffer.add_string buf "[\"";
+      Buffer.add_string buf (escape_string field);
+      Buffer.add_string buf "\"]"
+    end
 
 and print_lvalues_to_buf buf level lvalues =
   print_separated buf ~sep:", " ~print:(fun buf lv -> print_lvalue_to_buf buf level lv) lvalues

@@ -1,0 +1,12 @@
+(* Functions returning lists *)
+(* Expected: ACCEPT - functions can return lists *)
+
+let make_list x = [x]
+let make_pair a b = [a; b]
+let duplicate x = [x; x; x]
+
+let result1 = make_list 42
+let result2 = make_pair "a" "b"
+let result3 = duplicate true
+
+let () = print_string "ok"

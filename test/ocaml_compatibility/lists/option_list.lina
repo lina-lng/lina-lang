@@ -1,0 +1,13 @@
+(* List of options: combining list and option *)
+(* Expected: ACCEPT - list of options should work *)
+
+let opts : int option list = [Some 1; None; Some 3]
+let all_some = [Some "a"; Some "b"]
+
+let rec filter_some lst =
+  match lst with
+  | [] -> []
+  | Some x :: xs -> x :: filter_some xs
+  | None :: xs -> filter_some xs
+
+let _ = print "ok"

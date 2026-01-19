@@ -1,0 +1,228 @@
+(* Test Result stdlib module functions *)
+
+(* Test 1: is_ok / is_error predicates *)
+let _ =
+  let _ = print (if Result.is_ok (Ok 42) then "OK" else "FAIL") in
+  let _ = print (if Result.is_ok (Error "oops") then "FAIL" else "OK") in
+  let _ = print (if Result.is_error (Error "err") then "OK" else "FAIL") in
+  print (if Result.is_error (Ok 1) then "FAIL" else "OK")
+(* Expected: OK *)
+(* Expected: OK *)
+(* Expected: OK *)
+(* Expected: OK *)
+
+(* Test 2: get_or *)
+let _ =
+  let _ = print (Result.get_or (Ok 10) 0) in
+  print (Result.get_or (Error "bad") 99)
+(* Expected: 10 *)
+(* Expected: 99 *)
+
+(* Test 3: get_error_or *)
+let _ =
+  let _ = print (Result.get_error_or (Error "found") "default") in
+  print (Result.get_error_or (Ok 42) "default")
+(* Expected: found *)
+(* Expected: default *)
+
+(* Test 4: map *)
+let _ =
+  let result = Result.map (fun x -> x * 2) (Ok 5) in
+  print (Result.get_or result 0)
+(* Expected: 10 *)
+
+let _ =
+  let result = Result.map (fun x -> x * 2) (Error "err") in
+  print (if Result.is_error result then "OK: stayed Error" else "FAIL")
+(* Expected: OK: stayed Error *)
+
+(* Test 5: map_error *)
+let _ =
+  match Result.map_error (fun e -> e ^ "!") (Error "oops") with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: oops! *)
+
+let _ =
+  match Result.map_error (fun e -> e ^ "!") (Ok 42) with
+  | Ok n -> print n
+  | Error _ -> print "FAIL"
+(* Expected: 42 *)
+
+(* Test 6: flat_map / bind *)
+let safe_div x y = if y == 0 then Error "div by zero" else Ok (x / y)
+
+let _ =
+  let result = Result.flat_map (safe_div 10) (Ok 2) in
+  print (Result.get_or result 0)
+(* Expected: 5 *)
+
+let _ =
+  let result = Result.flat_map (safe_div 10) (Ok 0) in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: div by zero *)
+
+let _ =
+  let result = Result.flat_map (safe_div 10) (Error "initial err") in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: initial err *)
+
+(* Test 7: fold *)
+let _ =
+  let result = Result.fold (fun x -> x * 2) (fun _e -> 0 - 1) (Ok 5) in
+  print result
+(* Expected: 10 *)
+
+let _ =
+  let result = Result.fold (fun x -> x * 2) (fun _e -> 0 - 1) (Error "err") in
+  print result
+(* Expected: -1 *)
+
+(* Test 8: iter / iter_error *)
+let _ =
+  let counter = ref 0 in
+  let _ = Result.iter (fun x -> counter := x) (Ok 42) in
+  print !counter
+(* Expected: 42 *)
+
+let _ =
+  let counter = ref 0 in
+  let _ = Result.iter (fun x -> counter := x) (Error "err") in
+  print !counter
+(* Expected: 0 *)
+
+(* Test 9: or_ *)
+let _ =
+  let _ = print (Result.get_or (Result.or_ (Ok 1) (Ok 2)) 0) in
+  let _ = print (Result.get_or (Result.or_ (Error "e") (Ok 2)) 0) in
+  ()
+(* Expected: 1 *)
+(* Expected: 2 *)
+
+let _ =
+  match Result.or_ (Error "e1") (Error "e2") with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: e2 *)
+
+(* Test 10: and_ *)
+let _ =
+  let _ = print (Result.get_or (Result.and_ (Ok 1) (Ok 2)) 0) in
+  ()
+(* Expected: 2 *)
+
+let _ =
+  match Result.and_ (Ok 1) (Error "e") with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: e *)
+
+let _ =
+  match Result.and_ (Error "e") (Ok 2) with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: e *)
+
+(* Test 11: join / flatten *)
+let _ =
+  let nested = Ok (Ok 42) in
+  let flat = Result.flatten nested in
+  print (Result.get_or flat 0)
+(* Expected: 42 *)
+
+let _ =
+  let nested = Ok (Error "inner") in
+  let flat = Result.flatten nested in
+  match flat with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: inner *)
+
+(* Test 12: map2 *)
+let _ =
+  let add = fun a -> fun b -> a + b in
+  let result = Result.map2 add (Ok 3) (Ok 4) in
+  print (Result.get_or result 0)
+(* Expected: 7 *)
+
+let _ =
+  let add = fun a -> fun b -> a + b in
+  match Result.map2 add (Error "e1") (Ok 4) with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: e1 *)
+
+(* Test 13: to_option / of_option *)
+let _ =
+  match Result.to_option (Ok 42) with
+  | Some n -> print n
+  | None -> print "FAIL"
+(* Expected: 42 *)
+
+let _ =
+  match Result.to_option (Error "e") with
+  | None -> print "OK: Error to None"
+  | Some _ -> print "FAIL"
+(* Expected: OK: Error to None *)
+
+let _ =
+  match Result.of_option (Some 100) "missing" with
+  | Ok n -> print n
+  | Error _ -> print "FAIL"
+(* Expected: 100 *)
+
+let _ =
+  match Result.of_option None "missing" with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: missing *)
+
+(* Test 14: equal *)
+let _ =
+  let ok_eq = fun a -> fun b -> a == b in
+  let err_eq = fun a -> fun b -> a == b in
+  let _ = print (if Result.equal ok_eq err_eq (Ok 5) (Ok 5) then "equal" else "FAIL") in
+  let _ = print (if Result.equal ok_eq err_eq (Ok 5) (Ok 6) then "FAIL" else "not equal") in
+  print (if Result.equal ok_eq err_eq (Error 1) (Error 1) then "errs equal" else "FAIL")
+(* Expected: equal *)
+(* Expected: not equal *)
+(* Expected: errs equal *)
+
+(* Test 15: binding operators *)
+let ( let* ) = Result.( let* )
+let ( let+ ) = Result.( let+ )
+
+let _ =
+  let result =
+    let* x = Ok 10 in
+    let* y = Ok 20 in
+    Ok (x + y)
+  in
+  print (Result.get_or result 0)
+(* Expected: 30 *)
+
+let _ =
+  let result =
+    let* x = Ok 10 in
+    let* y = Error "stop" in
+    Ok (x + y)
+  in
+  match result with
+  | Error msg -> print msg
+  | Ok _ -> print "FAIL"
+(* Expected: stop *)
+
+let _ =
+  let result =
+    let+ x = Ok 5 in
+    x * 2
+  in
+  print (Result.get_or result 0)
+(* Expected: 10 *)
+
+let _ = print "Result stdlib tests complete"
+(* Expected: Result stdlib tests complete *)

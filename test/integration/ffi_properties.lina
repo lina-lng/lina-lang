@@ -1,15 +1,18 @@
 -- FFI Property Access Tests
 -- Tests @get attribute
 
+-- NOTE: External declarations must come before other code due to parser
+-- ambiguity between @ as attribute prefix and @ as list append operator.
+
 -- @get: Property getter (obj.field)
 -- Using a table created via a simple function
-
--- Create a record type and access its field via FFI
-let point = { x = 10; y = 20 }
 
 -- Use @get to access x field
 @get
 external get_x : { x : int; y : int } -> int = "x"
+
+-- Create a record type and access its field via FFI
+let point = { x = 10; y = 20 }
 
 let x_val = get_x point
 

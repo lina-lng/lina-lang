@@ -1,0 +1,26 @@
+(* Modules: binding operator access with Module.( let* ) syntax *)
+(* Expected: ACCEPT - access binding operator from module *)
+
+type 'a option = None | Some of 'a
+
+module Option = struct
+  let ( let* ) opt f = match opt with
+    | None -> None
+    | Some x -> f x
+
+  let ( and* ) opt1 opt2 = match (opt1, opt2) with
+    | (Some x, Some y) -> Some (x, y)
+    | _ -> None
+end
+
+let ( let* ) = Option.( let* )
+let ( and* ) = Option.( and* )
+
+let result =
+  let* x = Some 10
+  and* y = Some 20 in
+  Some (x + y)
+
+let _ = match result with
+  | None -> print_int 0
+  | Some n -> print_int n

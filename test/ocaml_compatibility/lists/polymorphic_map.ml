@@ -1,0 +1,12 @@
+(* Polymorphic list: map function *)
+(* Expected: ACCEPT - map preserving type structure *)
+
+let rec map f lst =
+  match lst with
+  | [] -> []
+  | x :: xs -> f x :: map f xs
+
+let doubled = map (fun x -> x * 2) [1; 2; 3]
+let lengths = map (fun s -> 1) ["a"; "bb"; "ccc"]
+
+let () = print_string "ok"

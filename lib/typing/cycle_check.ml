@@ -134,6 +134,40 @@ and check_poly_variant_row ~env ~recursive_set ~visited ~contractive ~loc pv_row
   ) pv_row.pv_fields;
   check_type ~env ~recursive_set ~visited ~contractive ~loc pv_row.pv_more
 
+(** Check if a type expression contains a reference to a given type name.
+    Used for detecting self-references in type aliases. *)
+let rec contains_type_name name ty =
+  match representative ty with
+  | TypeVariable _ -> false
+  | TypeConstructor (path, args) ->
+    path_to_string path = name || List.exists (contains_type_name name) args
+  | TypeArrow (_, arg, result) ->
+    contains_type_name name arg || contains_type_name name result
+  | TypeTuple elements ->
+    List.exists (contains_type_name name) elements
+  | TypeRecord row ->
+    contains_type_name_in_row name row
+  | TypePolyVariant pv_row ->
+    contains_type_name_in_pv_row name pv_row
+  | TypeRowEmpty -> false
+  | TypePackage pkg ->
+    List.exists (fun (_, ty) -> contains_type_name name ty) pkg.package_signature
+
+and contains_type_name_in_row name row =
+  List.exists (fun (_, field) ->
+    match field with
+    | RowFieldPresent ty -> contains_type_name name ty
+  ) row.row_fields
+  || contains_type_name name row.row_more
+
+and contains_type_name_in_pv_row name pv_row =
+  List.exists (fun (_, field) ->
+    match field with
+    | PVFieldPresent (Some ty) -> contains_type_name name ty
+    | PVFieldPresent None | PVFieldAbsent -> false
+  ) pv_row.pv_fields
+  || contains_type_name name pv_row.pv_more
+
 (** Check a single type definition for cycles. *)
 let check_type_definition ~env ~loc name _params kind manifest =
   let visited = Hashtbl.create 8 in
@@ -144,7 +178,15 @@ let check_type_definition ~env ~loc name _params kind manifest =
 
   begin match kind, manifest with
   | DeclarationAbstract, Some manifest_ty ->
-    (* Type alias: the manifest is NOT contractive initially *)
+    (* Type alias: ANY self-reference is a cycle error.
+       Unlike variant/record types, type aliases cannot be recursive
+       even if wrapped in a data constructor. OCaml rejects:
+         type t = t list
+       because t is an alias, not a data type. *)
+    if contains_type_name name manifest_ty then
+      raise (Cycle_detected (UnguardedCycle ([name], loc)));
+
+    (* Also check for indirect cycles through other type aliases *)
     begin try
       check_type ~env ~recursive_set ~visited ~contractive:false ~loc manifest_ty
     with Cycle_detected (UnguardedCycle (path, _)) ->

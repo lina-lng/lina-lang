@@ -202,9 +202,7 @@ let rec analyze_expression state (expr : typed_expression) =
 
       let promote_to_parameter (binding : Scope.binding) =
         match Scope.find_binding_local func_state.current_scope binding.bind_name with
-        | Some bound ->
-            Hashtbl.replace func_state.current_scope.scope_bindings
-              bound.bind_name { bound with bind_kind = Scope.Parameter }
+        | Some bound -> bound.bind_kind <- Scope.Parameter
         | None -> ()
       in
 

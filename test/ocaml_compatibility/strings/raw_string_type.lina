@@ -7,4 +7,4 @@ let concat_strings (a : string) (b : string) : string = a ^ b
 
 let result = concat_strings {|foo|} {|bar|}
 
-let _ = print_endline result
+let _ = print result

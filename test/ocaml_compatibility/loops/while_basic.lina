@@ -8,4 +8,4 @@ let _ =
     count := !count + 1
   done
 
-let _ = print_int !count
+let _ = print !count

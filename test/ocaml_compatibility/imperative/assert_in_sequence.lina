@@ -8,4 +8,4 @@ let test_sequence x =
   in
   result
 
-let _ = print_int (test_sequence 5)
+let _ = print (test_sequence 5)

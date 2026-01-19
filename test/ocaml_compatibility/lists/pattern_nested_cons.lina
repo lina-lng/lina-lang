@@ -1,0 +1,15 @@
+(* Pattern matching: nested cons a :: b :: rest *)
+(* Expected: ACCEPT - multi-level cons patterns should work *)
+
+let first_two lst =
+  match lst with
+  | a :: b :: _ -> a + b
+  | a :: [] -> a
+  | [] -> 0
+
+let at_least_three lst =
+  match lst with
+  | _ :: _ :: _ :: _ -> true
+  | _ -> false
+
+let _ = print (if first_two [10; 20; 30] == 30 then "ok" else "fail")

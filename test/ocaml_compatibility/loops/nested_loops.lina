@@ -12,4 +12,4 @@ let _ =
     done
   done
 
-let _ = print_int !count
+let _ = print !count

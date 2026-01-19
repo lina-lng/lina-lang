@@ -1,0 +1,70 @@
+(* Test Fn stdlib module functions *)
+
+(* Test 1: id *)
+let _ =
+  let _ = print (Fn.id 42) in
+  print (Fn.id "hello")
+(* Expected: 42 *)
+(* Expected: hello *)
+
+(* Test 2: const *)
+let _ =
+  let always_10 = Fn.const 10 in
+  let _ = print (always_10 "ignored") in
+  print (always_10 "also ignored")
+(* Expected: 10 *)
+(* Expected: 10 *)
+
+(* Test 3: flip *)
+let _ =
+  let sub = fun a -> fun b -> a - b in
+  let flipped_sub = Fn.flip sub in
+  let _ = print (sub 10 3) in
+  print (flipped_sub 10 3)
+(* Expected: 7 *)
+(* Expected: -7 *)
+
+(* Test 4: tap *)
+let _ =
+  let logged = ref 0 in
+  let result = Fn.tap (fun x -> logged := x) 42 in
+  let _ = print !logged in
+  print result
+(* Expected: 42 *)
+(* Expected: 42 *)
+
+(* Test 5: compose *)
+let _ =
+  let add1 = fun x -> x + 1 in
+  let mul2 = fun x -> x * 2 in
+  let composed = Fn.compose add1 mul2 in
+  print (composed 5)
+(* Expected: 12 *)
+
+(* Test 6: compose_left *)
+let _ =
+  let add1 = fun x -> x + 1 in
+  let mul2 = fun x -> x * 2 in
+  let composed = Fn.compose_left add1 mul2 in
+  print (composed 5)
+(* Expected: 11 *)
+
+(* Test 7: negate *)
+let _ =
+  let is_positive = fun x -> x > 0 in
+  let is_not_positive = Fn.negate is_positive in
+  let _ = print (if is_positive 5 then "pos" else "not pos") in
+  print (if is_not_positive 5 then "not pos" else "pos")
+(* Expected: pos *)
+(* Expected: pos *)
+
+let _ =
+  let is_positive = fun x -> x > 0 in
+  let is_not_positive = Fn.negate is_positive in
+  let _ = print (if is_positive (0 - 3) then "pos" else "not pos") in
+  print (if is_not_positive (0 - 3) then "not pos" else "pos")
+(* Expected: not pos *)
+(* Expected: not pos *)
+
+let _ = print "Fn stdlib tests complete"
+(* Expected: Fn stdlib tests complete *)

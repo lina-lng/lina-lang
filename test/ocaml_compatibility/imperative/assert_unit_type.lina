@@ -6,4 +6,4 @@ let check_positive x =
   x * 2
 
 let result : int = check_positive 5
-let _ = print_int result
+let _ = print result

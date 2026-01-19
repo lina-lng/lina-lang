@@ -1,0 +1,21 @@
+(* List in module: list operations in modules *)
+(* Expected: ACCEPT - list types should work in module signatures *)
+
+module type LIST_OPS = sig
+  val length : 'a list -> int
+  val head : 'a list -> 'a option
+end
+
+module MyList : LIST_OPS = struct
+  let rec length lst =
+    match lst with
+    | [] -> 0
+    | _ :: xs -> 1 + length xs
+
+  let head lst =
+    match lst with
+    | [] -> None
+    | x :: _ -> Some x
+end
+
+let _ = print "ok"

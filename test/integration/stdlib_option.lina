@@ -1,0 +1,228 @@
+(* Test Option stdlib module functions *)
+
+(* Test 1: is_some / is_none predicates *)
+let _ =
+  let _ = print (if Option.is_some (Some 42) then "OK" else "FAIL") in
+  let _ = print (if Option.is_some None then "FAIL" else "OK") in
+  let _ = print (if Option.is_none None then "OK" else "FAIL") in
+  print (if Option.is_none (Some 1) then "FAIL" else "OK")
+(* Expected: OK *)
+(* Expected: OK *)
+(* Expected: OK *)
+(* Expected: OK *)
+
+(* Test 2: get_or *)
+let _ =
+  let _ = print (Option.get_or (Some 10) 0) in
+  print (Option.get_or None 99)
+(* Expected: 10 *)
+(* Expected: 99 *)
+
+(* Test 3: get_or_else (lazy default) *)
+let _ =
+  let computed = ref false in
+  let _ = Option.get_or_else (Some 42) (fun () -> computed := true; 0) in
+  print (if !computed then "FAIL: computed" else "OK: not computed")
+(* Expected: OK: not computed *)
+
+let _ =
+  let _ = print (Option.get_or_else None (fun () -> 100)) in
+  ()
+(* Expected: 100 *)
+
+(* Test 4: map *)
+let _ =
+  let add_one = fun x -> x + 1 in
+  let result = Option.map add_one (Some 5) in
+  print (Option.get_or result 0)
+(* Expected: 6 *)
+
+let _ =
+  let result = Option.map (fun x -> x * 2) None in
+  print (if Option.is_none result then "OK: None" else "FAIL")
+(* Expected: OK: None *)
+
+(* Test 5: flat_map / bind *)
+let safe_div x y = if y == 0 then None else Some (x / y)
+
+let _ =
+  let result = Option.flat_map (safe_div 10) (Some 2) in
+  print (Option.get_or result 0)
+(* Expected: 5 *)
+
+let _ =
+  let result = Option.flat_map (safe_div 10) (Some 0) in
+  print (if Option.is_none result then "OK: division failed" else "FAIL")
+(* Expected: OK: division failed *)
+
+(* Test 6: filter *)
+let _ =
+  let gt5 = fun x -> x > 5 in
+  let result1 = Option.filter gt5 (Some 10) in
+  let _ = print (Option.get_or result1 0) in
+  let result2 = Option.filter gt5 (Some 3) in
+  print (if Option.is_none result2 then "OK: filtered out" else "FAIL")
+(* Expected: 10 *)
+(* Expected: OK: filtered out *)
+
+(* Test 7: flatten / join *)
+let _ =
+  let nested = Some (Some 42) in
+  let flat = Option.flatten nested in
+  print (Option.get_or flat 0)
+(* Expected: 42 *)
+
+let _ =
+  let nested = Some None in
+  let flat = Option.flatten nested in
+  print (if Option.is_none flat then "OK: flattened None" else "FAIL")
+(* Expected: OK: flattened None *)
+
+(* Test 8: or_ and and_ *)
+let _ =
+  let _ = print (Option.get_or (Option.or_ (Some 1) (Some 2)) 0) in
+  let _ = print (Option.get_or (Option.or_ None (Some 2)) 0) in
+  let _ = print (if Option.is_none (Option.or_ None None) then "None" else "FAIL") in
+  ()
+(* Expected: 1 *)
+(* Expected: 2 *)
+(* Expected: None *)
+
+let _ =
+  let _ = print (Option.get_or (Option.and_ (Some 1) (Some 2)) 0) in
+  let _ = print (if Option.is_none (Option.and_ None (Some 2)) then "None" else "FAIL") in
+  ()
+(* Expected: 2 *)
+(* Expected: None *)
+
+(* Test 9: map2 *)
+let _ =
+  let add = fun a -> fun b -> a + b in
+  let result = Option.map2 add (Some 3) (Some 4) in
+  print (Option.get_or result 0)
+(* Expected: 7 *)
+
+let _ =
+  let add = fun a -> fun b -> a + b in
+  let result = Option.map2 add None (Some 4) in
+  print (if Option.is_none result then "OK: None" else "FAIL")
+(* Expected: OK: None *)
+
+(* Test 10: zip / product *)
+let _ =
+  let result = Option.zip (Some 1) (Some 2) in
+  match result with
+  | Some (a, b) -> print (a + b)
+  | None -> print "FAIL"
+(* Expected: 3 *)
+
+(* Test 11: fold *)
+let _ =
+  let result = Option.fold 0 (fun x -> x * 2) (Some 5) in
+  print result
+(* Expected: 10 *)
+
+let _ =
+  let result = Option.fold 99 (fun x -> x * 2) None in
+  print result
+(* Expected: 99 *)
+
+(* Test 12: iter *)
+let _ =
+  let counter = ref 0 in
+  let _ = Option.iter (fun x -> counter := x) (Some 42) in
+  print !counter
+(* Expected: 42 *)
+
+let _ =
+  let counter = ref 0 in
+  let _ = Option.iter (fun x -> counter := x) None in
+  print !counter
+(* Expected: 0 *)
+
+(* Test 13: contains *)
+let _ =
+  let _ = print (if Option.contains 42 (Some 42) then "OK" else "FAIL") in
+  let _ = print (if Option.contains 42 (Some 99) then "FAIL" else "OK") in
+  print (if Option.contains 42 None then "FAIL" else "OK")
+(* Expected: OK *)
+(* Expected: OK *)
+(* Expected: OK *)
+
+(* Test 14: for_all / exists *)
+let _ =
+  let gt0 = fun x -> x > 0 in
+  let _ = print (if Option.for_all gt0 (Some 5) then "OK" else "FAIL") in
+  let _ = print (if Option.for_all gt0 None then "OK: vacuously true" else "FAIL") in
+  let _ = print (if Option.exists gt0 (Some 5) then "OK" else "FAIL") in
+  print (if Option.exists gt0 None then "FAIL" else "OK: not exists")
+(* Expected: OK *)
+(* Expected: OK: vacuously true *)
+(* Expected: OK *)
+(* Expected: OK: not exists *)
+
+(* Test 15: equal / compare *)
+let _ =
+  let int_eq = fun a -> fun b -> a == b in
+  let _ = print (if Option.equal int_eq (Some 5) (Some 5) then "equal" else "FAIL") in
+  let _ = print (if Option.equal int_eq (Some 5) (Some 6) then "FAIL" else "not equal") in
+  print (if Option.equal int_eq None None then "both none" else "FAIL")
+(* Expected: equal *)
+(* Expected: not equal *)
+(* Expected: both none *)
+
+(* Test 16: to_result / of_result *)
+let _ =
+  match Option.to_result "missing" (Some 42) with
+  | Ok n -> print n
+  | Error _ -> print "FAIL"
+(* Expected: 42 *)
+
+let _ =
+  match Option.to_result "missing" None with
+  | Ok _ -> print "FAIL"
+  | Error msg -> print msg
+(* Expected: missing *)
+
+let _ =
+  let opt = Option.of_result (Ok 100) in
+  print (Option.get_or opt 0)
+(* Expected: 100 *)
+
+let _ =
+  let opt = Option.of_result (Error "ignored") in
+  print (if Option.is_none opt then "OK: Error to None" else "FAIL")
+(* Expected: OK: Error to None *)
+
+(* Test 17: binding operators *)
+let ( let* ) = Option.( let* )
+let ( let+ ) = Option.( let+ )
+
+let _ =
+  let result =
+    let* x = Some 10 in
+    let* y = Some 20 in
+    Some (x + y)
+  in
+  print (Option.get_or result 0)
+(* Expected: 30 *)
+
+let _ =
+  let result =
+    let* x = Some 10 in
+    let* y = None in
+    Some (x + y)
+  in
+  print (if Option.is_none result then "OK: short-circuit" else "FAIL")
+(* Expected: OK: short-circuit *)
+
+let _ =
+  let result =
+    let+ x = Some 5 in
+    x * 2
+  in
+  print (Option.get_or result 0)
+(* Expected: 10 *)
+
+let _ = print "Option stdlib tests complete"
+(* Expected: Option stdlib tests complete *)

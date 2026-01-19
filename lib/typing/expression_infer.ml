@@ -31,7 +31,7 @@ let unify = Inference_utils.unify
 let is_binary_operator name =
   match name with
   | "+" | "-" | "*" | "/" | "^" | "==" | "!=" | "<" | ">" | "<=" | ">="
-  | "+." | "-." | "*." | "/." -> true
+  | "+." | "-." | "*." | "/." | "&&" | "||" -> true
   | _ -> false
 
 (** Describe an operator's expected operand type. *)
@@ -41,6 +41,7 @@ let operator_type_description op_name =
   | "+." | "-." | "*." | "/." -> "floats"
   | "^" -> "strings"
   | "==" | "!=" | "<" | ">" | "<=" | ">=" -> "comparable values"
+  | "&&" | "||" -> "booleans"
   | _ -> "values"
 
 (** Unify function argument with context-aware error message.
@@ -835,9 +836,7 @@ and infer_expression ctx (expr : expression) =
     let mk_loc value = { Location.value; location = loc } in
 
     let mk_op_var op_name =
-      (* Parenthesized operators: ( let* ) or ( and* ) *)
-      let var_name = "( " ^ op_name ^ " )" in
-      mk_loc (ExpressionVariable var_name)
+      mk_loc (ExpressionVariable op_name)
     in
 
     let mk_apply fn args =

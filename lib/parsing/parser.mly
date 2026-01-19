@@ -71,7 +71,7 @@ let build_function loc params body =
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
 %token STAR PLUS MINUS SLASH CARET
 %token LESS GREATER LESS_EQUAL GREATER_EQUAL EQUAL_EQUAL NOT_EQUAL
-%token REF BANG COLONEQUALS COLONCOLON
+%token REF BANG COLONEQUALS COLONCOLON MOD
 %token <string> BACKTICK_TAG
 %token TILDE QUESTION PLUSEQUAL
 %token ASSERT
@@ -100,9 +100,9 @@ let build_function loc params body =
 %nonassoc ELSE
 %left INFIXOP0                              (* |> && || - lowest custom operator precedence *)
 %left EQUAL EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
-%right INFIXOP1 COLONCOLON                  (* @@ @ ^ :: - right-associative *)
+%right INFIXOP1 COLONCOLON AT               (* @@ @ :: - right-associative *)
 %left INFIXOP2 PLUS MINUS                   (* ++ +. + - - additive *)
-%left INFIXOP3 STAR SLASH                   (* *. // * / - multiplicative *)
+%left INFIXOP3 STAR SLASH MOD               (* *. // * / mod - multiplicative *)
 %right INFIXOP4 CARET                       (* ** ^ - highest custom operator precedence *)
 %nonassoc unary_minus
 %nonassoc PREFIXOP REF BANG                 (* prefix operators *)
@@ -190,20 +190,7 @@ let_binding:
       let name_pattern = make_located (PatternVariable name) $loc(name) in
       make_binding name_pattern func_expr $loc
     }
-  (* Parenthesized binding operators as function definitions: let ( let* ) x f = ... *)
-  | LPAREN; op = LETOP; RPAREN; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
-    {
-      let func_expr = build_function $loc params expr in
-      let name_pattern = make_located (PatternVariable ("( " ^ op ^ " )")) $loc in
-      make_binding name_pattern func_expr $loc
-    }
-  | LPAREN; op = ANDOP; RPAREN; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
-    {
-      let func_expr = build_function $loc params expr in
-      let name_pattern = make_located (PatternVariable ("( " ^ op ^ " )")) $loc in
-      make_binding name_pattern func_expr $loc
-    }
-  (* Custom operator definitions: let ( |> ) x f = f x, let ( ** ) x y = ... *)
+  (* Operator definitions: let ( |> ) x f = f x, let ( let* ) x f = ..., etc. *)
   | LPAREN; op = operator_name; RPAREN; params = nonempty_list(labeled_pattern); EQUAL; expr = expression
     {
       let func_expr = build_function $loc params expr in
@@ -522,7 +509,9 @@ simple_expression:
   | MINUS { "-" }
   | STAR { "*" }
   | SLASH { "/" }
+  | MOD { "mod" }
   | CARET { "^" }
+  | AT { "@" }
   | EQUAL { "=" }
   | EQUAL_EQUAL { "==" }
   | NOT_EQUAL { "<>" }
@@ -543,7 +532,9 @@ simple_expression:
   | MINUS { "-" }
   | STAR { "*" }
   | SLASH { "/" }
+  | MOD { "mod" }
   | CARET { "^" }
+  | AT { "@" }
   | LESS { "<" }
   | GREATER { ">" }
   | LESS_EQUAL { "<=" }
@@ -554,6 +545,8 @@ simple_expression:
   | op = INFIXOP3 { op }
   | op = INFIXOP4 { op }
   | op = PREFIXOP { op }
+  | op = LETOP { op }
+  | op = ANDOP { op }
 
 application_expression:
   | e = postfix_expression { e }
@@ -607,6 +600,9 @@ postfix_expression:
   | e = postfix_expression; DOT; field = UPPERCASE_IDENTIFIER
     (* Allow M.N for nested module access - type checker handles the semantics *)
     { make_located (ExpressionRecordAccess (e, field)) $loc }
+  (* Module operator access: M.( let* ), Option.( |> ), etc. *)
+  | e = postfix_expression; DOT; LPAREN; op = operator_name; RPAREN
+    { make_located (ExpressionRecordAccess (e, op)) $loc }
   (* Dereference at postfix level so it can be used as function argument *)
   | BANG; e = postfix_expression %prec BANG
     { make_located (ExpressionDeref e) $loc }
@@ -614,11 +610,9 @@ postfix_expression:
 atomic_expression:
   | LPAREN; RPAREN
     { make_located (ExpressionConstant ConstantUnit) $loc }
-  (* Parenthesized binding operators as values: ( let* ), ( and* ) *)
-  | LPAREN; op = LETOP; RPAREN
-    { make_located (ExpressionVariable ("( " ^ op ^ " )")) $loc }
-  | LPAREN; op = ANDOP; RPAREN
-    { make_located (ExpressionVariable ("( " ^ op ^ " )")) $loc }
+  (* Parenthesized operators as values: ( let* ), ( |> ), ( + ), etc. *)
+  | LPAREN; op = operator_name; RPAREN
+    { make_located (ExpressionVariable op) $loc }
   | LPAREN; e = expression; RPAREN
     { e }
   | LPAREN; es = expression_tuple; RPAREN
@@ -713,11 +707,9 @@ atomic_pattern:
     { make_located (PatternConstant ConstantUnit) $loc }
   | LPAREN; TYPE; name = LOWERCASE_IDENTIFIER; RPAREN
     { make_located (PatternLocallyAbstract name) $loc }
-  (* Parenthesized binding operators as patterns: ( let* ), ( and* ) *)
-  | LPAREN; op = LETOP; RPAREN
-    { make_located (PatternVariable ("( " ^ op ^ " )")) $loc }
-  | LPAREN; op = ANDOP; RPAREN
-    { make_located (PatternVariable ("( " ^ op ^ " )")) $loc }
+  (* Parenthesized operators as patterns: ( let* ), ( |> ), ( + ), etc. *)
+  | LPAREN; op = operator_name; RPAREN
+    { make_located (PatternVariable op) $loc }
   | LPAREN; p = pattern; RPAREN
     { p }
   | LPAREN; ps = pattern_tuple; RPAREN
@@ -966,7 +958,7 @@ with_constraint:
 longident:
   | name = LOWERCASE_IDENTIFIER
     { make_located (Lident name) $loc }
-  | li = longident; DOT; name = LOWERCASE_IDENTIFIER
+  | li = module_longident; DOT; name = LOWERCASE_IDENTIFIER
     { make_located (Ldot (li, name)) $loc }
 
 (* Module longidents (uppercase) for with module constraints *)

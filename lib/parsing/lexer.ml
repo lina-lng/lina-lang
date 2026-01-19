@@ -59,6 +59,7 @@ type token =
   | PLUS
   | MINUS
   | SLASH
+  | MOD                  (** mod integer modulo *)
   | CARET                (** ^ string concatenation *)
   | LESS
   | GREATER
@@ -159,6 +160,8 @@ let keywords_table : (string, token) Hashtbl.t =
       ("for", FOR);
       ("to", TO);
       ("downto", DOWNTO);
+      (* Modulo operator *)
+      ("mod", MOD);
     ];
   table
 
@@ -516,6 +519,10 @@ let lex_real_token state =
   (* Other operators and symbols - single char fallbacks *)
   | '|' -> make_token BAR state
   | '@' -> make_token AT state
+  (* Underscore-prefixed identifiers: _foo, _x *)
+  | '_', Plus identifier_char ->
+      update_location state;
+      Some (LOWERCASE_IDENTIFIER (current_lexeme state), state.current_location)
   | '_' -> make_token UNDERSCORE state
   | '*' -> make_token STAR state
   | '+' -> make_token PLUS state

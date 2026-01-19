@@ -1,0 +1,14 @@
+(* Pattern matching: cons pattern x :: xs *)
+(* Expected: ACCEPT - cons pattern should destructure list *)
+
+let head_or_zero lst =
+  match lst with
+  | x :: _ -> x
+  | [] -> 0
+
+let tail_or_empty lst =
+  match lst with
+  | _ :: xs -> xs
+  | [] -> []
+
+let () = print_string (if head_or_zero [1; 2; 3] = 1 then "ok" else "fail")

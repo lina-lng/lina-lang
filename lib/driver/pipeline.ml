@@ -222,7 +222,8 @@ let compile_string options filename source =
     end;
 
     Typing.Types.reset_type_variable_id ();
-    let ctx = Typing.Typing_context.create Typing.Environment.initial in
+    let env = Stdlib_loader.initial_with_stdlib () in
+    let ctx = Typing.Typing_context.create env in
     let typed_ast, _ctx = Typing.Inference.infer_structure ctx ast in
     if options.dump_typed then begin
       Printf.eprintf "=== Typed AST ===\n%s\n\n" (dump_typed_structure typed_ast)
@@ -238,7 +239,8 @@ let compile_string options filename source =
     end;
 
     let lua_ast = Lua.Codegen.generate lambda in
-    let lua_code = Lua.Printer.print_chunk lua_ast in
+    let user_code = Lua.Printer.print_chunk lua_ast in
+    let lua_code = Stdlib_loader.stdlib_prelude () ^ user_code in
 
     (* Process type inference warnings with rich rendering *)
     let type_warnings = Compiler_error.get_warnings () in

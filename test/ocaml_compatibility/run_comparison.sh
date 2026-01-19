@@ -141,7 +141,12 @@ CATEGORIES=(
     "level_propagation"
     "toplevel_expressions"
     "result"
+    "lists"
     "error_cases"
+    "binding_operators"
+    "loops"
+    "strings"
+    "imperative"
 )
 
 for category in "${CATEGORIES[@]}"; do

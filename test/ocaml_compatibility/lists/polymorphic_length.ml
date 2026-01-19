@@ -1,0 +1,13 @@
+(* Polymorphic list: length function *)
+(* Expected: ACCEPT - polymorphic list functions should work *)
+
+let rec length lst =
+  match lst with
+  | [] -> 0
+  | _ :: xs -> 1 + length xs
+
+let n1 = length [1; 2; 3]
+let n2 = length ["a"; "b"]
+let n3 = length []
+
+let () = print_string "ok"

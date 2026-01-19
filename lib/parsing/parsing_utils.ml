@@ -61,6 +61,7 @@ let lexer_token_to_parser_token : Lexer.token -> Parser.token = function
   | Lexer.PLUS -> Parser.PLUS
   | Lexer.MINUS -> Parser.MINUS
   | Lexer.SLASH -> Parser.SLASH
+  | Lexer.MOD -> Parser.MOD
   | Lexer.CARET -> Parser.CARET
   | Lexer.LESS -> Parser.LESS
   | Lexer.GREATER -> Parser.GREATER

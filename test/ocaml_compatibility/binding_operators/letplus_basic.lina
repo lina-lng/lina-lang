@@ -12,5 +12,5 @@ let result =
   x * 2
 
 let _ = match result with
-  | None -> print_endline "none"
-  | Some n -> print_int n
+  | None -> print "none"
+  | Some n -> print n

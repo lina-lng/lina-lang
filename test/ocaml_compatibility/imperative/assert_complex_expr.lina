@@ -5,4 +5,4 @@ let validate x y z =
   assert (x > 0 && y > x && z >= y);
   x + y + z
 
-let _ = print_int (validate 1 2 3)
+let _ = print (validate 1 2 3)

@@ -1,0 +1,14 @@
+(* Pattern matching with list literals *)
+(* Expected: ACCEPT - pattern match on specific list structure *)
+
+let classify lst =
+  match lst with
+  | [] -> "empty"
+  | [_] -> "singleton"
+  | [_; _] -> "pair"
+  | _ -> "many"
+
+let _ = print (classify [])
+let _ = print (classify [1])
+let _ = print (classify [1; 2])
+let _ = print (classify [1; 2; 3])

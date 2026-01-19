@@ -9,6 +9,5 @@ let _ =
     sum := !sum + i
   done
 
-let _ = print_int !sum
-let _ = print_newline ()
-let _ = print_int i
+let _ = print !sum
+let _ = print i

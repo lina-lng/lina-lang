@@ -77,10 +77,9 @@ let%expect_test "match pattern variables are tracked" =
     Printf.printf "  Pattern var: %s\n" b.Analysis.Scope.bind_name
   ) (List.sort (fun a b -> String.compare a.Analysis.Scope.bind_name b.Analysis.Scope.bind_name) pattern_vars);
   [%expect{|
-    Pattern var count: 3
+    Pattern var count: 2
       Pattern var: n
       Pattern var: s
-      Pattern var: x
     |}]
 
 let%expect_test "variable reference is tracked" =
@@ -253,8 +252,8 @@ let%expect_test "mutual recursion references are tracked" =
   [%expect{|
     Total bindings: 4
       even: refs=1, kind=Scope.Function {is_recursive = true}
-      n: refs=0, kind=Scope.PatternVar
-      n: refs=0, kind=Scope.PatternVar
+      n: refs=2, kind=Scope.Parameter
+      n: refs=2, kind=Scope.Parameter
       odd: refs=1, kind=Scope.Function {is_recursive = true}
     |}]
 
