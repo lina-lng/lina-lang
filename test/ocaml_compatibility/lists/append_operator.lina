@@ -1,11 +1,13 @@
-(* List append: @ operator *)
-(* Expected: ACCEPT - @ should concatenate lists *)
+(* List append: List.append function *)
+(* Expected: ACCEPT - List.append concatenates lists *)
+(* Note: Lina uses @ for FFI attributes (like ReScript), so we use List.append
+   instead of the @ operator for list concatenation. *)
 
 let lst1 = [1; 2; 3]
 let lst2 = [4; 5; 6]
-let combined = lst1 @ lst2
+let combined = List.append lst1 lst2
 
-let empty_append = [] @ [1; 2]
-let append_empty = [1; 2] @ []
+let empty_append = List.append [] [1; 2]
+let append_empty = List.append [1; 2] []
 
 let _ = print "ok"

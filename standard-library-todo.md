@@ -75,7 +75,6 @@ lib/stdlib/
   - [x] Comparison: `equal`, `compare`
   - [x] Conversion: `to_result`, `of_result`, `to_list`, `to_array`
   - [x] Binding operators: `let*`, `and*`, `let+`, `and+`
-  - [ ] `of_nullable` (requires FFI)
 
 - [x] **Result** (`result.lina`) — Error handling
   - [x] Constructors: `ok`, `error`
@@ -86,7 +85,7 @@ lib/stdlib/
   - [x] Conversion: `of_option`
   - [x] Sequencing: `sequence`
   - [x] Binding operators: `let*`, `and*`, `let+`, `and+`
-  - [ ] `try_with` (requires FFI pcall)
+  - [x] `try_with` (via `@return(pcall)` FFI attribute)
 
 - [x] **List** (`list.lina`) — Immutable linked lists
   - [x] Construction: `empty`, `singleton`, `cons`, `range`, `replicate`, `init`
@@ -247,55 +246,55 @@ lib/stdlib/
     - [x] `random_range : int -> int -> int` — Random int [m, n]
     - [x] `randomseed : int -> unit` — Set random seed
 
-### Phase 6: IO Module (File Operations)
+### Phase 6: IO Module (File Operations) — COMPLETE
 
-- [ ] **Io** (`io.lina`) — File I/O operations
-  - [ ] **Types**
-    - [ ] `type file` — File handle (abstract)
-  - [ ] **Standard Streams**
-    - [ ] `stdin : file` — Standard input
-    - [ ] `stdout : file` — Standard output
-    - [ ] `stderr : file` — Standard error
-  - [ ] **File Operations**
-    - [ ] `open_ : string -> string -> file option` — Open file (path, mode)
-    - [ ] `open_exn : string -> string -> file` — Open or raise
-    - [ ] `close : file -> unit` — Close file
-    - [ ] `flush : file -> unit` — Flush buffer
-  - [ ] **Reading**
-    - [ ] `read_line : file -> string option` — Read line
-    - [ ] `read_all : file -> string` — Read entire file
-    - [ ] `read_bytes : file -> int -> string option` — Read n bytes
-  - [ ] **Writing**
-    - [ ] `write : file -> string -> unit` — Write string
-    - [ ] `write_line : file -> string -> unit` — Write string with newline
-  - [ ] **Positioning**
-    - [ ] `seek : file -> string -> int -> int option` — Seek position
-    - [ ] `tell : file -> int` — Get current position
-  - [ ] **Convenience Functions** (pure Lina wrappers)
-    - [ ] `read_file : string -> (string, string) result` — Read entire file by path
-    - [ ] `write_file : string -> string -> (unit, string) result` — Write string to file
-    - [ ] `append_file : string -> string -> (unit, string) result` — Append to file
-    - [ ] `with_file : string -> string -> (file -> 'a) -> ('a, string) result` — Open, use, close
+- [x] **Io** (`io.lina`) — File I/O operations
+  - [x] **Types**
+    - [x] `type file` — File handle (abstract)
+  - [x] **Standard Streams**
+    - [x] `stdin : file` — Standard input
+    - [x] `stdout : file` — Standard output
+    - [x] `stderr : file` — Standard error
+  - [x] **File Operations**
+    - [x] `open_ : string -> string -> file option` — Open file (path, mode)
+    - [x] `open_exn : string -> string -> file` — Open or raise
+    - [x] `close : file -> unit` — Close file
+    - [x] `flush : file -> unit` — Flush buffer
+  - [x] **Reading**
+    - [x] `read_line : file -> string option` — Read line
+    - [x] `read_all : file -> string` — Read entire file
+    - [x] `read_bytes : file -> int -> string option` — Read n bytes
+  - [x] **Writing**
+    - [x] `write : file -> string -> unit` — Write string
+    - [x] `write_line : file -> string -> unit` — Write string with newline
+  - [x] **Positioning**
+    - [x] `seek : file -> string -> int -> int option` — Seek position
+    - [x] `tell : file -> int` — Get current position
+  - [x] **Convenience Functions** (pure Lina wrappers)
+    - [x] `read_file : string -> (string, string) result` — Read entire file by path
+    - [x] `write_file : string -> string -> (unit, string) result` — Write string to file
+    - [x] `append_file : string -> string -> (unit, string) result` — Append to file
+    - [x] `with_file : string -> string -> (file -> 'a) -> ('a, string) result` — Open, use, close
   - Note: `print` and `error` are already builtins
 
-### Phase 7: OS Module
+### Phase 7: OS Module (COMPLETE)
 
-- [ ] **Os** (`os.lina`) — Operating system facilities
-  - [ ] **Date and Time**
-    - [ ] `time : unit -> int` — Current Unix timestamp
-    - [ ] `clock : unit -> float` — CPU time used
-    - [ ] `difftime : int -> int -> int` — Time difference in seconds
-    - [ ] `date : string -> string` — Format current time
-    - [ ] `date_of : string -> int -> string` — Format given timestamp
-  - [ ] **Environment**
-    - [ ] `getenv : string -> string option` — Get environment variable
-  - [ ] **File System**
-    - [ ] `remove : string -> (unit, string) result` — Delete file
-    - [ ] `rename : string -> string -> (unit, string) result` — Rename file
-    - [ ] `tmpname : unit -> string` — Generate temporary filename
-  - [ ] **Process Control**
-    - [ ] `execute : string -> int` — Execute shell command, return exit code
-    - [ ] `exit : int -> unit` — Exit program with code
+- [x] **Os** (`os.lina`) — Operating system facilities
+  - [x] **Date and Time**
+    - [x] `time : unit -> int` — Current Unix timestamp
+    - [x] `clock : unit -> float` — CPU time used
+    - [x] `difftime : int -> int -> int` — Time difference in seconds
+    - [x] `date : string -> string` — Format current time
+    - [x] `date_of : string -> int -> string` — Format given timestamp
+  - [x] **Environment**
+    - [x] `getenv : string -> string option` — Get environment variable
+  - [x] **File System**
+    - [x] `remove : string -> (unit, string) result` — Delete file
+    - [x] `rename : string -> string -> (unit, string) result` — Rename file
+    - [x] `tmpname : unit -> string` — Generate temporary filename
+  - [x] **Process Control**
+    - [x] `execute : string -> bool` — Execute shell command, return success
+    - [x] `exit : int -> unit` — Exit program with code
 
 ### Phase 8: Coroutine Module (Optional/Advanced)
 
@@ -325,13 +324,12 @@ lib/stdlib/
     - [ ] `getlocal : int -> int -> (string * 'a) option` — Get local variable
     - [ ] `getupvalue : ('a -> 'b) -> int -> (string * 'c) option` — Get upvalue
 
-### Phase 10: FFI Utilities
+### Phase 10: FFI Utilities (COMPLETE)
 
-- [ ] **Update Option module**
-  - [ ] `of_nullable : 'a -> 'a option` — Convert Lua nil to None
+- [x] **Update Result module**
+  - [x] `try_with : (unit -> 'a) -> ('a, string) result` — Catch errors via pcall
 
-- [ ] **Update Result module**
-  - [ ] `try_with : (unit -> 'a) -> ('a, string) result` — Catch errors via pcall
+Note: `Option.of_nullable` is not needed — `@return(nullable)` handles Lua nil → Option conversion at FFI boundaries.
 
 ### Phase 11: Prelude
 
@@ -347,8 +345,8 @@ lib/stdlib/
 
 - [x] Unit tests for String module (byte operations)
 - [x] Unit tests for Math module
-- [ ] Unit tests for IO module (file operations)
-- [ ] Unit tests for OS module
+- [x] Unit tests for IO module (file operations)
+- [x] Unit tests for OS module
 - [ ] Integration tests with Lua packages (verify zero-cost FFI)
 - [ ] Performance tests vs raw Lua (ensure no overhead)
 
@@ -359,8 +357,8 @@ lib/stdlib/
 | File | Status | Description |
 |------|--------|-------------|
 | `lib/stdlib/fn.lina` | ✅ Complete | Function combinators |
-| `lib/stdlib/option.lina` | ✅ Complete | Optional values (needs `of_nullable`) |
-| `lib/stdlib/result.lina` | ✅ Complete | Error handling (needs `try_with`) |
+| `lib/stdlib/option.lina` | ✅ Complete | Optional values |
+| `lib/stdlib/result.lina` | ✅ Complete | Error handling |
 | `lib/stdlib/list.lina` | ✅ Complete | Immutable lists |
 | `lib/stdlib/array.lina` | ✅ Complete | Mutable arrays (needs `insert/remove_in_place`) |
 | `lib/stdlib/dict.lina` | ✅ Complete | Dictionaries |
@@ -369,8 +367,8 @@ lib/stdlib/
 | `lib/stdlib/ord.lina` | ✅ Complete | Ordering |
 | `lib/stdlib/string.lina` | ✅ Complete | String manipulation (byte-based) |
 | `lib/stdlib/math.lina` | ✅ Complete | Math functions |
-| `lib/stdlib/io.lina` | ⬜ TODO | File I/O |
-| `lib/stdlib/os.lina` | ⬜ TODO | OS facilities |
+| `lib/stdlib/io.lina` | ✅ Complete | File I/O |
+| `lib/stdlib/os.lina` | ✅ Complete | OS facilities |
 | `lib/stdlib/coroutine.lina` | ⬜ Optional | Coroutines |
 | `lib/stdlib/debug.lina` | ⬜ Optional | Debug utilities |
 | `lib/stdlib/prelude.lina` | 🔄 Partial | Re-exports |

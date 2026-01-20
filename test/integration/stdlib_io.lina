@@ -1,0 +1,354 @@
+(** Integration tests for Io stdlib module.
+
+    Tests file I/O operations including reading, writing, and convenience functions. *)
+
+let assert_true msg cond =
+  if cond then print ("OK: " ^ msg)
+  else print ("FAIL: " ^ msg)
+
+let assert_eq msg actual expected =
+  if actual == expected then print ("OK: " ^ msg)
+  else
+    let _ = print ("FAIL: " ^ msg) in
+    let _ = print "Expected:" in
+    let _ = print expected in
+    let _ = print "Got:" in
+    print actual
+
+let assert_eq_int msg actual expected =
+  if actual = expected then print ("OK: " ^ msg)
+  else
+    let _ = print ("FAIL: " ^ msg) in
+    let _ = print "Expected:" in
+    let _ = print expected in
+    let _ = print "Got:" in
+    print actual
+
+(* ===================================================================== *)
+(* SECTION 1: STANDARD STREAMS                                           *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 1: Standard Streams ==="
+
+let test_standard_streams () =
+  let _ = assert_true "stdin exists" (Io.stdin == Io.stdin) in
+  let _ = assert_true "stdout exists" (Io.stdout == Io.stdout) in
+  assert_true "stderr exists" (Io.stderr == Io.stderr)
+
+let _ = test_standard_streams ()
+
+(* ===================================================================== *)
+(* SECTION 2: WRITE AND READ FILE                                        *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 2: Write and Read File ==="
+
+let test_write_read_file () =
+  let test_file = "/tmp/lina_io_test_1.txt" in
+  let test_content = "Hello, Lina IO!" in
+
+  let _ = match Io.write_file test_file test_content with
+    | Ok () -> print "OK: write_file succeeded"
+    | Error msg -> print ("FAIL: write_file: " ^ msg)
+  in
+
+  match Io.read_file test_file with
+    | Ok content -> assert_eq "read_file content matches" content test_content
+    | Error msg -> print ("FAIL: read_file: " ^ msg)
+
+let _ = test_write_read_file ()
+
+(* ===================================================================== *)
+(* SECTION 3: APPEND FILE                                                *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 3: Append File ==="
+
+let test_append_file () =
+  let test_file = "/tmp/lina_io_test_2.txt" in
+  let initial_content = "Line 1" in
+  let append_content = "\nLine 2" in
+
+  let _ = match Io.write_file test_file initial_content with
+    | Ok () -> ()
+    | Error msg -> print ("FAIL: initial write: " ^ msg)
+  in
+
+  let _ = match Io.append_file test_file append_content with
+    | Ok () -> print "OK: append_file succeeded"
+    | Error msg -> print ("FAIL: append_file: " ^ msg)
+  in
+
+  match Io.read_file test_file with
+    | Ok content -> assert_eq "append result" content (initial_content ^ append_content)
+    | Error msg -> print ("FAIL: read after append: " ^ msg)
+
+let _ = test_append_file ()
+
+(* ===================================================================== *)
+(* SECTION 4: MANUAL FILE OPERATIONS                                     *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 4: Manual File Operations ==="
+
+let test_manual_write () =
+  let test_file = "/tmp/lina_io_test_3.txt" in
+
+  match Io.open_ test_file "w" with
+  | None -> print "FAIL: could not open for writing"
+  | Some handle ->
+      let _ = Io.write handle "First line\n" in
+      let _ = Io.write_line handle "Second line" in
+      let _ = Io.flush handle in
+      let _ = Io.close handle in
+      print "OK: manual write completed"
+
+let _ = test_manual_write ()
+
+let test_manual_read () =
+  let test_file = "/tmp/lina_io_test_3.txt" in
+
+  match Io.open_ test_file "r" with
+  | None -> print "FAIL: could not open for reading"
+  | Some handle ->
+      let content = Io.read_all handle in
+      let _ = Io.close handle in
+      assert_eq "manual read content" content "First line\nSecond line\n"
+
+let _ = test_manual_read ()
+
+(* ===================================================================== *)
+(* SECTION 5: READ LINE                                                  *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 5: Read Line ==="
+
+let test_read_line () =
+  let test_file = "/tmp/lina_io_test_4.txt" in
+
+  let _ = match Io.write_file test_file "line1\nline2\nline3" with
+    | Ok () -> ()
+    | Error msg -> print ("FAIL: setup: " ^ msg)
+  in
+
+  match Io.open_ test_file "r" with
+  | None -> print "FAIL: could not open for reading"
+  | Some handle ->
+      let _ = match Io.read_line handle with
+        | Some line -> assert_eq "first line" line "line1"
+        | None -> print "FAIL: no first line"
+      in
+      let _ = match Io.read_line handle with
+        | Some line -> assert_eq "second line" line "line2"
+        | None -> print "FAIL: no second line"
+      in
+      let _ = match Io.read_line handle with
+        | Some line -> assert_eq "third line" line "line3"
+        | None -> print "FAIL: no third line"
+      in
+      let _ = match Io.read_line handle with
+        | Some _ -> print "FAIL: should be end of file"
+        | None -> print "OK: end of file detected"
+      in
+      Io.close handle
+
+let _ = test_read_line ()
+
+(* ===================================================================== *)
+(* SECTION 6: WITH_FILE                                                  *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 6: with_file ==="
+
+let test_with_file () =
+  let test_file = "/tmp/lina_io_test_5.txt" in
+  let test_content = "test content for with_file" in
+
+  let _ = match Io.write_file test_file test_content with
+    | Ok () -> ()
+    | Error msg -> print ("FAIL: setup: " ^ msg)
+  in
+
+  match Io.with_file test_file "r" (fun handle -> String.length (Io.read_all handle)) with
+  | Ok len -> assert_eq_int "with_file returns correct length" len (String.length test_content)
+  | Error msg -> print ("FAIL: with_file: " ^ msg)
+
+let _ = test_with_file ()
+
+(* ===================================================================== *)
+(* SECTION 7: ERROR CASES                                                *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 7: Error Cases ==="
+
+let test_open_nonexistent () =
+  match Io.open_ "/nonexistent/path/file.txt" "r" with
+  | None -> print "OK: open nonexistent returns None"
+  | Some _ -> print "FAIL: should not open nonexistent file"
+
+let _ = test_open_nonexistent ()
+
+let test_read_file_nonexistent () =
+  match Io.read_file "/nonexistent/path/file.txt" with
+  | Error _ -> print "OK: read_file nonexistent returns Error"
+  | Ok _ -> print "FAIL: should not read nonexistent file"
+
+let _ = test_read_file_nonexistent ()
+
+let test_write_file_bad_path () =
+  match Io.write_file "/nonexistent/path/file.txt" "content" with
+  | Error _ -> print "OK: write_file bad path returns Error"
+  | Ok _ -> print "FAIL: should not write to bad path"
+
+let _ = test_write_file_bad_path ()
+
+(* ===================================================================== *)
+(* SECTION 8: MULTILINE CONTENT                                          *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 8: Multiline Content ==="
+
+let test_multiline () =
+  let test_file = "/tmp/lina_io_test_6.txt" in
+  let multiline = "Line 1\nLine 2\nLine 3\n\nLine 5" in
+
+  let _ = match Io.write_file test_file multiline with
+    | Ok () -> print "OK: wrote multiline content"
+    | Error msg -> print ("FAIL: " ^ msg)
+  in
+
+  match Io.read_file test_file with
+  | Ok content ->
+      if content == multiline then print "OK: multiline content preserved"
+      else
+        let _ = print "FAIL: multiline content mismatch" in
+        let _ = print "Expected:" in
+        let _ = print multiline in
+        let _ = print "Got:" in
+        print content
+  | Error msg -> print ("FAIL: " ^ msg)
+
+let _ = test_multiline ()
+
+(* ===================================================================== *)
+(* SECTION 9: EMPTY FILE                                                 *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 9: Empty File ==="
+
+let test_empty_file () =
+  let test_file = "/tmp/lina_io_test_7.txt" in
+
+  let _ = match Io.write_file test_file "" with
+    | Ok () -> print "OK: wrote empty file"
+    | Error msg -> print ("FAIL: " ^ msg)
+  in
+
+  match Io.read_file test_file with
+  | Ok content -> assert_eq "empty file content" content ""
+  | Error msg -> print ("FAIL: " ^ msg)
+
+let _ = test_empty_file ()
+
+(* ===================================================================== *)
+(* SECTION 10: SPECIAL CHARACTERS                                        *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 10: Special Characters ==="
+
+let test_special_chars () =
+  let test_file = "/tmp/lina_io_test_8.txt" in
+  let special = "Tab:\tQuote:\"Backslash:\\Newline:\n" in
+
+  let _ = match Io.write_file test_file special with
+    | Ok () -> ()
+    | Error msg -> print ("FAIL: write: " ^ msg)
+  in
+
+  match Io.read_file test_file with
+  | Ok content ->
+      if content == special then print "OK: special characters preserved"
+      else print "FAIL: special characters not preserved"
+  | Error msg -> print ("FAIL: read: " ^ msg)
+
+let _ = test_special_chars ()
+
+(* ===================================================================== *)
+(* SECTION 11: READ BYTES                                                *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 11: Read Bytes ==="
+
+let test_read_bytes () =
+  let test_file = "/tmp/lina_io_test_9.txt" in
+  let content = "Hello, World!" in
+
+  let _ = match Io.write_file test_file content with
+    | Ok () -> ()
+    | Error msg -> print ("FAIL: setup: " ^ msg)
+  in
+
+  match Io.open_ test_file "r" with
+  | None -> print "FAIL: could not open for reading"
+  | Some handle ->
+      let _ = match Io.read_bytes handle 5 with
+        | Some bytes -> assert_eq "read first 5 bytes" bytes "Hello"
+        | None -> print "FAIL: read_bytes returned None"
+      in
+      let _ = match Io.read_bytes handle 2 with
+        | Some bytes -> assert_eq "read next 2 bytes" bytes ", "
+        | None -> print "FAIL: second read_bytes returned None"
+      in
+      Io.close handle
+
+let _ = test_read_bytes ()
+
+(* ===================================================================== *)
+(* SECTION 12: SEEK AND TELL                                             *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 12: Seek and Tell ==="
+
+let test_seek_tell () =
+  let test_file = "/tmp/lina_io_test_10.txt" in
+  let content = "0123456789" in
+
+  let _ = match Io.write_file test_file content with
+    | Ok () -> ()
+    | Error msg -> print ("FAIL: setup: " ^ msg)
+  in
+
+  match Io.open_ test_file "r" with
+  | None -> print "FAIL: could not open for reading"
+  | Some handle ->
+      let initial_pos = Io.tell handle in
+      let _ = assert_eq_int "initial position is 0" initial_pos 0 in
+
+      let _ = match Io.seek handle "set" 5 with
+        | Some pos -> assert_eq_int "seek to 5" pos 5
+        | None -> print "FAIL: seek returned None"
+      in
+
+      let _ = match Io.read_bytes handle 3 with
+        | Some bytes -> assert_eq "read after seek" bytes "567"
+        | None -> print "FAIL: read after seek returned None"
+      in
+
+      let pos_after_read = Io.tell handle in
+      let _ = assert_eq_int "position after read is 8" pos_after_read 8 in
+
+      let _ = match Io.seek handle "cur" (0 - 3) with
+        | Some pos -> assert_eq_int "seek backward by 3" pos 5
+        | None -> print "FAIL: seek cur returned None"
+      in
+
+      let _ = match Io.seek handle "end" 0 with
+        | Some pos -> assert_eq_int "seek to end" pos 10
+        | None -> print "FAIL: seek end returned None"
+      in
+
+      Io.close handle
+
+let _ = test_seek_tell ()
+
+let _ = print "=== All IO tests complete ==="

@@ -199,6 +199,12 @@ let get_error_or r default = match r with
   | Ok _ -> default
   | Error e -> e
 
+(** [get_exn r] returns the value if [r] is [Ok v], raises error if [Error].
+    Use only when you are certain the result is Ok. *)
+let get_exn r = match r with
+  | Ok x -> x
+  | Error _ -> error "Result.get_exn: called on Error"
+
 (** {1 Transforming} *)
 
 let map f r = match r with
@@ -265,6 +271,33 @@ let equal ok_eq err_eq r1 r2 = match (r1, r2) with
   | (Ok x1, Ok x2) -> ok_eq x1 x2
   | (Error e1, Error e2) -> err_eq e1 e2
   | _ -> false
+
+(** {1 Sequencing} *)
+
+(** [sequence results] converts a list of results into a result of list.
+    Returns [Ok] with all values if all are [Ok], or first [Error] encountered. *)
+let sequence results =
+  let rec go acc lst = match lst with
+    | [] -> Ok (List.reverse acc)
+    | r :: rest -> match r with
+      | Ok x -> go (x :: acc) rest
+      | Error e -> Error e
+  in
+  go [] results
+
+(** {1 Protected Calls} *)
+
+(** [try_with f] calls [f ()] wrapped in Lua's pcall.
+    Returns [Ok result] if the function succeeds,
+    [Error message] if it throws an exception.
+
+    Example:
+    {[
+      let safe_parse s = Result.try_with (fun () -> parse s)
+      (* Returns Ok parsed_value or Error "error message" *)
+    ]} *)
+@val @return(pcall)
+external try_with : (unit -> 'a) -> ('a, string) result = "pcall"
 
 (** {1 Binding Operators} *)
 
@@ -1821,20 +1854,282 @@ let random_int n = random_max n
 let random_range m n = random_range_raw m n
 |}
 
+let io_source = {|
+(** File I/O operations.
+
+    Provides bindings to Lua's io library for file operations.
+    File handles are opaque types managed by the runtime. *)
+
+(** File handle (opaque type). *)
+type file
+
+(* {1 FFI Declarations - Standard Streams} *)
+
+@val @scope("io")
+external stdin : file = "stdin"
+
+@val @scope("io")
+external stdout : file = "stdout"
+
+@val @scope("io")
+external stderr : file = "stderr"
+
+(* {1 FFI Declarations - File Operations} *)
+
+@val @scope("io") @return(nullable)
+external open_raw : string -> string -> file option = "open"
+
+@send
+external close : file -> unit = "close"
+
+@send
+external flush : file -> unit = "flush"
+
+(* {1 FFI Declarations - Reading} *)
+
+@send @return(nullable)
+external read_line_raw : file -> string option = "read"
+
+@send
+external read_all_raw : file -> string -> string = "read"
+
+@send @return(nullable)
+external read_bytes_raw : file -> int -> string option = "read"
+
+(* {1 FFI Declarations - Writing} *)
+
+@send
+external write_raw : file -> string -> unit = "write"
+
+(* {1 FFI Declarations - Positioning} *)
+
+@send @return(nullable)
+external seek_raw : file -> string -> int -> int option = "seek"
+
+@send
+external seek_cur : file -> int = "seek"
+
+(* {1 File Operations} *)
+
+(** Open a file with the given mode.
+    Modes: "r" (read), "w" (write), "a" (append), "r+", "w+", "a+"
+    Returns [None] if the file cannot be opened. *)
+let open_ path mode = open_raw path mode
+
+(** Open a file or raise an error if it cannot be opened. *)
+let open_exn path mode =
+  match open_raw path mode with
+  | Some handle -> handle
+  | None -> error ("Io.open_exn: cannot open file: " ^ path)
+
+(* {1 Reading} *)
+
+(** Read a single line from the file, or [None] if at end of file.
+    The newline character is not included. *)
+let read_line handle = read_line_raw handle
+
+(** Read the entire contents of the file as a string. *)
+let read_all handle = read_all_raw handle "*a"
+
+(** Read up to [count] bytes from the file.
+    Returns [None] if at end of file. *)
+let read_bytes handle count = read_bytes_raw handle count
+
+(* {1 Writing} *)
+
+(** Write a string to the file. *)
+let write handle content = write_raw handle content
+
+(** Write a string followed by a newline to the file. *)
+let write_line handle content =
+  let _ = write_raw handle content in
+  write_raw handle "\n"
+
+(* {1 Positioning} *)
+
+(** Set the file position.
+    [whence] can be: "set" (from beginning), "cur" (from current), "end" (from end)
+    Returns the new position or [None] on error. *)
+let seek handle whence offset = seek_raw handle whence offset
+
+(** Return the current file position. *)
+let tell handle = seek_cur handle
+
+(* {1 Convenience Functions} *)
+
+(** Read the entire contents of a file by path.
+    Opens, reads, and closes the file automatically. *)
+let read_file path =
+  match open_raw path "r" with
+  | None -> Error ("Cannot open file: " ^ path)
+  | Some handle ->
+      let content = read_all_raw handle "*a" in
+      let _ = close handle in
+      Ok content
+
+(** Write a string to a file by path.
+    Creates the file if it doesn't exist, overwrites if it does. *)
+let write_file path content =
+  match open_raw path "w" with
+  | None -> Error ("Cannot open file for writing: " ^ path)
+  | Some handle ->
+      let _ = write_raw handle content in
+      let _ = close handle in
+      Ok ()
+
+(** Append a string to a file by path.
+    Creates the file if it doesn't exist. *)
+let append_file path content =
+  match open_raw path "a" with
+  | None -> Error ("Cannot open file for appending: " ^ path)
+  | Some handle ->
+      let _ = write_raw handle content in
+      let _ = close handle in
+      Ok ()
+
+(** Open a file, apply an action, and close it automatically.
+    Returns [Ok result] if successful, [Error msg] if the file couldn't be opened. *)
+let with_file path mode action =
+  match open_raw path mode with
+  | None -> Error ("Cannot open file: " ^ path)
+  | Some handle ->
+      let result = action handle in
+      let _ = close handle in
+      Ok result
+|}
+
+let os_source = {|
+(** Operating system facilities.
+
+    Provides bindings to Lua's os library for date/time,
+    environment, filesystem, and process control.
+    Targets LuaJIT / Lua 5.1 semantics. *)
+
+(* {1 FFI Declarations - Date and Time} *)
+
+@val @scope("os")
+external time_raw : unit -> int = "time"
+
+@val @scope("os")
+external clock : unit -> float = "clock"
+
+@val @scope("os")
+external difftime : int -> int -> int = "difftime"
+
+@val @scope("os")
+external date_raw : string -> string = "date"
+
+@val @scope("os")
+external date_of_raw : string -> int -> string = "date"
+
+(* {1 FFI Declarations - Environment} *)
+
+@val @scope("os") @return(nullable)
+external getenv_raw : string -> string option = "getenv"
+
+(* {1 FFI Declarations - File System}
+
+   Note: os.remove and os.rename return true on success, nil on failure.
+   The error message is not captured due to FFI limitations. *)
+
+@val @scope("os") @return(nullable)
+external remove_raw : string -> bool option = "remove"
+
+@val @scope("os") @return(nullable)
+external rename_raw : string -> string -> bool option = "rename"
+
+@val @scope("os")
+external tmpname : unit -> string = "tmpname"
+
+(* {1 FFI Declarations - Process Control}
+
+   LuaJIT: os.execute returns (true, "exit", code) on success,
+   or (nil, "exit"|"signal", code) on failure.
+   We capture only the first return value (bool or nil). *)
+
+@val @scope("os") @return(nullable)
+external execute_raw : string -> bool option = "execute"
+
+@val @scope("os")
+external exit_raw : int -> unit = "exit"
+
+(* {1 Date and Time Functions} *)
+
+(** Return the current Unix timestamp (seconds since epoch). *)
+let time () = time_raw ()
+
+(** Return the difference between two timestamps in seconds.
+    [difftime t2 t1] returns [t2 - t1]. *)
+(* difftime is already an FFI binding *)
+
+(** Format the current time using a format string.
+    Format specifiers follow Lua/C conventions:
+    - %Y: 4-digit year, %m: month (01-12), %d: day (01-31)
+    - %H: hour (00-23), %M: minute (00-59), %S: second (00-59)
+    - %a: abbreviated weekday, %A: full weekday
+    - %b: abbreviated month, %B: full month
+    - %c: date and time, %x: date, %X: time
+    Note: The "*t" table format is NOT supported. *)
+let date format = date_raw format
+
+(** Format a given timestamp using a format string. *)
+let date_of format timestamp = date_of_raw format timestamp
+
+(* {1 Environment Functions} *)
+
+(** Get the value of an environment variable, or None if not set. *)
+let getenv name = getenv_raw name
+
+(* {1 File System Functions} *)
+
+(** Delete a file.
+    Returns Ok () on success, Error message on failure.
+    Note: Specific error message not available due to FFI limitation. *)
+let remove path =
+  match remove_raw path with
+  | Some _ -> Ok ()
+  | None -> Error ("Cannot remove file: " ^ path)
+
+(** Rename or move a file.
+    Returns Ok () on success, Error message on failure.
+    Note: Specific error message not available due to FFI limitation. *)
+let rename old_path new_path =
+  match rename_raw old_path new_path with
+  | Some _ -> Ok ()
+  | None -> Error ("Cannot rename: " ^ old_path ^ " to " ^ new_path)
+
+(* {1 Process Control Functions} *)
+
+(** Execute a shell command.
+    Returns [true] if the command succeeded (exit code 0),
+    [false] if it failed or could not be executed. *)
+let execute command =
+  match execute_raw command with
+  | Some true -> true
+  | _ -> false
+
+(** Exit the program with the given exit code.
+    This function never returns. Code 0 indicates success. *)
+let exit code = exit_raw code
+|}
+
 (** All stdlib modules in load order.
-    Order matters if there are dependencies between modules. *)
+    Order matters: modules are loaded sequentially and can only depend on
+    modules that appear earlier in this list. *)
 let stdlib_modules = [
   { name = "Fn"; source = fn_source };
   { name = "Ord"; source = ord_source };
+  { name = "List"; source = list_source };     (* List before Result - Result.sequence uses List.reverse *)
   { name = "Result"; source = result_source };
   { name = "Option"; source = option_source };
-  { name = "List"; source = list_source };
   { name = "Array"; source = array_source };
   { name = "Tuple"; source = tuple_source };
   { name = "Dict"; source = dict_source };
   { name = "Set"; source = set_source };
   { name = "String"; source = string_source };
   { name = "Math"; source = math_source };
+  { name = "Io"; source = io_source };
+  { name = "Os"; source = os_source };
 ]
 
 (** Use the existing signature extraction from Structure_infer *)

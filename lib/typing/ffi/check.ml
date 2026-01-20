@@ -98,14 +98,17 @@ let parse_attribute (attr : Parsing_ffi.Attributes.attribute) : (Types.ffi_attri
   | "return", Some (PayloadString "nullable")
   | "return", Some (PayloadIdent "nullable") ->
     Ok (Some Types.FFIReturnNullable)
+  | "return", Some (PayloadString "pcall")
+  | "return", Some (PayloadIdent "pcall") ->
+    Ok (Some Types.FFIReturnPcall)
   | "return", Some (PayloadString s) ->
-    Error (InvalidPayload ("return", Printf.sprintf "\"nullable\", got \"%s\"" s))
+    Error (InvalidPayload ("return", Printf.sprintf "\"nullable\" or \"pcall\", got \"%s\"" s))
   | "return", Some (PayloadIdent s) ->
-    Error (InvalidPayload ("return", Printf.sprintf "nullable, got %s" s))
+    Error (InvalidPayload ("return", Printf.sprintf "nullable or pcall, got %s" s))
   | "return", None ->
-    Error (InvalidPayload ("return", "argument: @return(nullable)"))
+    Error (InvalidPayload ("return", "argument: @return(nullable) or @return(pcall)"))
   | "return", Some (PayloadStringList _) ->
-    Error (InvalidPayload ("return", "single identifier \"nullable\""))
+    Error (InvalidPayload ("return", "single identifier \"nullable\" or \"pcall\""))
 
   | "as", Some (PayloadString s) ->
     Ok (Some (Types.FFIAs s))
@@ -144,6 +147,7 @@ let check_duplicates (attrs : Types.ffi_attribute list) : (unit, ffi_error) resu
     | Types.FFINew -> "new"
     | Types.FFIVariadic -> "variadic"
     | Types.FFIReturnNullable -> "return"
+    | Types.FFIReturnPcall -> "return"
     | Types.FFIAs _ -> "as"
   in
   let seen = Hashtbl.create 16 in
@@ -274,6 +278,10 @@ let get_lua_name (attrs : Types.ffi_attribute list) (primitive : string) : strin
 let is_return_nullable (attrs : Types.ffi_attribute list) : bool =
   List.exists (function Types.FFIReturnNullable -> true | _ -> false) attrs
 
+(** Check if call should be wrapped in pcall and return result. *)
+let is_return_pcall (attrs : Types.ffi_attribute list) : bool =
+  List.exists (function Types.FFIReturnPcall -> true | _ -> false) attrs
+
 (** Check if function is variadic. *)
 let is_variadic (attrs : Types.ffi_attribute list) : bool =
   List.exists (function Types.FFIVariadic -> true | _ -> false) attrs
@@ -320,6 +328,7 @@ let build_ffi_spec
               ffi_lua_name = get_lua_name ffi_attrs primitive;
               ffi_is_variadic = variadic;
               ffi_return_nullable = is_return_nullable ffi_attrs;
+              ffi_return_pcall = is_return_pcall ffi_attrs;
               ffi_arity = arity;
               ffi_unit_params = unit_params;
               ffi_location = location;

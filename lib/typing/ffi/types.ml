@@ -29,6 +29,8 @@ type ffi_attribute =
     (** [@variadic] - Last argument is spread as varargs *)
   | FFIReturnNullable
     (** [@return(nullable)] - Lua nil maps to None, value to Some *)
+  | FFIReturnPcall
+    (** [@return(pcall)] - Wrap call in pcall, return Result *)
   | FFIAs of string
     (** [@as("name")] - Override the Lua name for this binding *)
 [@@deriving show, eq]
@@ -63,6 +65,8 @@ type ffi_spec = {
     (** Whether the last argument should be spread *)
   ffi_return_nullable : bool;
     (** Whether to wrap return value in option *)
+  ffi_return_pcall : bool;
+    (** Whether to wrap call in pcall and return result *)
   ffi_arity : int;
     (** Number of arguments (including receiver for methods) *)
   ffi_unit_params : bool list;
@@ -79,6 +83,7 @@ let make_global_spec ~lua_name ~arity ~unit_params ~location =
     ffi_lua_name = lua_name;
     ffi_is_variadic = false;
     ffi_return_nullable = false;
+    ffi_return_pcall = false;
     ffi_arity = arity;
     ffi_unit_params = unit_params;
     ffi_location = location;

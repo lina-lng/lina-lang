@@ -582,7 +582,9 @@ let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list
     ExpressionCall (func, wrapped_args)
 
   | FFIKindGlobal scope_path ->
-    (* Global with optional scope: name(args) or scope.name(args) - with variadic support *)
+    (* Global with optional scope: name(args) or scope.name(args) - with variadic support
+       Special case: if arity = 0, return just the value (for constants like io.stdin)
+       Functions with unit param have arity >= 1 even if args is empty *)
     let wrapped_args = wrap_variadic_args args is_variadic in
     let func = match scope_path with
       | [] -> ExpressionVariable lua_name
@@ -591,7 +593,8 @@ let generate_ffi_call (spec : Typing_ffi.Types.ffi_spec) (args : expression list
         let scoped = List.fold_left (fun acc name -> ExpressionField (acc, name)) base (List.tl path) in
         ExpressionField (scoped, lua_name)
     in
-    ExpressionCall (func, wrapped_args)
+    if spec.ffi_arity = 0 then func
+    else ExpressionCall (func, wrapped_args)
 
   | FFIKindMethod ->
     (* Method call: receiver:name(rest_args) - with variadic support for rest_args *)
@@ -813,6 +816,49 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
         Some [StatementReturn [some_expr]]
       ) in
       (make_iife [result_decl; if_stmt], ctx)
+    else if spec.Typing_ffi.Types.ffi_return_pcall then
+      (* Generate:
+         (function()
+           local _ok, _result = pcall(function() return ffi_call(args) end)
+           if _ok then
+             return {_tag = 0, _0 = _result}  -- Ok
+           else
+             return {_tag = 1, _0 = _result}  -- Error
+           end
+         end)()
+
+         Special case: when primitive is "pcall", don't double-wrap.
+         Instead, pass the argument directly to pcall. *)
+      let ok_name = "_ok" in
+      let result_name = Codegen_constants.ffi_result_name in
+      let ok_var = ExpressionVariable ok_name in
+      let result_var = ExpressionVariable result_name in
+      (* When primitive is "pcall", pass args directly to pcall, don't wrap *)
+      let pcall_call =
+        if spec.Typing_ffi.Types.ffi_lua_name = "pcall" then
+          (* pcall(arg) - pass the function argument directly *)
+          ExpressionCall (ExpressionVariable "pcall", translated_args)
+        else
+          (* pcall(function() return ffi_call(args) end) *)
+          let inner_fn = ExpressionFunction ([], [StatementReturn [call_expr]]) in
+          ExpressionCall (ExpressionVariable "pcall", [inner_fn])
+      in
+      (* local _ok, _result = pcall(...) *)
+      let pcall_decl = StatementLocal ([ok_name; result_name], [pcall_call]) in
+      (* Ok = tag 0, Error = tag 1 *)
+      let ok_expr = ExpressionTable [
+        FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 0.0);
+        FieldNamed (Codegen_constants.variant_arg_field, result_var)
+      ] in
+      let error_expr = ExpressionTable [
+        FieldNamed (Codegen_constants.variant_tag_field, ExpressionNumber 1.0);
+        FieldNamed (Codegen_constants.variant_arg_field, result_var)
+      ] in
+      let if_stmt = StatementIf (
+        [(ok_var, [StatementReturn [ok_expr]])],
+        Some [StatementReturn [error_expr]]
+      ) in
+      (make_iife [pcall_decl; if_stmt], ctx)
     else
       (call_expr, ctx)
 

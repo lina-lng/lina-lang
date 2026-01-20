@@ -118,6 +118,20 @@ let sequence results =
   in
   go [] results
 
+(** {1 Protected Calls} *)
+
+(** [try_with f] calls [f ()] wrapped in Lua's pcall.
+    Returns [Ok result] if the function succeeds,
+    [Error message] if it throws an exception.
+
+    Example:
+    {[
+      let safe_parse s = Result.try_with (fun () -> parse s)
+      (* Returns Ok parsed_value or Error "error message" *)
+    ]} *)
+@val @return(pcall)
+external try_with : (unit -> 'a) -> ('a, string) result = "pcall"
+
 (** {1 Binding Operators} *)
 
 let ( let* ) r f = flat_map f r

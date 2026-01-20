@@ -1,0 +1,173 @@
+(** Integration tests for Os stdlib module.
+
+    Tests date/time, environment, filesystem, and process control functions. *)
+
+let assert_true msg cond =
+  if cond then print ("OK: " ^ msg)
+  else print ("FAIL: " ^ msg)
+
+let assert_eq msg actual expected =
+  if actual == expected then print ("OK: " ^ msg)
+  else
+    let _ = print ("FAIL: " ^ msg) in
+    let _ = print "Expected:" in
+    let _ = print expected in
+    let _ = print "Got:" in
+    print actual
+
+let assert_eq_int msg actual expected =
+  if actual = expected then print ("OK: " ^ msg)
+  else
+    let _ = print ("FAIL: " ^ msg) in
+    let _ = print "Expected:" in
+    let _ = print expected in
+    let _ = print "Got:" in
+    print actual
+
+(* ===================================================================== *)
+(* SECTION 1: DATE AND TIME                                               *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 1: Date and Time ==="
+
+let test_time () =
+  let t = Os.time () in
+  assert_true "time returns positive integer" (t > 0)
+
+let _ = test_time ()
+
+let test_clock () =
+  let c = Os.clock () in
+  assert_true "clock returns non-negative float" (c >= 0.0)
+
+let _ = test_clock ()
+
+let test_difftime () =
+  let t1 = Os.time () in
+  let t2 = t1 + 100 in
+  let diff = Os.difftime t2 t1 in
+  assert_eq_int "difftime calculates correctly" diff 100
+
+let _ = test_difftime ()
+
+let test_date () =
+  let formatted = Os.date "%Y" in
+  let len = String.length formatted in
+  assert_true "date %Y returns 4-character year" (len = 4)
+
+let _ = test_date ()
+
+let test_date_of () =
+  (* Unix epoch timestamp 0 = Jan 1, 1970 00:00:00 UTC *)
+  let timestamp = 0 in
+  let formatted = Os.date_of "!%Y" timestamp in
+  assert_eq "date_of epoch year is 1970" formatted "1970"
+
+let _ = test_date_of ()
+
+(* ===================================================================== *)
+(* SECTION 2: ENVIRONMENT                                                 *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 2: Environment ==="
+
+let test_getenv_exists () =
+  match Os.getenv "PATH" with
+  | Some path -> assert_true "getenv PATH returns value" (String.length path > 0)
+  | None -> print "FAIL: PATH should exist"
+
+let _ = test_getenv_exists ()
+
+let test_getenv_not_exists () =
+  match Os.getenv "LINA_TEST_NONEXISTENT_VAR_12345" with
+  | Some _ -> print "FAIL: nonexistent var should return None"
+  | None -> print "OK: getenv returns None for nonexistent var"
+
+let _ = test_getenv_not_exists ()
+
+(* ===================================================================== *)
+(* SECTION 3: FILE SYSTEM                                                 *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 3: File System ==="
+
+let test_tmpname () =
+  let name = Os.tmpname () in
+  assert_true "tmpname returns non-empty string" (String.length name > 0)
+
+let _ = test_tmpname ()
+
+let test_tmpname_unique () =
+  let name1 = Os.tmpname () in
+  let name2 = Os.tmpname () in
+  assert_true "tmpnames are different" (not (name1 == name2))
+
+let _ = test_tmpname_unique ()
+
+let test_remove_and_rename () =
+  let test_file = "/tmp/lina_os_test_1.txt" in
+  let renamed_file = "/tmp/lina_os_test_1_renamed.txt" in
+
+  (* Cleanup any leftover files from previous runs *)
+  let _ = Os.remove test_file in
+  let _ = Os.remove renamed_file in
+
+  (* Create a file using Io *)
+  let _ = match Io.write_file test_file "test content" with
+    | Ok () -> print "OK: created test file"
+    | Error msg -> print ("FAIL: create file: " ^ msg)
+  in
+
+  (* Rename the file *)
+  let _ = match Os.rename test_file renamed_file with
+    | Ok () -> print "OK: rename succeeded"
+    | Error msg -> print ("FAIL: rename: " ^ msg)
+  in
+
+  (* Verify renamed file exists *)
+  let _ = match Io.read_file renamed_file with
+    | Ok content -> assert_eq "renamed file has correct content" content "test content"
+    | Error msg -> print ("FAIL: read renamed: " ^ msg)
+  in
+
+  (* Remove the renamed file *)
+  match Os.remove renamed_file with
+  | Ok () -> print "OK: remove succeeded"
+  | Error msg -> print ("FAIL: remove: " ^ msg)
+
+let _ = test_remove_and_rename ()
+
+let test_remove_nonexistent () =
+  match Os.remove "/tmp/lina_nonexistent_file_12345.txt" with
+  | Ok () -> print "FAIL: removing nonexistent should fail"
+  | Error _ -> print "OK: remove returns Error for nonexistent file"
+
+let _ = test_remove_nonexistent ()
+
+(* ===================================================================== *)
+(* SECTION 4: PROCESS CONTROL                                             *)
+(* ===================================================================== *)
+
+let _ = print "=== Section 4: Process Control ==="
+
+let test_execute_success () =
+  let success = Os.execute "true" in
+  assert_true "execute 'true' returns true" success
+
+let _ = test_execute_success ()
+
+let test_execute_failure () =
+  let success = Os.execute "false" in
+  assert_true "execute 'false' returns false" (not success)
+
+let _ = test_execute_failure ()
+
+let test_execute_with_output () =
+  let success = Os.execute "echo hello > /dev/null" in
+  assert_true "execute echo succeeds" success
+
+let _ = test_execute_with_output ()
+
+(* Note: Os.exit is not tested as it terminates the program *)
+
+let _ = print "=== All Os tests completed ==="

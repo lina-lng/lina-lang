@@ -100,7 +100,7 @@ let build_function loc params body =
 %nonassoc ELSE
 %left INFIXOP0                              (* |> && || - lowest custom operator precedence *)
 %left EQUAL EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
-%right INFIXOP1 COLONCOLON AT               (* @@ @ :: - right-associative *)
+%right INFIXOP1 COLONCOLON                  (* @@ :: - right-associative; AT removed to avoid conflict with FFI attributes *)
 %left INFIXOP2 PLUS MINUS MINUSDOT          (* ++ +. + - -. - additive *)
 %left INFIXOP3 STAR SLASH MOD               (* *. // * / mod - multiplicative *)
 %right INFIXOP4 CARET                       (* ** ^ - highest custom operator precedence *)
@@ -528,7 +528,7 @@ simple_expression:
   | SLASH { "/" }
   | MOD { "mod" }
   | CARET { "^" }
-  | AT { "@" }
+  (* AT removed - use @@ instead; bare @ conflicts with FFI attributes *)
   | EQUAL { "=" }
   | EQUAL_EQUAL { "==" }
   | NOT_EQUAL { "<>" }
@@ -544,6 +544,7 @@ simple_expression:
   | op = INFIXOP4 { op }
 
 (* Operator names for definitions: let ( |> ) x f = f x *)
+(* Note: AT (@) removed from operators - use @@ instead; bare @ is reserved for FFI attributes *)
 %inline operator_name:
   | PLUS { "+" }
   | MINUS { "-" }
@@ -552,7 +553,6 @@ simple_expression:
   | SLASH { "/" }
   | MOD { "mod" }
   | CARET { "^" }
-  | AT { "@" }
   | LESS { "<" }
   | GREATER { ">" }
   | LESS_EQUAL { "<=" }

@@ -12,17 +12,22 @@ let test_options = Driver.Pipeline.{
   warning_config = Common.Warning_config.disable_all Common.Warning_config.default;
 }
 
+(** Compile source and return Lua code (without stdlib prelude) or error. *)
 let compile source =
   Typing.Types.reset_type_variable_id ();
   match Driver.Pipeline.compile_string test_options "<test>" source with
-  | Ok lua_code -> lua_code
+  | Ok lua_code ->
+    let prelude_len = String.length (Driver.Stdlib_loader.stdlib_prelude ()) in
+    String.sub lua_code prelude_len (String.length lua_code - prelude_len)
   | Error msg -> "ERROR: " ^ msg
 
+(** Compile and run with luajit, returning the output.
+    Uses full compilation (with stdlib) since the code needs to actually run. *)
 let compile_and_run source =
-  let lua_code = compile source in
-  if String.length lua_code >= 6 && String.sub lua_code 0 6 = "ERROR:" then
-    lua_code
-  else
+  Typing.Types.reset_type_variable_id ();
+  match Driver.Pipeline.compile_string test_options "<test>" source with
+  | Error msg -> "ERROR: " ^ msg
+  | Ok lua_code ->
     let temp_file = Filename.temp_file "lina_test" ".lua" in
     let oc = open_out temp_file in
     output_string oc lua_code;

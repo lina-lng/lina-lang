@@ -1,0 +1,35 @@
+(* Test Result.try_with - wraps function calls in pcall *)
+
+(* Test successful execution *)
+let test_success () =
+  let result = Result.try_with (fun () -> 42) in
+  match result with
+  | Ok n -> print n
+  | Error _ -> print "unexpected error"
+
+(* Test catching errors *)
+let test_error () =
+  let result = Result.try_with (fun () -> error "test error") in
+  match result with
+  | Ok _ -> print "unexpected success"
+  | Error msg -> print msg
+
+(* Test with computation *)
+let safe_divide a b =
+  Result.try_with (fun () ->
+    if b = 0 then error "division by zero"
+    else a / b
+  )
+
+let test_divide () =
+  let _ = match safe_divide 10 2 with
+    | Ok n -> print n
+    | Error _ -> print "error"
+  in
+  match safe_divide 10 0 with
+  | Ok _ -> print "error"
+  | Error msg -> print msg
+
+let _ = test_success ()
+let _ = test_error ()
+let _ = test_divide ()

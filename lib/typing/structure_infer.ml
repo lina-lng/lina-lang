@@ -38,6 +38,26 @@ let rec wrap_return_in_option ty =
     (* Wrap the final return type in option *)
     Types.TypeConstructor (Types.PathLocal "option", [ty])
 
+(** Check if a type is already a result type. *)
+let is_result_type ty =
+  match ty with
+  | Types.TypeConstructor (Types.PathLocal "result", [_; _]) -> true
+  | _ -> false
+
+(** Wrap the return type of a function in result for @return(pcall).
+    For example: (unit -> int) -> int becomes (unit -> int) -> (int, string) result.
+    If the return type is already result, don't double-wrap it. *)
+let rec wrap_return_in_result ty =
+  match ty with
+  | Types.TypeArrow (_, arg, ret) ->
+    Types.TypeArrow (Nolabel, arg, wrap_return_in_result ret)
+  | _ when is_result_type ty ->
+    (* Already result, don't double-wrap *)
+    ty
+  | _ ->
+    (* Wrap the final return type in (ty, string) result *)
+    Types.TypeConstructor (Types.PathLocal "result", [ty; type_string])
+
 (** Process a type declaration with pre-created type parameters.
     Used for mutually recursive type definitions where all type names
     must be added to the environment before processing any definitions. *)
@@ -512,10 +532,13 @@ and infer_structure_item ctx (item : structure_item) =
     | Error err ->
       Compiler_error.type_error location (Typing_ffi.Check.error_message err)
     in
-    (* If @return(nullable), wrap the return type in option *)
+    (* If @return(nullable), wrap the return type in option.
+       If @return(pcall), wrap the return type in result. *)
     let final_type =
       if ffi_spec.Typing_ffi.Types.ffi_return_nullable then
         wrap_return_in_option external_type
+      else if ffi_spec.Typing_ffi.Types.ffi_return_pcall then
+        wrap_return_in_result external_type
       else
         external_type
     in
