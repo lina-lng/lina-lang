@@ -69,7 +69,7 @@ let build_function loc params body =
 %token EXTERNAL AT
 %token LPAREN RPAREN LBRACKET RBRACKET LBRACE RBRACE
 %token COMMA SEMICOLON COLON DOT DOTDOT ARROW EQUAL BAR UNDERSCORE
-%token STAR PLUS MINUS SLASH CARET
+%token STAR PLUS MINUS MINUSDOT SLASH CARET
 %token LESS GREATER LESS_EQUAL GREATER_EQUAL EQUAL_EQUAL NOT_EQUAL
 %token REF BANG COLONEQUALS COLONCOLON MOD
 %token <string> BACKTICK_TAG
@@ -101,7 +101,7 @@ let build_function loc params body =
 %left INFIXOP0                              (* |> && || - lowest custom operator precedence *)
 %left EQUAL EQUAL_EQUAL NOT_EQUAL LESS GREATER LESS_EQUAL GREATER_EQUAL
 %right INFIXOP1 COLONCOLON AT               (* @@ @ :: - right-associative *)
-%left INFIXOP2 PLUS MINUS                   (* ++ +. + - - additive *)
+%left INFIXOP2 PLUS MINUS MINUSDOT          (* ++ +. + - -. - additive *)
 %left INFIXOP3 STAR SLASH MOD               (* *. // * / mod - multiplicative *)
 %right INFIXOP4 CARET                       (* ** ^ - highest custom operator precedence *)
 %nonassoc unary_minus
@@ -475,9 +475,25 @@ simple_expression:
   | e = application_expression { e }
   | MINUS; e = simple_expression %prec unary_minus
     {
-      let zero = make_located (ExpressionConstant (ConstantInteger 0)) $loc in
-      let minus = make_located (ExpressionVariable "-") $loc in
-      make_located (ExpressionApply (minus, [(Nolabel, zero); (Nolabel, e)])) $loc
+      (* Like OCaml: -<int> and -<float> become negative constants directly *)
+      match e.value with
+      | ExpressionConstant (ConstantInteger n) ->
+          make_located (ExpressionConstant (ConstantInteger (-n))) $loc
+      | ExpressionConstant (ConstantFloat f) ->
+          make_located (ExpressionConstant (ConstantFloat (-.f))) $loc
+      | _ ->
+          let neg = make_located (ExpressionVariable "~-") $loc in
+          make_located (ExpressionApply (neg, [(Nolabel, e)])) $loc
+    }
+  | MINUSDOT; e = simple_expression %prec unary_minus
+    {
+      (* Like OCaml: -.<float> becomes a negative constant directly *)
+      match e.value with
+      | ExpressionConstant (ConstantFloat f) ->
+          make_located (ExpressionConstant (ConstantFloat (-.f))) $loc
+      | _ ->
+          let neg = make_located (ExpressionVariable "~-.") $loc in
+          make_located (ExpressionApply (neg, [(Nolabel, e)])) $loc
     }
   (* Custom prefix operators: !foo, ~~x, etc. *)
   | op = PREFIXOP; e = simple_expression %prec PREFIXOP
@@ -507,6 +523,7 @@ simple_expression:
 %inline binary_operator:
   | PLUS { "+" }
   | MINUS { "-" }
+  | MINUSDOT { "-." }
   | STAR { "*" }
   | SLASH { "/" }
   | MOD { "mod" }
@@ -530,6 +547,7 @@ simple_expression:
 %inline operator_name:
   | PLUS { "+" }
   | MINUS { "-" }
+  | MINUSDOT { "-." }
   | STAR { "*" }
   | SLASH { "/" }
   | MOD { "mod" }

@@ -75,6 +75,13 @@ let rec check_type_expression_impl ctx (var_map : (string * type_variable) list)
                    (Printf.sprintf "Type constructor ref expects 1 argument, got %d"
                       (List.length arg_types))
           end
+        | "array" ->
+          begin match arg_types with
+          | [element_ty] -> Some (type_array element_ty)
+          | _ -> Compiler_error.type_error loc
+                   (Printf.sprintf "Type constructor array expects 1 argument, got %d"
+                      (List.length arg_types))
+          end
         | _ ->
           (* Look up the type in environment *)
           begin match Environment.find_type name env with

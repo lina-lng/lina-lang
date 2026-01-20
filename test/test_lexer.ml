@@ -529,7 +529,7 @@ let%expect_test "INFIXOP2: additive operators" =
     (Lexer.INFIXOP2 "++")
     (Lexer.INFIXOP2 "+.")
     (Lexer.INFIXOP2 "+|")
-    (Lexer.INFIXOP2 "-.")
+    Lexer.MINUSDOT
     (Lexer.INFIXOP2 "->>")
     Lexer.EOF
     |}]

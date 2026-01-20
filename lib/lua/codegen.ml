@@ -116,6 +116,10 @@ let binary_primitives = [
   Lambda.PrimitiveMulInt, OpMul;
   Lambda.PrimitiveDivInt, OpDiv;
   Lambda.PrimitiveModInt, OpMod;
+  Lambda.PrimitiveAddFloat, OpAdd;
+  Lambda.PrimitiveSubFloat, OpSub;
+  Lambda.PrimitiveMulFloat, OpMul;
+  Lambda.PrimitiveDivFloat, OpDiv;
   Lambda.PrimitiveIntEqual, OpEqual;
   Lambda.PrimitiveIntNotEqual, OpNotEqual;
   Lambda.PrimitiveIntLess, OpLess;
@@ -136,6 +140,7 @@ let binary_primitives = [
 
 let unary_primitives = [
   Lambda.PrimitiveNegInt, OpNegate;
+  Lambda.PrimitiveNegFloat, OpNegate;
   Lambda.PrimitiveBoolNot, OpNot;
 ]
 
@@ -779,7 +784,11 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
 
   | Lambda.LambdaExternalCall (spec, args) ->
     let translated_args, ctx = translate_expression_list ctx args in
-    let call_expr = generate_ffi_call spec translated_args in
+    (* Filter out unit arguments (ExpressionNil) from FFI calls, since Lua
+       functions don't expect nil for unit-typed parameters. For example,
+       math.random() should be called with no args, not math.random(nil). *)
+    let filtered_args = List.filter (fun arg -> arg <> ExpressionNil) translated_args in
+    let call_expr = generate_ffi_call spec filtered_args in
     if spec.Typing_ffi.Types.ffi_return_nullable then
       (* Generate:
          (function()

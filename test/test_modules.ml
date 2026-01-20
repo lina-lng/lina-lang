@@ -3472,6 +3472,611 @@ end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local x = 42;
     local M = {x = x}
     |}]
@@ -6920,6 +7525,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local add = function(x)
       return function(y)
@@ -10381,6 +11591,611 @@ let y = M.x
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local x = 42;
     local M = {x = x};
@@ -13844,6 +15659,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local x = 42;
     local Inner = {x = x};
@@ -17311,6 +19731,611 @@ end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local x = 42;
     local hidden = 99;
     local M = {x = x, hidden = hidden}
@@ -20763,6 +23788,611 @@ let y = M.x
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local x = 42;
     local hidden = 99;
@@ -24248,6 +27878,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local MakeDouble = function(X)
       return {doubled = X.x + X.x}
@@ -27764,6 +31999,611 @@ let z = x + y
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local x = 10;
     local y = 20;
@@ -31478,6 +36318,611 @@ let _ = print 1
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local Empty = {};
     local top = print(1)
     |}]
@@ -35043,6 +40488,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     |}]
 
@@ -38744,6 +44794,611 @@ module type S2 = S with type t = int
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     |}]
 
 let%expect_test "with type constraint - type not found" =
@@ -42208,6 +48863,611 @@ module type S2 = S with type 'a t = int
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     |}]
 
@@ -45677,6 +52937,611 @@ module type S_INT = S with type t := int
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     |}]
 
@@ -49260,6 +57125,611 @@ let f (x : t) = match x with
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local function f(x)
       local x_match = x;
       local matched = x_match;
@@ -52731,6 +61201,611 @@ let f (type a) (x : a) = x
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local function f(x)
       return x
     end
@@ -56178,6 +65253,611 @@ let f (type a) (x : a) (y : a) = (x, y)
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local f = function(x)
       return function(y)
@@ -59627,6 +69307,611 @@ let f (type a) (type b) (x : a) (y : b) = (x, y)
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local f = function(x)
       return function(y)
@@ -63090,6 +73375,611 @@ end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local x = 1;
     local M = {x = x}
     |}]
@@ -66539,6 +77429,611 @@ let y = M.x
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local x = 42;
     local M = {x = x};
     local y = M.x
@@ -69987,6 +81482,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local F = function(X)
       return {doubled = X.n + X.n}
@@ -73440,6 +85540,611 @@ module Result = F(Input)
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local F = function(X)
       return {doubled = X.n + X.n}
@@ -76895,6 +89600,611 @@ end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
     end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
+    end)();
     local a = 10;
     local b = a + 5;
     local c = b * 2;
@@ -80344,6 +93654,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local add = function(x)
       return function(y)
@@ -83798,6 +97713,611 @@ end
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local value = 100;
     local Inner = {value = value};
@@ -87258,6 +101778,611 @@ module R = F(struct let n = 5 end)
       end
     end
     return {["empty"] = empty, ["singleton"] = singleton, ["mem"] = mem, ["has"] = has, ["size"] = size, ["is_empty"] = is_empty, ["add"] = add, ["remove"] = remove, ["union"] = union, ["inter"] = inter, ["diff"] = diff, ["sym_diff"] = sym_diff, ["subset"] = subset, ["disjoint"] = disjoint, ["exists"] = exists, ["for_all"] = for_all, ["map"] = map, ["filter"] = filter, ["filter_map"] = filter_map, ["partition"] = partition, ["fold"] = fold, ["iter"] = iter, ["find"] = find, ["elements"] = elements, ["to_list"] = to_list, ["of_list"] = of_list, ["equal"] = equal, ["compare"] = compare}
+    end)();
+
+    local String = (function()
+    local _Ctor_option_0 = {_tag = 0};
+    local _Ctor_list_0 = {_tag = 0};
+    local function string_len(arg0)
+      return arg0:len()
+    end;
+
+    local string_sub = function(arg0_1)
+      return function(arg1)
+        return function(arg2)
+          return string.sub(arg0_1, arg1, arg2)
+        end
+      end
+    end;
+
+    local function string_upper(arg0_2)
+      return arg0_2:upper()
+    end;
+
+    local function string_lower(arg0_3)
+      return arg0_3:lower()
+    end;
+
+    local string_rep = function(arg0_4)
+      return function(arg1_1)
+        return string.rep(arg0_4, arg1_1)
+      end
+    end;
+
+    local string_byte = function(arg0_5)
+      return function(arg1_2)
+        return string.byte(arg0_5, arg1_2)
+      end
+    end;
+
+    local function string_char(arg0_6)
+      return string.char(arg0_6)
+    end;
+
+    local string_gsub_raw = function(arg0_7)
+      return function(arg1_3)
+        return function(arg2_1)
+          return string.gsub(arg0_7, arg1_3, arg2_1)
+        end
+      end
+    end;
+
+    local string_match_raw = function(arg0_8)
+      return function(arg1_4)
+        return (function()
+          local _ffi_result = arg0_8:match(arg1_4);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local string_find_start = function(arg0_9)
+      return function(arg1_5)
+        return (function()
+          local _ffi_result = arg0_9:find(arg1_5);
+          if _ffi_result == nil then
+            return {_tag = 0}
+          else
+            return {_tag = 1, _0 = _ffi_result}
+          end
+        end)()
+      end
+    end;
+
+    local function string_reverse(arg0_10)
+      return string.reverse(arg0_10)
+    end;
+
+    local table_concat = function(arg0_11)
+      return function(arg1_6)
+        return table.concat(arg0_11, arg1_6)
+      end
+    end;
+
+    local function length(str)
+      return string_len(str)
+    end;
+
+    local function is_empty(str_1)
+      return string_len(str_1) == 0
+    end;
+
+    local sub = function(str_2)
+      return function(start)
+        return function(stop)
+          return string_sub(str_2)(start)(stop)
+        end
+      end
+    end;
+
+    local get = function(str_3)
+      return function(index)
+        if index < 1 or index > string_len(str_3) then
+          return _Ctor_option_0
+        else
+          return {_tag = 1, _0 = string_byte(str_3)(index)}
+        end
+      end
+    end;
+
+    local get_exn = function(str_4)
+      return function(index_1)
+        if index_1 < 1 or index_1 > string_len(str_4) then
+          return error("String.get_exn: index out of bounds")
+        else
+          return string_byte(str_4)(index_1)
+        end
+      end
+    end;
+
+    local function upper(str_5)
+      return string_upper(str_5)
+    end;
+
+    local function lower(str_6)
+      return string_lower(str_6)
+    end;
+
+    local function capitalize(str_7)
+      if string_len(str_7) == 0 then
+        return str_7
+      else
+        local first = string_upper(string_sub(str_7)(1)(1));
+        local rest = string_sub(str_7)(2)(string_len(str_7));
+        return first .. rest
+      end
+    end;
+
+    local function uncapitalize(str_8)
+      if string_len(str_8) == 0 then
+        return str_8
+      else
+        local first_1 = string_lower(string_sub(str_8)(1)(1));
+        local rest_1 = string_sub(str_8)(2)(string_len(str_8));
+        return first_1 .. rest_1
+      end
+    end;
+
+    local rep = function(str_9)
+      return function(n)
+        if n <= 0 then
+          return ""
+        else
+          return string_rep(str_9)(n)
+        end
+      end
+    end;
+
+    local make = function(n_1)
+      return function(byte)
+        if n_1 <= 0 then
+          return ""
+        else
+          return string_rep(string_char(byte))(n_1)
+        end
+      end
+    end;
+
+    local join = function(sep)
+      return function(strings)
+        local arr = Array.of_list(strings);
+        return table_concat(arr)(sep)
+      end
+    end;
+
+    local concat = function(str1)
+      return function(str2)
+        return str1 .. str2
+      end
+    end;
+
+    local function reverse(str_10)
+      return string_reverse(str_10)
+    end;
+
+    local find = function(str_11)
+      return function(pattern)
+        return Option.is_some(string_find_start(str_11)(pattern))
+      end
+    end;
+
+    local contains = function(str_12)
+      return function(substring)
+        local escaped = string_gsub_raw(substring)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+        return Option.is_some(string_find_start(str_12)(escaped))
+      end
+    end;
+
+    local match_ = function(str_13)
+      return function(pattern_1)
+        return string_match_raw(str_13)(pattern_1)
+      end
+    end;
+
+    local gsub = function(str_14)
+      return function(pattern_2)
+        return function(replacement)
+          return string_gsub_raw(str_14)(pattern_2)(replacement)
+        end
+      end
+    end;
+
+    local starts_with = function(str_15)
+      return function(prefix)
+        local prefix_len = string_len(prefix);
+        local str_len = string_len(str_15);
+        if prefix_len > str_len then
+          return false
+        else
+          return string_sub(str_15)(1)(prefix_len) == prefix
+        end
+      end
+    end;
+
+    local ends_with = function(str_16)
+      return function(suffix)
+        local suffix_len = string_len(suffix);
+        local str_len_1 = string_len(str_16);
+        if suffix_len > str_len_1 then
+          return false
+        else
+          return string_sub(str_16)(str_len_1 - suffix_len + 1)(str_len_1) == suffix
+        end
+      end
+    end;
+
+    local function trim(str_17)
+      local trimmed = string_gsub_raw(str_17)("^%s+")("");
+      return string_gsub_raw(trimmed)("%s+$")("")
+    end;
+
+    local function trim_start(str_18)
+      return string_gsub_raw(str_18)("^%s+")("")
+    end;
+
+    local function trim_end(str_19)
+      return string_gsub_raw(str_19)("%s+$")("")
+    end;
+
+    local split = function(str_20)
+      return function(sep_1)
+        if is_empty(str_20) then
+          return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+        else
+          if is_empty(sep_1) then
+            return {_tag = 1, _0 = {str_20, _Ctor_list_0}}
+          else
+            local sep_len = string_len(sep_1);
+            local str_len_2 = string_len(str_20);
+            local escaped_sep = string_gsub_raw(sep_1)("([%^%$%(%)%%%.%[%]%*%+%-%?])")("%%%1");
+            local go;
+            go = function(acc)
+              return function(pos)
+                if pos > str_len_2 then
+                  return List.reverse(acc)
+                else
+                  local matched = string_match_raw(string_sub(str_20)(pos)(str_len_2))("^(.-)" .. escaped_sep);
+                  local matched_1 = matched;
+                  if matched_1._tag == 1 then
+                    local part = matched._0;
+                    local new_pos = pos + string_len(part) + sep_len;
+                    return go({_tag = 1, _0 = {part, acc}})(new_pos)
+                  elseif matched_1._tag == 0 then
+                    local remaining = string_sub(str_20)(pos)(str_len_2);
+                    return List.reverse({_tag = 1, _0 = {remaining, acc}})
+                  else
+                    return error("Match failure")
+                  end
+                end
+              end
+            end;
+            return go(_Ctor_list_0)(1)
+          end
+        end
+      end
+    end;
+
+    local function lines(str_21)
+      return split(str_21)("\n")
+    end;
+
+    local function to_bytes(str_22)
+      local len = string_len(str_22);
+      return List.init(len)(function(index_2)
+        return string_byte(str_22)(index_2 + 1)
+      end)
+    end;
+
+    local function of_bytes(bytes)
+      return List.fold_left(function(acc_1)
+        return function(byte_1)
+          return acc_1 .. string_char(byte_1)
+        end
+      end)("")(bytes)
+    end;
+
+    local function of_byte(byte_2)
+      return string_char(byte_2)
+    end;
+
+    local compare = function(str1_1)
+      return function(str2_1)
+        if str1_1 < str2_1 then
+          return 0 - 1
+        else
+          if str1_1 > str2_1 then
+            return 1
+          else
+            return 0
+          end
+        end
+      end
+    end;
+
+    local equal = function(str1_2)
+      return function(str2_2)
+        return str1_2 == str2_2
+      end
+    end;
+
+    local iter = function(f)
+      return function(str_23)
+        local len_1 = string_len(str_23);
+        return (function()
+          for index_3 = 1, len_1 do
+            local _ = f(string_byte(str_23)(index_3))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local iteri = function(f_1)
+      return function(str_24)
+        local len_2 = string_len(str_24);
+        return (function()
+          for index_4 = 1, len_2 do
+            local __1 = f_1(index_4)(string_byte(str_24)(index_4))
+          end;
+          return nil
+        end)()
+      end
+    end;
+
+    local fold_left = function(f_2)
+      return function(init)
+        return function(str_25)
+          local len_3 = string_len(str_25);
+          local acc_2 = {value = init};
+          (function()
+            for index_5 = 1, len_3 do
+              acc_2.value = f_2(acc_2.value)(string_byte(str_25)(index_5))
+            end;
+            return nil
+          end)();
+          return acc_2.value
+        end
+      end
+    end;
+
+    local for_all = function(predicate)
+      return function(str_26)
+        local len_4 = string_len(str_26);
+        local result = {value = true};
+        local index_6 = {value = 1};
+        (function()
+          while index_6.value <= len_4 and result.value do
+            if not predicate(string_byte(str_26)(index_6.value)) then
+              result.value = false
+            else
+              index_6.value = index_6.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result.value
+      end
+    end;
+
+    local exists = function(predicate_1)
+      return function(str_27)
+        local len_5 = string_len(str_27);
+        local result_1 = {value = false};
+        local index_7 = {value = 1};
+        (function()
+          while index_7.value <= len_5 and not result_1.value do
+            if predicate_1(string_byte(str_27)(index_7.value)) then
+              result_1.value = true
+            else
+              index_7.value = index_7.value + 1
+            end
+          end;
+          return nil
+        end)();
+        return result_1.value
+      end
+    end
+    return {["string_len"] = string_len, ["string_sub"] = string_sub, ["string_upper"] = string_upper, ["string_lower"] = string_lower, ["string_rep"] = string_rep, ["string_byte"] = string_byte, ["string_char"] = string_char, ["string_gsub_raw"] = string_gsub_raw, ["string_match_raw"] = string_match_raw, ["string_find_start"] = string_find_start, ["string_reverse"] = string_reverse, ["table_concat"] = table_concat, ["length"] = length, ["is_empty"] = is_empty, ["sub"] = sub, ["get"] = get, ["get_exn"] = get_exn, ["upper"] = upper, ["lower"] = lower, ["capitalize"] = capitalize, ["uncapitalize"] = uncapitalize, ["rep"] = rep, ["make"] = make, ["join"] = join, ["concat"] = concat, ["reverse"] = reverse, ["find"] = find, ["contains"] = contains, ["match_"] = match_, ["gsub"] = gsub, ["starts_with"] = starts_with, ["ends_with"] = ends_with, ["trim"] = trim, ["trim_start"] = trim_start, ["trim_end"] = trim_end, ["split"] = split, ["lines"] = lines, ["to_bytes"] = to_bytes, ["of_bytes"] = of_bytes, ["of_byte"] = of_byte, ["compare"] = compare, ["equal"] = equal, ["iter"] = iter, ["iteri"] = iteri, ["fold_left"] = fold_left, ["for_all"] = for_all, ["exists"] = exists}
+    end)();
+
+    local Math = (function()
+    local function floor_raw(arg0)
+      return math.floor(arg0)
+    end;
+
+    local function ceil_raw(arg0_1)
+      return math.ceil(arg0_1)
+    end;
+
+    local function abs(arg0_2)
+      return math.abs(arg0_2)
+    end;
+
+    local fmod = function(arg0_3)
+      return function(arg1)
+        return math.fmod(arg0_3, arg1)
+      end
+    end;
+
+    local min_raw = function(arg0_4)
+      return function(arg1_1)
+        return math.min(arg0_4, arg1_1)
+      end
+    end;
+
+    local max_raw = function(arg0_5)
+      return function(arg1_2)
+        return math.max(arg0_5, arg1_2)
+      end
+    end;
+
+    local function exp(arg0_6)
+      return math.exp(arg0_6)
+    end;
+
+    local function log(arg0_7)
+      return math.log(arg0_7)
+    end;
+
+    local function sqrt(arg0_8)
+      return math.sqrt(arg0_8)
+    end;
+
+    local pow = function(arg0_9)
+      return function(arg1_3)
+        return math.pow(arg0_9, arg1_3)
+      end
+    end;
+
+    local function sin(arg0_10)
+      return math.sin(arg0_10)
+    end;
+
+    local function cos(arg0_11)
+      return math.cos(arg0_11)
+    end;
+
+    local function tan(arg0_12)
+      return math.tan(arg0_12)
+    end;
+
+    local function asin(arg0_13)
+      return math.asin(arg0_13)
+    end;
+
+    local function acos(arg0_14)
+      return math.acos(arg0_14)
+    end;
+
+    local function atan(arg0_15)
+      return math.atan(arg0_15)
+    end;
+
+    local atan2 = function(arg0_16)
+      return function(arg1_4)
+        return math.atan2(arg0_16, arg1_4)
+      end
+    end;
+
+    local function rad(arg0_17)
+      return math.rad(arg0_17)
+    end;
+
+    local function deg(arg0_18)
+      return math.deg(arg0_18)
+    end;
+
+    local function random_unit(arg0_19)
+      return math.random()
+    end;
+
+    local function random_max(arg0_20)
+      return math.random(arg0_20)
+    end;
+
+    local random_range_raw = function(arg0_21)
+      return function(arg1_5)
+        return math.random(arg0_21, arg1_5)
+      end
+    end;
+
+    local function randomseed(arg0_22)
+      return math.randomseed(arg0_22)
+    end;
+    local pi = 3.14159;
+    local huge = 1 / 0;
+    local function floor(x)
+      return floor_raw(x)
+    end;
+
+    local function ceil(x_1)
+      return ceil_raw(x_1)
+    end;
+
+    local function round(x_2)
+      if x_2 >= 0 then
+        return floor_raw(x_2 + 0.5)
+      else
+        return ceil_raw(x_2 - 0.5)
+      end
+    end;
+
+    local function trunc(x_3)
+      if x_3 >= 0 then
+        return floor_raw(x_3)
+      else
+        return ceil_raw(x_3)
+      end
+    end;
+
+    local function abs_int(n)
+      if n < 0 then
+        return 0 - n
+      else
+        return n
+      end
+    end;
+
+    local min = function(a)
+      return function(b)
+        return min_raw(a)(b)
+      end
+    end;
+
+    local max = function(a_1)
+      return function(b_1)
+        return max_raw(a_1)(b_1)
+      end
+    end;
+
+    local min_int = function(a_2)
+      return function(b_2)
+        if a_2 < b_2 then
+          return a_2
+        else
+          return b_2
+        end
+      end
+    end;
+
+    local max_int = function(a_3)
+      return function(b_3)
+        if a_3 > b_3 then
+          return a_3
+        else
+          return b_3
+        end
+      end
+    end;
+
+    local function modf(x_4)
+      local int_part = trunc(x_4);
+      local frac_part = x_4 - int_part;
+      return {int_part, frac_part}
+    end;
+
+    local function log10(x_5)
+      return log(x_5) / log(10)
+    end;
+
+    local function random(param)
+      return random_unit(nil)
+    end;
+
+    local function random_int(n_1)
+      return random_max(n_1)
+    end;
+
+    local random_range = function(m)
+      return function(n_2)
+        return random_range_raw(m)(n_2)
+      end
+    end
+    return {["floor_raw"] = floor_raw, ["ceil_raw"] = ceil_raw, ["abs"] = abs, ["fmod"] = fmod, ["min_raw"] = min_raw, ["max_raw"] = max_raw, ["exp"] = exp, ["log"] = log, ["sqrt"] = sqrt, ["pow"] = pow, ["sin"] = sin, ["cos"] = cos, ["tan"] = tan, ["asin"] = asin, ["acos"] = acos, ["atan"] = atan, ["atan2"] = atan2, ["rad"] = rad, ["deg"] = deg, ["random_unit"] = random_unit, ["random_max"] = random_max, ["random_range_raw"] = random_range_raw, ["randomseed"] = randomseed, ["pi"] = pi, ["huge"] = huge, ["floor"] = floor, ["ceil"] = ceil, ["round"] = round, ["trunc"] = trunc, ["abs_int"] = abs_int, ["min"] = min, ["max"] = max, ["min_int"] = min_int, ["max_int"] = max_int, ["modf"] = modf, ["log10"] = log10, ["random"] = random, ["random_int"] = random_int, ["random_range"] = random_range}
     end)();
     local F = function(X)
       return {result = X.n * 2}

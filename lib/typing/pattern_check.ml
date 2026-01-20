@@ -121,12 +121,49 @@ let is_constructor_reachable env scrutinee_type (ctor : Types.constructor_info) 
     with Unification.Unification_error _ ->
       false
 
-(** Build a variant signature from constructors, filtering out unreachable GADT cases. *)
+(** Instantiate a constructor's argument type for pattern checking.
+    For non-GADTs, substitutes type parameters directly from the scrutinee.
+    For GADTs, uses unification to determine the proper instantiation. *)
+let instantiate_ctor_arg_type env scrutinee_type (ctor : Types.constructor_info) =
+  if not ctor.constructor_is_gadt then
+    let type_args = match Types.representative scrutinee_type with
+      | Types.TypeConstructor (_, args) -> args
+      | _ -> []
+    in
+    match ctor.constructor_argument_type with
+    | None -> None
+    | Some arg_ty ->
+      if List.length ctor.constructor_type_parameters = List.length type_args then
+        Some (Type_utils.substitute_type_params
+                ctor.constructor_type_parameters type_args arg_ty)
+      else
+        ctor.constructor_argument_type
+  else
+    let fresh_var () = Types.new_type_variable_at_level Types.generic_level in
+    let instantiated_arg, instantiated_result =
+      Type_utils.instantiate_constructor ~fresh_var ctor
+    in
+    let scrutinee_copy = Type_scheme.instantiate_all_fresh ~fresh_var scrutinee_type in
+    let type_lookup path = Environment.find_type_by_path path env in
+    (try
+       Unification.unify ~type_lookup Location.none scrutinee_copy instantiated_result;
+       instantiated_arg
+     with Unification.Unification_error _ ->
+       ctor.constructor_argument_type)
+
+(** Build a variant signature from constructors, filtering out unreachable GADT cases.
+    Instantiates constructor argument types with the actual type arguments from the
+    scrutinee type. This is crucial for nested patterns like [Some (a, b)] matching
+    against [(int * int) option] - we need the instantiated type [(int * int)] not
+    the generic type parameter ['a]. *)
 let make_variant_signature env scrutinee_type ctors =
   let reachable = List.filter (is_constructor_reachable env scrutinee_type) ctors in
-  let ctor_pairs = List.map (fun (c : Types.constructor_info) ->
-    (c.constructor_name, c.constructor_argument_type)
+
+  let ctor_pairs = List.map (fun (ctor : Types.constructor_info) ->
+    let instantiated_arg_type = instantiate_ctor_arg_type env scrutinee_type ctor in
+    (ctor.constructor_name, instantiated_arg_type)
   ) reachable in
+
   SigVariant ctor_pairs
 
 (* Get constructor signature from environment.

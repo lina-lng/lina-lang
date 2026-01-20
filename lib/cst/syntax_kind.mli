@@ -77,6 +77,7 @@ type t =
   | TK_STAR
   | TK_PLUS
   | TK_MINUS
+  | TK_MINUSDOT      (** -. float subtraction/negation *)
   | TK_SLASH
   | TK_MOD           (** mod integer modulo *)
   | TK_CARET         (** ^ string concatenation *)

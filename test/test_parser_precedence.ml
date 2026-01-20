@@ -102,7 +102,7 @@ let%expect_test "unary minus with multiplication: -1 * 2" =
   [%expect
     {|
     Top operator: *
-    Left is subtraction (unary minus): true
+    Left is subtraction (unary minus): false
     Right is 2: true
     |}]
 
@@ -118,7 +118,7 @@ let%expect_test "unary minus with addition: -1 + 2" =
   [%expect
     {|
     Top operator: +
-    Left is subtraction (unary minus): true
+    Left is subtraction (unary minus): false
     Right is 2: true
     |}]
 

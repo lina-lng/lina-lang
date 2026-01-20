@@ -19,6 +19,18 @@ open Types
 let binary_int_op_type =
   trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_int)))
 
+(** Binary float operation: float -> float -> float *)
+let binary_float_op_type =
+  trivial_scheme (TypeArrow (Nolabel, type_float, TypeArrow (Nolabel, type_float, type_float)))
+
+(** Unary int negation: int -> int *)
+let unary_int_neg_type =
+  trivial_scheme (TypeArrow (Nolabel, type_int, type_int))
+
+(** Unary float negation: float -> float *)
+let unary_float_neg_type =
+  trivial_scheme (TypeArrow (Nolabel, type_float, type_float))
+
 (** Integer comparison: int -> int -> bool *)
 let comparison_int_type =
   trivial_scheme (TypeArrow (Nolabel, type_int, TypeArrow (Nolabel, type_int, type_bool)))

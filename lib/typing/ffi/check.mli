@@ -60,7 +60,7 @@ val is_return_nullable : Types.ffi_attribute list -> bool
 (** [is_variadic attrs] returns true if [@variadic] is present. *)
 val is_variadic : Types.ffi_attribute list -> bool
 
-(** [build_ffi_spec ~attrs ~primitive ~arity ~location] builds a complete
+(** [build_ffi_spec ~attrs ~primitive ~arity ~unit_params ~location] builds a complete
     FFI specification from parsed attributes.
 
     Performs all validation:
@@ -72,11 +72,13 @@ val is_variadic : Types.ffi_attribute list -> bool
     @param attrs The parsed attributes from the AST
     @param primitive The primitive string (Lua function name)
     @param arity The number of arguments (computed from the type)
+    @param unit_params Which parameters are unit type (should not be passed to Lua)
     @param location Source location for error reporting
     @return The validated FFI spec or an error *)
 val build_ffi_spec :
   attrs:Parsing_ffi.Attributes.attribute list ->
   primitive:string ->
   arity:int ->
+  unit_params:bool list ->
   location:Location.t ->
   (Types.ffi_spec, ffi_error) result

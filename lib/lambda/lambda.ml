@@ -7,6 +7,11 @@ type primitive =
   | PrimitiveDivInt
   | PrimitiveModInt
   | PrimitiveNegInt
+  | PrimitiveAddFloat
+  | PrimitiveSubFloat
+  | PrimitiveMulFloat
+  | PrimitiveDivFloat
+  | PrimitiveNegFloat
   | PrimitiveIntEqual
   | PrimitiveIntNotEqual
   | PrimitiveIntLess
@@ -176,6 +181,12 @@ let primitive_of_operator = function
   | "*" -> Some PrimitiveMulInt
   | "/" -> Some PrimitiveDivInt
   | "mod" -> Some PrimitiveModInt
+  | "+." -> Some PrimitiveAddFloat
+  | "-." -> Some PrimitiveSubFloat
+  | "*." -> Some PrimitiveMulFloat
+  | "/." -> Some PrimitiveDivFloat
+  | "~-" -> Some PrimitiveNegInt
+  | "~-." -> Some PrimitiveNegFloat
   | "^" -> Some PrimitiveStringConcat
   | "@" -> Some PrimitiveListAppend
   | "print" -> Some PrimitivePrint
@@ -213,6 +224,7 @@ let translate_constant = function
 
 let make_ffi_wrapper (spec : Typing_ffi.Types.ffi_spec) : lambda =
   let arity = spec.ffi_arity in
+  let unit_params = spec.ffi_unit_params in
 
   if arity = 0 then
     LambdaExternalCall (spec, [])
@@ -220,8 +232,14 @@ let make_ffi_wrapper (spec : Typing_ffi.Types.ffi_spec) : lambda =
     let arg_ids = List.init arity (fun index ->
       Identifier.create (Printf.sprintf "arg%d" index))
     in
-    let arg_vars = List.map (fun id -> LambdaVariable id) arg_ids in
-    LambdaFunction (arg_ids, LambdaExternalCall (spec, arg_vars))
+    (* Filter out arguments at positions where unit_params is true *)
+    let arg_vars_with_flags = List.combine arg_ids
+      (if List.length unit_params = arity then unit_params
+       else List.init arity (fun _ -> false)) in
+    let filtered_arg_vars = arg_vars_with_flags
+      |> List.filter (fun (_, is_unit) -> not is_unit)
+      |> List.map (fun (id, _) -> LambdaVariable id) in
+    LambdaFunction (arg_ids, LambdaExternalCall (spec, filtered_arg_vars))
 
 let occurrence_to_lambda (scrutinee : lambda) (occ : Pattern_match.occurrence) : lambda =
   List.fold_left (fun expr step ->

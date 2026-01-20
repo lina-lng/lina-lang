@@ -9,6 +9,15 @@
 (** Binary integer operation: int -> int -> int *)
 val binary_int_op_type : Types.type_scheme
 
+(** Binary float operation: float -> float -> float *)
+val binary_float_op_type : Types.type_scheme
+
+(** Unary int negation: int -> int *)
+val unary_int_neg_type : Types.type_scheme
+
+(** Unary float negation: float -> float *)
+val unary_float_neg_type : Types.type_scheme
+
 (** Integer comparison: int -> int -> bool *)
 val comparison_int_type : Types.type_scheme
 

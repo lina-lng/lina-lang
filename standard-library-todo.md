@@ -153,92 +153,99 @@ lib/stdlib/
   - [x] Convert: `elements`, `to_list`, `of_list`
   - [x] Compare: `equal`, `compare`
 
-### Phase 4: String Module (UTF-8 by Default)
+### Phase 4: String Module (Byte-Based, Like Lua) — COMPLETE
 
-- [ ] **String** (`string.lina`) — String manipulation
-  - [ ] **UTF-8 Operations (Default)**
-    - [ ] `length : string -> int` — Character count
-    - [ ] `sub : string -> int -> int -> string` — Substring by character index
-    - [ ] `at : string -> int -> int option` — Get codepoint at character index
-    - [ ] `reverse : string -> string` — Reverse by characters
-    - [ ] `iter : (int -> unit) -> string -> unit` — Iterate over codepoints
-    - [ ] `iteri : (int -> int -> unit) -> string -> unit` — Iterate with index
-    - [ ] `to_codepoints : string -> int list` — String to codepoint list
-    - [ ] `of_codepoints : int list -> string` — Codepoint list to string
-  - [ ] **Byte Operations (Explicit)**
-    - [ ] `length_bytes : string -> int` — Byte count
-    - [ ] `sub_bytes : string -> int -> int -> string` — Substring by byte index
-    - [ ] `byte_at : string -> int -> int option` — Get byte at position
-    - [ ] `to_bytes : string -> int list` — String to byte list
-    - [ ] `of_bytes : int list -> string` — Byte list to string
-  - [ ] **Case Conversion** (ASCII only - Lua limitation)
-    - [ ] `upper : string -> string` — Convert to uppercase
-    - [ ] `lower : string -> string` — Convert to lowercase
-  - [ ] **Building**
-    - [ ] `rep : string -> int -> string` — Repeat string n times
-    - [ ] `join : string -> string list -> string` — Join with separator (from table.concat)
-    - [ ] `concat : string -> string -> string` — Concatenate two strings
-  - [ ] **Pattern Matching** (byte-based, Lua patterns)
-    - [ ] `find : string -> string -> (int * int) option` — Find pattern
-    - [ ] `find_from : string -> string -> int -> (int * int) option` — Find from position
-    - [ ] `match_ : string -> string -> string option` — Match pattern
-    - [ ] `match_all : string -> string -> string list` — All matches
-    - [ ] `gsub : string -> string -> string -> string` — Global substitution
-  - [ ] **Formatting**
-    - [ ] `format : string -> ... -> string` — Printf-style formatting
-  - [ ] **Utilities** (implemented in pure Lina)
-    - [ ] `split : string -> string -> string list` — Split by pattern
-    - [ ] `trim : string -> string` — Remove whitespace
-    - [ ] `starts_with : string -> string -> bool` — Prefix check
-    - [ ] `ends_with : string -> string -> bool` — Suffix check
-    - [ ] `contains : string -> string -> bool` — Substring check
-    - [ ] `is_empty : string -> bool` — Empty check
-  - Note: Use `Ord.string_compare` for comparison
+- [x] **String** (`string.lina`) — String manipulation (byte-based)
+  - [x] **Basic Operations**
+    - [x] `length : string -> int` — Byte count
+    - [x] `is_empty : string -> bool` — Empty check
+    - [x] `sub : string -> int -> int -> string` — Substring by byte index (1-based, supports negative)
+    - [x] `get : string -> int -> int option` — Get byte at position
+    - [x] `get_exn : string -> int -> int` — Get byte or raise
+  - [x] **Case Conversion** (ASCII only)
+    - [x] `upper : string -> string` — Convert to uppercase
+    - [x] `lower : string -> string` — Convert to lowercase
+    - [x] `capitalize : string -> string` — Capitalize first character
+    - [x] `uncapitalize : string -> string` — Uncapitalize first character
+  - [x] **Building**
+    - [x] `rep : string -> int -> string` — Repeat string n times
+    - [x] `make : int -> int -> string` — Create string of n copies of byte
+    - [x] `join : string -> string list -> string` — Join with separator
+    - [x] `concat : string -> string -> string` — Concatenate two strings
+    - [x] `reverse : string -> string` — Reverse string (by bytes)
+  - [x] **Searching** (Lua patterns)
+    - [x] `find : string -> string -> bool` — Pattern found check
+    - [x] `contains : string -> string -> bool` — Literal substring check
+    - [x] `match_ : string -> string -> string option` — Match pattern
+    - [x] `gsub : string -> string -> string -> string` — Global substitution
+  - [x] **Predicates**
+    - [x] `starts_with : string -> string -> bool` — Prefix check
+    - [x] `ends_with : string -> string -> bool` — Suffix check
+  - [x] **Trimming**
+    - [x] `trim : string -> string` — Remove leading/trailing whitespace
+    - [x] `trim_start : string -> string` — Remove leading whitespace
+    - [x] `trim_end : string -> string` — Remove trailing whitespace
+  - [x] **Splitting**
+    - [x] `split : string -> string -> string list` — Split by literal separator
+    - [x] `lines : string -> string list` — Split by newline
+  - [x] **Byte Conversion**
+    - [x] `to_bytes : string -> int list` — String to byte list
+    - [x] `of_bytes : int list -> string` — Byte list to string
+    - [x] `of_byte : int -> string` — Single byte to string
+  - [x] **Comparison**
+    - [x] `compare : string -> string -> int` — Lexicographic comparison
+    - [x] `equal : string -> string -> bool` — Equality test
+  - [x] **Iteration**
+    - [x] `iter : (int -> unit) -> string -> unit` — Apply to each byte
+    - [x] `iteri : (int -> int -> unit) -> string -> unit` — Apply with index
+    - [x] `fold_left : ('a -> int -> 'a) -> 'a -> string -> 'a` — Fold over bytes
+    - [x] `for_all : (int -> bool) -> string -> bool` — All bytes satisfy predicate
+    - [x] `exists : (int -> bool) -> string -> bool` — Any byte satisfies predicate
+  - Note: Use `Ord.string_compare` for ordering type result
 
-### Phase 5: Math Module
+### Phase 5: Math Module (COMPLETE)
 
-- [ ] **Math** (`math.lina`) — Mathematical functions
-  - [ ] **Constants**
-    - [ ] `pi : float` — π (3.14159...)
-    - [ ] `huge : float` — Positive infinity
-    - [ ] `max_integer : int` — Maximum integer
-    - [ ] `min_integer : int` — Minimum integer
-  - [ ] **Rounding**
-    - [ ] `floor : float -> int` — Round down
-    - [ ] `ceil : float -> int` — Round up
-    - [ ] `round : float -> int` — Round to nearest
-    - [ ] `trunc : float -> int` — Truncate toward zero
-  - [ ] **Arithmetic**
-    - [ ] `abs : float -> float` — Absolute value (float)
-    - [ ] `abs_int : int -> int` — Absolute value (int)
-    - [ ] `fmod : float -> float -> float` — Floating modulo
-    - [ ] `modf : float -> (int * float)` — Integer and fractional parts
-    - [ ] `min : float -> float -> float` — Minimum of two floats
-    - [ ] `max : float -> float -> float` — Maximum of two floats
-    - [ ] `min_int : int -> int -> int` — Minimum of two ints
-    - [ ] `max_int : int -> int -> int` — Maximum of two ints
-  - [ ] **Exponential & Logarithmic**
-    - [ ] `exp : float -> float` — e^x
-    - [ ] `log : float -> float` — Natural logarithm
-    - [ ] `log10 : float -> float` — Base-10 logarithm
-    - [ ] `sqrt : float -> float` — Square root
-    - [ ] `pow : float -> float -> float` — Power
-  - [ ] **Trigonometric**
-    - [ ] `sin : float -> float` — Sine
-    - [ ] `cos : float -> float` — Cosine
-    - [ ] `tan : float -> float` — Tangent
-    - [ ] `asin : float -> float` — Arc sine
-    - [ ] `acos : float -> float` — Arc cosine
-    - [ ] `atan : float -> float` — Arc tangent
-    - [ ] `atan2 : float -> float -> float` — Two-argument arc tangent
-  - [ ] **Angle Conversion**
-    - [ ] `rad : float -> float` — Degrees to radians
-    - [ ] `deg : float -> float` — Radians to degrees
-  - [ ] **Random Numbers**
-    - [ ] `random : unit -> float` — Random float [0, 1)
-    - [ ] `random_int : int -> int` — Random int [1, n]
-    - [ ] `random_range : int -> int -> int` — Random int [m, n]
-    - [ ] `randomseed : int -> unit` — Set random seed
+- [x] **Math** (`math.lina`) — Mathematical functions
+  - [x] **Constants**
+    - [x] `pi : float` — π (3.14159...)
+    - [x] `huge : float` — Positive infinity
+    - Note: `max_integer`/`min_integer` skipped (Lua 5.3+ only, not in LuaJIT)
+  - [x] **Rounding**
+    - [x] `floor : float -> float` — Round down
+    - [x] `ceil : float -> float` — Round up
+    - [x] `round : float -> float` — Round to nearest (half away from zero)
+    - [x] `trunc : float -> float` — Truncate toward zero
+  - [x] **Arithmetic**
+    - [x] `abs : float -> float` — Absolute value (float)
+    - [x] `abs_int : int -> int` — Absolute value (int)
+    - [x] `fmod : float -> float -> float` — Floating modulo
+    - [x] `modf : float -> (float * float)` — Integer and fractional parts
+    - [x] `min : float -> float -> float` — Minimum of two floats
+    - [x] `max : float -> float -> float` — Maximum of two floats
+    - [x] `min_int : int -> int -> int` — Minimum of two ints
+    - [x] `max_int : int -> int -> int` — Maximum of two ints
+  - [x] **Exponential & Logarithmic**
+    - [x] `exp : float -> float` — e^x
+    - [x] `log : float -> float` — Natural logarithm
+    - [x] `log10 : float -> float` — Base-10 logarithm
+    - [x] `sqrt : float -> float` — Square root
+    - [x] `pow : float -> float -> float` — Power
+  - [x] **Trigonometric**
+    - [x] `sin : float -> float` — Sine
+    - [x] `cos : float -> float` — Cosine
+    - [x] `tan : float -> float` — Tangent
+    - [x] `asin : float -> float` — Arc sine
+    - [x] `acos : float -> float` — Arc cosine
+    - [x] `atan : float -> float` — Arc tangent
+    - [x] `atan2 : float -> float -> float` — Two-argument arc tangent
+  - [x] **Angle Conversion**
+    - [x] `rad : float -> float` — Degrees to radians
+    - [x] `deg : float -> float` — Radians to degrees
+  - [x] **Random Numbers**
+    - [x] `random : unit -> float` — Random float [0, 1)
+    - [x] `random_int : int -> int` — Random int [1, n]
+    - [x] `random_range : int -> int -> int` — Random int [m, n]
+    - [x] `randomseed : int -> unit` — Set random seed
 
 ### Phase 6: IO Module (File Operations)
 
@@ -338,8 +345,8 @@ lib/stdlib/
 
 ## Testing Checklist
 
-- [ ] Unit tests for String module (UTF-8 and byte operations)
-- [ ] Unit tests for Math module
+- [x] Unit tests for String module (byte operations)
+- [x] Unit tests for Math module
 - [ ] Unit tests for IO module (file operations)
 - [ ] Unit tests for OS module
 - [ ] Integration tests with Lua packages (verify zero-cost FFI)
@@ -360,8 +367,8 @@ lib/stdlib/
 | `lib/stdlib/set.lina` | ✅ Complete | Sets |
 | `lib/stdlib/tuple.lina` | ✅ Complete | Tuples |
 | `lib/stdlib/ord.lina` | ✅ Complete | Ordering |
-| `lib/stdlib/string.lina` | ⬜ TODO | String manipulation (UTF-8 default) |
-| `lib/stdlib/math.lina` | ⬜ TODO | Math functions |
+| `lib/stdlib/string.lina` | ✅ Complete | String manipulation (byte-based) |
+| `lib/stdlib/math.lina` | ✅ Complete | Math functions |
 | `lib/stdlib/io.lina` | ⬜ TODO | File I/O |
 | `lib/stdlib/os.lina` | ⬜ TODO | OS facilities |
 | `lib/stdlib/coroutine.lina` | ⬜ Optional | Coroutines |

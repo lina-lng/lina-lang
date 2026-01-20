@@ -75,6 +75,7 @@ type token =
   | STAR                  (** [*] *)
   | PLUS                  (** [+] *)
   | MINUS                 (** [-] *)
+  | MINUSDOT              (** [-.] float subtraction/negation *)
   | SLASH                 (** [/] *)
   | MOD                   (** [mod] integer modulo *)
   | CARET                 (** [^] string concatenation *)

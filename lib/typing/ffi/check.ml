@@ -283,12 +283,14 @@ let is_variadic (attrs : Types.ffi_attribute list) : bool =
     @param attrs The parsed attributes from the AST
     @param primitive The primitive string (Lua function name)
     @param arity The number of arguments (computed from the type)
+    @param unit_params Which parameters are unit type (should not be passed to Lua)
     @param location Source location for error reporting
     @return The validated FFI spec or an error *)
 let build_ffi_spec
     ~(attrs : Parsing_ffi.Attributes.attribute list)
     ~(primitive : string)
     ~(arity : int)
+    ~(unit_params : bool list)
     ~(location : Location.t)
   : (Types.ffi_spec, ffi_error) result =
   (* Parse attributes *)
@@ -319,5 +321,6 @@ let build_ffi_spec
               ffi_is_variadic = variadic;
               ffi_return_nullable = is_return_nullable ffi_attrs;
               ffi_arity = arity;
+              ffi_unit_params = unit_params;
               ffi_location = location;
             }

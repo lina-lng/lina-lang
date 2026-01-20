@@ -1,0 +1,306 @@
+(** Integration tests for String module.
+
+    Tests the byte-based String module that works on all Lua versions. *)
+
+let _ = print "=== Basic Operations ==="
+
+(* Test length *)
+let _ = print (String.length "hello")
+(* Expected: 5 *)
+
+let _ = print (String.length "")
+(* Expected: 0 *)
+
+(* Test is_empty *)
+let _ = print (String.is_empty "")
+(* Expected: true *)
+
+let _ = print (String.is_empty "x")
+(* Expected: false *)
+
+(* Test sub - 1-based indices *)
+let _ = print (String.sub "hello" 1 3)
+(* Expected: hel *)
+
+let _ = print (String.sub "hello" 2 4)
+(* Expected: ell *)
+
+(* Test negative indices *)
+let _ = print (String.sub "hello" (-3) (-1))
+(* Expected: llo *)
+
+(* Test get *)
+let _ = match String.get "hello" 1 with
+  | Some byte -> print byte
+  | None -> print "none"
+(* Expected: 104 (ASCII for 'h') *)
+
+let _ = match String.get "hello" 5 with
+  | Some byte -> print byte
+  | None -> print "none"
+(* Expected: 111 (ASCII for 'o') *)
+
+let _ = match String.get "hello" 0 with
+  | Some _ -> print "found"
+  | None -> print "out of bounds"
+(* Expected: out of bounds *)
+
+let _ = match String.get "hello" 6 with
+  | Some _ -> print "found"
+  | None -> print "out of bounds"
+(* Expected: out of bounds *)
+
+(* Test get_exn *)
+let _ = print (String.get_exn "hello" 1)
+(* Expected: 104 *)
+
+let _ = print "=== Case Conversion ==="
+
+let _ = print (String.upper "hello")
+(* Expected: HELLO *)
+
+let _ = print (String.lower "WORLD")
+(* Expected: world *)
+
+let _ = print (String.upper "HeLLo WoRLd")
+(* Expected: HELLO WORLD *)
+
+let _ = print (String.lower "HeLLo WoRLd")
+(* Expected: hello world *)
+
+(* Test capitalize/uncapitalize *)
+let _ = print (String.capitalize "hello")
+(* Expected: Hello *)
+
+let _ = print (String.uncapitalize "HELLO")
+(* Expected: hELLO *)
+
+let _ = print (String.capitalize "")
+(* Expected: (empty) *)
+
+let _ = print "=== Building ==="
+
+(* Test rep *)
+let _ = print (String.rep "ab" 3)
+(* Expected: ababab *)
+
+let _ = print (String.rep "x" 5)
+(* Expected: xxxxx *)
+
+let _ = print (String.rep "test" 0)
+(* Expected: (empty string) *)
+
+(* Test make *)
+let _ = print (String.make 5 65)
+(* Expected: AAAAA (65 = 'A') *)
+
+(* Test join *)
+let _ = print (String.join ", " (Cons ("a", Cons ("b", Cons ("c", Nil)))))
+(* Expected: a, b, c *)
+
+let _ = print (String.join "-" (Cons ("1", Cons ("2", Cons ("3", Nil)))))
+(* Expected: 1-2-3 *)
+
+let _ = print (String.join "" (Cons ("x", Cons ("y", Cons ("z", Nil)))))
+(* Expected: xyz *)
+
+(* Test concat *)
+let _ = print (String.concat "hello" " world")
+(* Expected: hello world *)
+
+(* Test reverse *)
+let _ = print (String.reverse "hello")
+(* Expected: olleh *)
+
+let _ = print (String.reverse "")
+(* Expected: (empty) *)
+
+let _ = print "=== Searching ==="
+
+(* Test find with patterns *)
+let _ = print (String.find "hello123world" "%d+")
+(* Expected: true - digits found *)
+
+let _ = print (String.find "hello world" "%d+")
+(* Expected: false - no digits *)
+
+(* Test contains (literal match) *)
+let _ = print (String.contains "hello world" "world")
+(* Expected: true *)
+
+let _ = print (String.contains "hello world" "xyz")
+(* Expected: false *)
+
+let _ = print (String.contains "hello" "")
+(* Expected: true - empty string is always contained *)
+
+(* Test gsub *)
+let _ = print (String.gsub "hello world" "o" "0")
+(* Expected: hell0 w0rld *)
+
+let _ = print (String.gsub "aaa" "a" "bb")
+(* Expected: bbbbbb *)
+
+(* Test match_ *)
+let _ = match String.match_ "hello123" "%d+" with
+  | Some matched -> print matched
+  | None -> print "no match"
+(* Expected: 123 *)
+
+let _ = match String.match_ "hello" "%d+" with
+  | Some matched -> print matched
+  | None -> print "no match"
+(* Expected: no match *)
+
+let _ = print "=== Predicates ==="
+
+(* Test starts_with *)
+let _ = print (String.starts_with "hello world" "hello")
+(* Expected: true *)
+
+let _ = print (String.starts_with "hello world" "world")
+(* Expected: false *)
+
+let _ = print (String.starts_with "hello" "hello world")
+(* Expected: false - prefix longer than string *)
+
+(* Test ends_with *)
+let _ = print (String.ends_with "hello world" "world")
+(* Expected: true *)
+
+let _ = print (String.ends_with "hello world" "hello")
+(* Expected: false *)
+
+let _ = print "=== Trimming ==="
+
+(* Test trim *)
+let _ = print (String.trim "  hello  ")
+(* Expected: hello *)
+
+let _ = print (String.trim "no spaces")
+(* Expected: no spaces *)
+
+let _ = print (String.trim "   ")
+(* Expected: (empty string) *)
+
+(* Test trim_start *)
+let _ = print (String.trim_start "  hello  ")
+(* Expected: hello   (with trailing spaces) *)
+
+(* Test trim_end *)
+let _ = print (String.trim_end "  hello  ")
+(* Expected:   hello (with leading spaces) *)
+
+let _ = print "=== Splitting ==="
+
+(* Test split *)
+let parts1 = String.split "a,b,c" ","
+let _ = List.iter print parts1
+(* Expected: a b c (each on separate line) *)
+
+let parts2 = String.split "one--two--three" "--"
+let _ = List.iter print parts2
+(* Expected: one two three *)
+
+let parts3 = String.split "no separator" ","
+let _ = List.iter print parts3
+(* Expected: no separator *)
+
+(* Test lines *)
+let text_lines = String.lines "line1\nline2\nline3"
+let _ = List.iter print text_lines
+(* Expected: line1 line2 line3 *)
+
+let _ = print "=== Byte Conversion ==="
+
+(* Test to_bytes *)
+let bytes = String.to_bytes "ABC"
+let _ = List.iter print bytes
+(* Expected: 65 66 67 *)
+
+(* Test of_bytes *)
+let _ = print (String.of_bytes (Cons (72, Cons (105, Nil))))
+(* Expected: Hi *)
+
+(* Test of_byte *)
+let _ = print (String.of_byte 65)
+(* Expected: A *)
+
+let _ = print "=== Comparison ==="
+
+let _ = print (String.compare "abc" "abd")
+(* Expected: -1 *)
+
+let _ = print (String.compare "abc" "abc")
+(* Expected: 0 *)
+
+let _ = print (String.compare "abd" "abc")
+(* Expected: 1 *)
+
+let _ = print (String.equal "hello" "hello")
+(* Expected: true *)
+
+let _ = print (String.equal "hello" "world")
+(* Expected: false *)
+
+let _ = print "=== Iteration ==="
+
+(* Test iter *)
+let _ = print "iter:"
+let _ = String.iter print "AB"
+(* Expected: iter: 65 66 *)
+
+(* Test iteri *)
+let _ = print "iteri:"
+let _ = String.iteri (fun index byte -> print (index + byte)) "AB"
+(* Expected: iteri: 66 68 (1+65=66, 2+66=68) *)
+
+(* Test fold_left - sum of bytes *)
+let sum = String.fold_left (fun acc byte -> acc + byte) 0 "ABC"
+let _ = print sum
+(* Expected: 198 (65+66+67) *)
+
+(* Test for_all *)
+let _ = print (String.for_all (fun byte -> byte >= 65 && byte <= 90) "ABC")
+(* Expected: true - all uppercase letters *)
+
+let _ = print (String.for_all (fun byte -> byte >= 65 && byte <= 90) "ABc")
+(* Expected: false - 'c' is lowercase *)
+
+(* Test exists *)
+let _ = print (String.exists (fun byte -> byte == 66) "ABC")
+(* Expected: true - 'B' exists *)
+
+let _ = print (String.exists (fun byte -> byte == 90) "ABC")
+(* Expected: false - 'Z' doesn't exist *)
+
+let _ = print "=== Edge Cases ==="
+
+(* Empty string operations *)
+let _ = print (String.length "")
+(* Expected: 0 *)
+
+let _ = print (String.upper "")
+(* Expected: (empty string) *)
+
+let _ = print (String.trim "")
+(* Expected: (empty string) *)
+
+let _ = print (String.join "," Nil)
+(* Expected: (empty string) *)
+
+let _ = print (String.reverse "")
+(* Expected: (empty string) *)
+
+(* Single character *)
+let _ = print (String.reverse "a")
+(* Expected: a *)
+
+(* Special characters in patterns - need escaping *)
+let _ = print (String.contains "a.b.c" ".")
+(* Expected: true - literal dot *)
+
+let _ = print (String.starts_with "file.txt" "file.")
+(* Expected: true *)
+
+let _ = print "=== All tests passed ==="

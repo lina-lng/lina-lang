@@ -181,7 +181,7 @@ let%expect_test "completion on empty document" =
     let items = Lsp_completion.get_completions store uri (pos 0 0) in
     Printf.printf "count=%d" (List.length items));
   (* Should return all keywords (24) + built-in values (11) = 35 *)
-  [%expect {| count=72 |}]
+  [%expect {| count=78 |}]
 
 let%expect_test "completion on invalid document returns keywords" =
   reset ();

@@ -65,18 +65,21 @@ type ffi_spec = {
     (** Whether to wrap return value in option *)
   ffi_arity : int;
     (** Number of arguments (including receiver for methods) *)
+  ffi_unit_params : bool list;
+    (** Which parameters are unit type (true = unit, should not be passed to Lua) *)
   ffi_location : Location.t;
     (** Source location for error reporting *)
 }
 [@@deriving show, eq]
 
 (** Create a default FFI spec for a global function. *)
-let make_global_spec ~lua_name ~arity ~location =
+let make_global_spec ~lua_name ~arity ~unit_params ~location =
   {
     ffi_kind = FFIKindGlobal [];
     ffi_lua_name = lua_name;
     ffi_is_variadic = false;
     ffi_return_nullable = false;
     ffi_arity = arity;
+    ffi_unit_params = unit_params;
     ffi_location = location;
   }

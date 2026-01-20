@@ -184,7 +184,8 @@ let _ = print (Dict.get_or "a" 0 d)
 |});
   [%expect {|
     1
-    42 |}]
+    42
+    |}]
 
 let%expect_test "Dict.set adds binding" =
   print_endline (compile_and_run {|
@@ -204,7 +205,8 @@ let _ = print (Dict.size d2)
 |});
   [%expect {|
     1
-    2 |}]
+    2
+    |}]
 
 let%expect_test "Dict.get returns Some for existing key" =
   print_endline (compile_and_run {|
@@ -232,7 +234,8 @@ let _ = print (Dict.has "b" d)
 |});
   [%expect {|
     true
-    false |}]
+    false
+    |}]
 
 let%expect_test "Dict.remove removes key" =
   print_endline (compile_and_run {|
@@ -243,7 +246,8 @@ let _ = print (Dict.size d2)
 |});
   [%expect {|
     false
-    1 |}]
+    1
+    |}]
 
 let%expect_test "Dict.remove is immutable" =
   print_endline (compile_and_run {|
@@ -254,7 +258,8 @@ let _ = print (Dict.size d2)
 |});
   [%expect {|
     2
-    1 |}]
+    1
+    |}]
 
 let%expect_test "Dict.map transforms values" =
   print_endline (compile_and_run {|
@@ -265,7 +270,8 @@ let _ = print (Dict.get_or "b" 0 d2)
 |});
   [%expect {|
     10
-    20 |}]
+    20
+    |}]
 
 let%expect_test "Dict.filter keeps matching" =
   print_endline (compile_and_run {|
@@ -276,7 +282,8 @@ let _ = print (Dict.has "a" d2)
 |});
   [%expect {|
     2
-    false |}]
+    false
+    |}]
 
 let%expect_test "Dict.fold sums values" =
   print_endline (compile_and_run {|
@@ -298,7 +305,8 @@ let _ = print (Dict.get_or "c" 0 merged)
   [%expect {|
     1
     20
-    3 |}]
+    3
+    |}]
 
 let%expect_test "Dict.equal compares dicts" =
   print_endline (compile_and_run {|
@@ -310,7 +318,8 @@ let _ = print (Dict.equal (fun a b -> a == b) d1 d3)
 |});
   [%expect {|
     true
-    false |}]
+    false
+    |}]
 
 let%expect_test "Dict works with integer keys" =
   print_endline (compile_and_run {|
@@ -320,7 +329,8 @@ let _ = print (Dict.get_or 2 "?" d)
 |});
   [%expect {|
     one
-    two |}]
+    two
+    |}]
 
 let%expect_test "Dict works with boolean keys" =
   print_endline (compile_and_run {|
@@ -330,7 +340,8 @@ let _ = print (Dict.get_or false 99 d)
 |});
   [%expect {|
     1
-    0 |}]
+    0
+    |}]
 
 let%expect_test "Dict.exists finds matching binding" =
   print_endline (compile_and_run {|
@@ -340,7 +351,8 @@ let _ = print (Dict.exists (fun k v -> v > 10) d)
 |});
   [%expect {|
     true
-    false |}]
+    false
+    |}]
 
 let%expect_test "Dict.for_all checks all bindings" =
   print_endline (compile_and_run {|
@@ -350,7 +362,8 @@ let _ = print (Dict.for_all (fun k v -> v > 1) d)
 |});
   [%expect {|
     true
-    false |}]
+    false
+    |}]
 
 (** {1 Type Error Cases} *)
 

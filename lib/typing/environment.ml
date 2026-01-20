@@ -278,12 +278,22 @@ let initial =
   let env = add_constructor "Nil" Builtins.nil_constructor env in
   let env = add_constructor "Cons" Builtins.cons_constructor env in
 
-  (* Add arithmetic operators *)
+  (* Add integer arithmetic operators *)
   let env = add_builtin "+" Builtins.binary_int_op_type env in
   let env = add_builtin "-" Builtins.binary_int_op_type env in
   let env = add_builtin "*" Builtins.binary_int_op_type env in
   let env = add_builtin "/" Builtins.binary_int_op_type env in
   let env = add_builtin "mod" Builtins.binary_int_op_type env in
+
+  (* Add float arithmetic operators *)
+  let env = add_builtin "+." Builtins.binary_float_op_type env in
+  let env = add_builtin "-." Builtins.binary_float_op_type env in
+  let env = add_builtin "*." Builtins.binary_float_op_type env in
+  let env = add_builtin "/." Builtins.binary_float_op_type env in
+
+  (* Add unary negation operators *)
+  let env = add_builtin "~-" Builtins.unary_int_neg_type env in
+  let env = add_builtin "~-." Builtins.unary_float_neg_type env in
 
   (* Add string concatenation operator *)
   let env = add_builtin "^" Builtins.string_concat_type env in

@@ -76,6 +76,7 @@ type t =
   | TK_STAR
   | TK_PLUS
   | TK_MINUS
+  | TK_MINUSDOT      (** -. float subtraction/negation *)
   | TK_SLASH
   | TK_MOD           (** mod integer modulo *)
   | TK_CARET         (** ^ string concatenation *)
@@ -243,7 +244,7 @@ let token_category = function
   | TK_ARROW | TK_EQUAL | TK_BAR | TK_UNDERSCORE | TK_AT -> Punctuation
 
   (* Operators *)
-  | TK_STAR | TK_PLUS | TK_MINUS | TK_SLASH | TK_MOD | TK_CARET
+  | TK_STAR | TK_PLUS | TK_MINUS | TK_MINUSDOT | TK_SLASH | TK_MOD | TK_CARET
   | TK_LESS | TK_GREATER | TK_LESS_EQUAL | TK_GREATER_EQUAL
   | TK_EQUAL_EQUAL | TK_NOT_EQUAL
   | TK_BANG | TK_COLONEQUALS | TK_COLONCOLON

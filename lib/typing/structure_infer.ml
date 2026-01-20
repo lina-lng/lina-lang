@@ -487,18 +487,25 @@ and infer_structure_item ctx (item : structure_item) =
     (* Check the type expression *)
     let external_type, ctx = Type_expression_check.check_type_expression ctx ext_decl.external_type in
     let env = Typing_context.environment ctx in
-    (* Compute arity from type (count function arrows) *)
-    let rec compute_arity ty =
+    (* Compute arity and unit_params from type (count function arrows) *)
+    let rec compute_arity_and_unit_params ty =
       match ty with
-      | Types.TypeArrow (_, _, ret) -> 1 + compute_arity ret
-      | _ -> 0
+      | Types.TypeArrow (_, arg_ty, ret) ->
+          let is_unit = match arg_ty with
+            | Types.TypeConstructor (Types.PathBuiltin Types.BuiltinUnit, []) -> true
+            | _ -> false
+          in
+          let rest_arity, rest_unit_params = compute_arity_and_unit_params ret in
+          (1 + rest_arity, is_unit :: rest_unit_params)
+      | _ -> (0, [])
     in
-    let arity = compute_arity external_type in
+    let arity, unit_params = compute_arity_and_unit_params external_type in
     (* Build and validate the FFI spec *)
     let ffi_spec = match Typing_ffi.Check.build_ffi_spec
       ~attrs:ext_decl.external_attributes
       ~primitive:ext_decl.external_primitive
       ~arity
+      ~unit_params
       ~location
     with
     | Ok spec -> spec

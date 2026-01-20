@@ -58,6 +58,7 @@ type token =
   | STAR
   | PLUS
   | MINUS
+  | MINUSDOT            (** -. float subtraction/negation *)
   | SLASH
   | MOD                  (** mod integer modulo *)
   | CARET                (** ^ string concatenation *)
@@ -500,7 +501,9 @@ let lex_real_token state =
   | ('@' | '^'), Plus binding_op_char ->
       update_location state;
       Some (INFIXOP1 (current_lexeme state), state.current_location)
-  (* INFIXOP2: + - followed by operator chars *)
+  (* Float subtraction/negation operator: -. *)
+  | "-." -> make_token MINUSDOT state
+  (* INFIXOP2: + - followed by operator chars (except -. which is handled above) *)
   | ('+' | '-'), Plus binding_op_char ->
       update_location state;
       Some (INFIXOP2 (current_lexeme state), state.current_location)
