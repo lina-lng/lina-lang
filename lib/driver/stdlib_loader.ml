@@ -1032,6 +1032,151 @@ let equal eq arr1 arr2 =
         i := !i + 1
     done;
     !ok
+
+(** {1 Filtering} *)
+
+(** [filter predicate arr] returns new array with elements satisfying [predicate]. *)
+let filter predicate arr =
+  let len = length arr in
+  if len == 0 then empty ()
+  else
+    let result = ref [] in
+    let _ = iteri (fun index elem ->
+      if predicate elem then result := elem :: !result
+      else ()
+    ) arr in
+    of_list (List.reverse !result)
+
+(** [filter_map f arr] applies [f] to each element, keeping [Some] results. *)
+let filter_map f arr =
+  let len = length arr in
+  if len == 0 then empty ()
+  else
+    let result = ref [] in
+    let _ = iteri (fun index elem ->
+      match f elem with
+      | Some y -> result := y :: !result
+      | None -> ()
+    ) arr in
+    of_list (List.reverse !result)
+
+(** {1 Stack Operations} *)
+
+(** [push arr elem] returns a new array with [elem] added at the end.
+    Does not mutate the original array. O(n). *)
+let push arr elem =
+  let len = length arr in
+  let new_arr = make (len + 1) elem in
+  let _ = iteri (fun index x -> set_exn new_arr index x) arr in
+  new_arr
+
+(** [pop arr] returns [Some (last_element, new_array)] where [new_array] has
+    the last element removed. Returns [None] if array is empty.
+    Does not mutate the original array. O(n). *)
+let pop arr =
+  let len = length arr in
+  if len == 0 then None
+  else
+    let last_elem = get_exn arr (len - 1) in
+    let new_arr = init (len - 1) (fun index -> get_exn arr index) in
+    Some (last_elem, new_arr)
+
+(** {1 In-Place Operations} *)
+
+(** [reverse_in_place arr] reverses array in place. Mutates [arr]. *)
+let reverse_in_place arr =
+  let len = length arr in
+  let half = len / 2 in
+  let rec swap i =
+    if i >= half then ()
+    else
+      let j = len - 1 - i in
+      let temp = get_exn arr i in
+      let _ = set_exn arr i (get_exn arr j) in
+      let _ = set_exn arr j temp in
+      swap (i + 1)
+  in
+  swap 0
+
+(** [sort_in_place cmp arr] sorts array in place using [cmp]. Mutates [arr].
+    [cmp a b] should return negative if [a < b], 0 if equal, positive if [a > b]. *)
+let sort_in_place cmp arr =
+  let swap i j =
+    let temp = get_exn arr i in
+    let _ = set_exn arr i (get_exn arr j) in
+    set_exn arr j temp
+  in
+
+  let rec partition low high =
+    let pivot = get_exn arr high in
+    let i = ref (low - 1) in
+    let rec loop j =
+      if j >= high then !i + 1
+      else
+        let _ = if cmp (get_exn arr j) pivot <= 0 then
+          let _ = i := !i + 1 in
+          swap !i j
+        else () in
+        loop (j + 1)
+    in
+    let pi = loop low in
+    let _ = swap pi high in
+    pi
+  in
+
+  let rec quicksort low high =
+    if low < high then
+      let pi = partition low high in
+      let _ = quicksort low (pi - 1) in
+      quicksort (pi + 1) high
+    else ()
+  in
+
+  let len = length arr in
+  if len > 1 then quicksort 0 (len - 1) else ()
+
+(* FFI bindings to Lua table functions - 1-indexed *)
+@val @scope("table")
+external table_insert_raw : 'a array -> int -> 'a -> unit = "insert"
+
+@val @scope("table") @return(nullable)
+external table_remove_raw : 'a array -> int -> 'a option = "remove"
+
+(** [insert_in_place arr index elem] inserts [elem] at position [index] (0-indexed),
+    shifting subsequent elements to the right. Mutates [arr] in place.
+    Valid indices: [0] to [length arr] (inclusive for append).
+    Does nothing if [index] is out of bounds. O(n) worst case. *)
+let insert_in_place arr index elem =
+  let len = length arr in
+  if index < 0 || index > len then ()
+  else table_insert_raw arr (index + 1) elem
+
+(** [insert_in_place_exn arr index elem] inserts [elem] at position [index].
+    Raises if [index] is outside [0, length arr]. *)
+let insert_in_place_exn arr index elem =
+  let len = length arr in
+  if index < 0 || index > len then
+    error "Array.insert_in_place_exn: index out of bounds"
+  else
+    table_insert_raw arr (index + 1) elem
+
+(** [remove_in_place arr index] removes and returns element at [index] (0-indexed).
+    Returns [None] if [index] is out of bounds. O(n) worst case. *)
+let remove_in_place arr index =
+  let len = length arr in
+  if index < 0 || index >= len then None
+  else table_remove_raw arr (index + 1)
+
+(** [remove_in_place_exn arr index] removes and returns element at [index].
+    Raises if [index] is out of bounds. *)
+let remove_in_place_exn arr index =
+  let len = length arr in
+  if index < 0 || index >= len then
+    error "Array.remove_in_place_exn: index out of bounds"
+  else
+    match table_remove_raw arr (index + 1) with
+    | Some v -> v
+    | None -> error "Array.remove_in_place_exn: unexpected nil from table.remove"
 |}
 
 let dict_source = {|
@@ -2113,6 +2258,289 @@ let execute command =
 let exit code = exit_raw code
 |}
 
+let coroutine_source = {|
+(** Coroutines for cooperative multitasking.
+
+    Lua coroutines provide cooperative multitasking where execution can be
+    suspended with yield and resumed later. Each coroutine has its own stack.
+
+    {1 Simplified Type Model}
+
+    This module uses a simplified type model where ['a thread] represents
+    a coroutine that yields and returns values of type ['a]. The full Lua
+    coroutine model supports bidirectional communication (passing values
+    through resume/yield), which is not exposed in this simplified API.
+
+    {1 Limitations}
+
+    - Coroutine bodies take [unit], not arguments (use closures to capture state)
+    - Values cannot be passed through [resume] to the coroutine
+    - [wrap] raises on error instead of returning Result
+    - [is_yieldable] is not available (Lua 5.3+ only)
+
+    {1 Example}
+
+    {[
+      (* Generator pattern *)
+      let numbers = Coroutine.create (fun () ->
+        let _ = Coroutine.yield 1 in
+        let _ = Coroutine.yield 2 in
+        3
+      ) in
+      (* Coroutine.resume numbers returns Ok 1, then Ok 2, then Ok 3 *)
+    ]} *)
+
+(** Coroutine handle (opaque type).
+    The type parameter ['a] is the type of values yielded and returned. *)
+type 'a thread
+
+(** Wrapped coroutine as a callable (opaque type). *)
+type 'a generator
+
+(** Coroutine status. *)
+type status = Suspended | Running | Normal | Dead
+
+(* FFI Declarations *)
+
+@val @scope("coroutine")
+external create : (unit -> 'a) -> 'a thread = "create"
+
+@val @scope("coroutine")
+external status_raw : 'a thread -> string = "status"
+
+(** [yield value] suspends the coroutine and returns [value] to the caller.
+    When the coroutine is resumed, [yield] returns (the same type is used
+    for both the yielded value and the return value due to type simplification). *)
+@val @scope("coroutine")
+external yield : 'a -> 'a = "yield"
+
+@val @scope("coroutine") @return(nullable)
+external running_raw : unit -> 'a thread option = "running"
+
+@val @scope("coroutine")
+external wrap_raw : (unit -> 'a) -> 'a generator = "wrap"
+
+@val
+external call_generator : 'a generator -> 'a = "_lina_call_generator"
+
+(* Resume uses the runtime helper to handle multiple return values *)
+@val
+external resume_raw : 'a thread -> ('a, string) result = "_lina_coroutine_resume"
+
+(* Public API *)
+
+(** Resume a suspended coroutine.
+    Returns [Ok value] with the yielded or returned value,
+    or [Error message] if the coroutine raised an error.
+
+    Note: For unit-returning coroutines, [Ok ()] is returned on completion. *)
+let resume co = resume_raw co
+
+(** Get the status of a coroutine.
+    - [Suspended]: Not yet started or yielded
+    - [Running]: Currently executing
+    - [Normal]: Resumed another coroutine (rare)
+    - [Dead]: Finished execution or errored *)
+let status co =
+  match status_raw co with
+  | "suspended" -> Suspended
+  | "running" -> Running
+  | "normal" -> Normal
+  | _ -> Dead
+
+(** Get the currently running coroutine, or [None] if in main thread. *)
+let running () = running_raw ()
+
+(** Create a generator from a coroutine body.
+    The generator can be called repeatedly using [next] to get yielded values.
+
+    Warning: Unlike [resume], generators raise errors. Use [resume] for
+    error handling. *)
+let wrap f = wrap_raw f
+
+(** Get the next value from a generator.
+    Each call resumes the underlying coroutine until the next yield or return.
+    Raises an error if the generator is exhausted or encounters an error. *)
+let next gen = call_generator gen
+|}
+
+let debug_source = {|
+(** Debug utilities for introspection and error diagnosis.
+
+    Provides bindings to Lua's debug library for stack traces,
+    function introspection, and variable inspection.
+
+    {1 Limitations}
+
+    - Only read-only operations are exposed (no setlocal/setupvalue)
+    - Stack levels are 1-indexed from the caller's perspective
+    - Some fields may not be available for C functions
+
+    {1 Example}
+
+    {[
+      (* Get a stack trace *)
+      let trace = Debug.traceback () in
+      print trace
+
+      (* Inspect a function *)
+      match Debug.getinfo 1 with
+      | Some info ->
+          print ("Function type: " ^ Debug.info_what info)
+      | None -> ()
+    ]} *)
+
+(** {1 Types} *)
+
+(** Function information (opaque type).
+    Returned by getinfo, fields accessed via accessor functions. *)
+type info
+
+(** Local variable information. *)
+type 'a local_info = { name : string; value : 'a }
+
+(** Upvalue information. *)
+type 'a upvalue_info = { name : string; value : 'a }
+
+(** {1 FFI Declarations - Traceback} *)
+
+@val @scope("debug")
+external traceback_raw : unit -> string = "traceback"
+
+@val @scope("debug")
+external traceback_msg_raw : string -> int -> string = "traceback"
+
+(** {1 FFI Declarations - Function Info} *)
+
+@val @scope("debug") @return(nullable)
+external getinfo_raw : int -> string -> info option = "getinfo"
+
+(** {1 FFI Declarations - Info Accessors} *)
+
+(** Source that created the function.
+    Prefixed with '@' for files, '=' for C functions. *)
+@get
+external info_source : info -> string = "source"
+
+(** Short version of source (max 60 chars). *)
+@get
+external info_short_src : info -> string = "short_src"
+
+(** Line where function definition starts (0 for C functions). *)
+@get
+external info_linedefined : info -> int = "linedefined"
+
+(** Line where function definition ends. *)
+@get
+external info_lastlinedefined : info -> int = "lastlinedefined"
+
+(** Function type: "Lua", "C", "main", or "tail". *)
+@get
+external info_what : info -> string = "what"
+
+(** Current executing line (-1 if not available). *)
+@get
+external info_currentline : info -> int = "currentline"
+
+(** Number of upvalues. *)
+@get
+external info_nups : info -> int = "nups"
+
+(** Function name if available (returns empty string if not). *)
+@get
+external info_name : info -> string = "name"
+
+(** How name was found: "global", "local", "method", "field", or "". *)
+@get
+external info_namewhat : info -> string = "namewhat"
+
+(** {1 FFI Declarations - Local Variables and Upvalues} *)
+
+(** Runtime helper for getlocal (packages multiple returns). *)
+@val @return(nullable)
+external getlocal_raw : int -> int -> 'a local_info option = "_lina_debug_getlocal"
+
+(** Runtime helper for getupvalue (packages multiple returns). *)
+@val @return(nullable)
+external getupvalue_raw : ('a -> 'b) -> int -> 'c upvalue_info option = "_lina_debug_getupvalue"
+
+(** {1 Stack Traceback} *)
+
+(** Get a stack traceback from the current position.
+    Returns a string with one line per stack frame. *)
+let traceback () = traceback_raw ()
+
+(** Get a stack traceback with a custom message prefix.
+    The message is prepended to the traceback output. *)
+let traceback_msg msg = traceback_msg_raw msg 1
+
+(** Get a stack traceback starting from a specific level.
+    Level 1 is the function calling traceback_from,
+    level 2 is its caller, etc. *)
+let traceback_from level = traceback_msg_raw "" level
+
+(** {1 Function Introspection} *)
+
+(** Get information about the function at stack level.
+    Level 1 is the function calling getinfo,
+    level 2 is its caller, etc.
+    Returns [None] if the level is invalid. *)
+let getinfo level = getinfo_raw level "Slnuf"
+
+(** {1 Variable Inspection} *)
+
+(** Get a local variable at stack level and index.
+    Level 1 is the function calling getlocal.
+    Index 1 is the first local variable (including parameters).
+    Returns [Some {name; value}] or [None] if invalid. *)
+let getlocal level index = getlocal_raw level index
+
+(** Get an upvalue from a function closure.
+    Index 1 is the first upvalue.
+    Returns [Some {name; value}] or [None] if invalid. *)
+let getupvalue func index = getupvalue_raw func index
+|}
+
+(** Lua runtime helpers for coroutine and debug support.
+    These are prepended to the stdlib prelude before any module definitions. *)
+let lua_runtime_helpers = {|-- Lina runtime helpers for coroutine support
+local function _lina_coroutine_resume(co)
+  local ok, result = coroutine.resume(co)
+  if ok then
+    return {_tag = 0, _0 = result}
+  else
+    return {_tag = 1, _0 = result}
+  end
+end
+
+-- Call a generator (wrapped coroutine) to get the next value
+local function _lina_call_generator(gen)
+  return gen()
+end
+
+-- Lina runtime helpers for debug support
+-- Get local variable and package as table (nil if invalid)
+-- Note: +4 offset accounts for helper + IIFE + curried wrappers
+local function _lina_debug_getlocal(level, index)
+  local name, value = debug.getlocal(level + 4, index)
+  if name == nil then
+    return nil
+  else
+    return {name = name, value = value}
+  end
+end
+
+-- Get upvalue and package as table (nil if invalid)
+local function _lina_debug_getupvalue(func, index)
+  local name, value = debug.getupvalue(func, index)
+  if name == nil then
+    return nil
+  else
+    return {name = name, value = value}
+  end
+end
+|}
+
 (** All stdlib modules in load order.
     Order matters: modules are loaded sequentially and can only depend on
     modules that appear earlier in this list. *)
@@ -2130,6 +2558,8 @@ let stdlib_modules = [
   { name = "Math"; source = math_source };
   { name = "Io"; source = io_source };
   { name = "Os"; source = os_source };
+  { name = "Coroutine"; source = coroutine_source };
+  { name = "Debug"; source = debug_source };
 ]
 
 (** Use the existing signature extraction from Structure_infer *)
@@ -2260,7 +2690,8 @@ let load_stdlib_with_prelude base_env =
     (env, wrapped_code :: codes)
   ) (base_env, []) stdlib_modules in
 
-  let lua_prelude = String.concat "\n" (List.rev lua_codes) in
+  let module_code = String.concat "\n" (List.rev lua_codes) in
+  let lua_prelude = lua_runtime_helpers ^ "\n" ^ module_code in
   { env; lua_prelude }
 
 (** Cached stdlib result to avoid recompilation. *)

@@ -339,3 +339,46 @@ let sort_in_place cmp arr =
 
   let len = length arr in
   if len > 1 then quicksort 0 (len - 1) else ()
+
+(* FFI bindings to Lua table functions - 1-indexed *)
+@val @scope("table")
+external table_insert_raw : 'a array -> int -> 'a -> unit = "insert"
+
+@val @scope("table") @return(nullable)
+external table_remove_raw : 'a array -> int -> 'a option = "remove"
+
+(** [insert_in_place arr index elem] inserts [elem] at position [index] (0-indexed),
+    shifting subsequent elements to the right. Mutates [arr] in place.
+    Valid indices: [0] to [length arr] (inclusive for append).
+    Does nothing if [index] is out of bounds. O(n) worst case. *)
+let insert_in_place arr index elem =
+  let len = length arr in
+  if index < 0 || index > len then ()
+  else table_insert_raw arr (index + 1) elem
+
+(** [insert_in_place_exn arr index elem] inserts [elem] at position [index].
+    Raises if [index] is outside [0, length arr]. *)
+let insert_in_place_exn arr index elem =
+  let len = length arr in
+  if index < 0 || index > len then
+    error "Array.insert_in_place_exn: index out of bounds"
+  else
+    table_insert_raw arr (index + 1) elem
+
+(** [remove_in_place arr index] removes and returns element at [index] (0-indexed).
+    Returns [None] if [index] is out of bounds. O(n) worst case. *)
+let remove_in_place arr index =
+  let len = length arr in
+  if index < 0 || index >= len then None
+  else table_remove_raw arr (index + 1)
+
+(** [remove_in_place_exn arr index] removes and returns element at [index].
+    Raises if [index] is out of bounds. *)
+let remove_in_place_exn arr index =
+  let len = length arr in
+  if index < 0 || index >= len then
+    error "Array.remove_in_place_exn: index out of bounds"
+  else
+    match table_remove_raw arr (index + 1) with
+    | Some v -> v
+    | None -> error "Array.remove_in_place_exn: unexpected nil from table.remove"

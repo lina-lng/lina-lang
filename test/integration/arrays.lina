@@ -242,4 +242,99 @@ let sum16 = Array.fold_left (fun acc x -> acc + x) 0 arr16
 let _ = print sum16
 (* Expected: 6 *)
 
+let _ = print "=== Insert/Remove In-Place ==="
+
+(* Test insert_in_place at beginning *)
+let arr_ins = Array.of_list (Cons (1, Cons (2, Cons (3, Nil))))
+let _ = Array.insert_in_place arr_ins 0 0
+let _ = print (Array.length arr_ins)
+(* Expected: 4 *)
+let _ = print (Array.get_exn arr_ins 0)
+(* Expected: 0 *)
+
+(* Test insert_in_place in middle *)
+let _ = Array.insert_in_place arr_ins 2 99
+let _ = print (Array.get_exn arr_ins 2)
+(* Expected: 99 *)
+
+(* Test insert_in_place at end (append) *)
+let arr_app = Array.make 2 0
+let _ = Array.insert_in_place arr_app 2 42
+let _ = print (Array.length arr_app)
+(* Expected: 3 *)
+let _ = print (Array.get_exn arr_app 2)
+(* Expected: 42 *)
+
+(* Test insert_in_place with invalid index does nothing *)
+let arr_noop = Array.make 2 0
+let _ = Array.insert_in_place arr_noop 10 99
+let _ = print (Array.length arr_noop)
+(* Expected: 2 *)
+
+(* Test insert_in_place with negative index does nothing *)
+let _ = Array.insert_in_place arr_noop (-1) 99
+let _ = print (Array.length arr_noop)
+(* Expected: 2 *)
+
+(* Test remove_in_place *)
+let arr_rem = Array.of_list (Cons (10, Cons (20, Cons (30, Nil))))
+let _ = match Array.remove_in_place arr_rem 1 with
+  | Some v -> print v
+  | None -> print "none"
+(* Expected: 20 *)
+let _ = print (Array.length arr_rem)
+(* Expected: 2 *)
+let _ = print (Array.get_exn arr_rem 1)
+(* Expected: 30 (shifted) *)
+
+(* Test remove_in_place from beginning *)
+let arr_rem2 = Array.of_list (Cons (1, Cons (2, Cons (3, Nil))))
+let _ = match Array.remove_in_place arr_rem2 0 with
+  | Some v -> print v
+  | None -> print "none"
+(* Expected: 1 *)
+let _ = print (Array.get_exn arr_rem2 0)
+(* Expected: 2 *)
+
+(* Test remove_in_place from end *)
+let arr_rem3 = Array.of_list (Cons (1, Cons (2, Cons (3, Nil))))
+let _ = match Array.remove_in_place arr_rem3 2 with
+  | Some v -> print v
+  | None -> print "none"
+(* Expected: 3 *)
+let _ = print (Array.length arr_rem3)
+(* Expected: 2 *)
+
+(* Test remove_in_place with invalid index *)
+let arr_rem4 = Array.make 2 0
+let _ = match Array.remove_in_place arr_rem4 10 with
+  | Some v -> print v
+  | None -> print "out of bounds"
+(* Expected: out of bounds *)
+
+(* Test remove_in_place with negative index *)
+let _ = match Array.remove_in_place arr_rem4 (-1) with
+  | Some v -> print v
+  | None -> print "negative index"
+(* Expected: negative index *)
+
+(* Test remove_in_place on empty array *)
+let arr_empty_rem = Array.make 0 0
+let _ = match Array.remove_in_place arr_empty_rem 0 with
+  | Some v -> print v
+  | None -> print "empty array"
+(* Expected: empty array *)
+
+(* Test insert_in_place_exn *)
+let arr_exn = Array.make 2 0
+let _ = Array.insert_in_place_exn arr_exn 1 42
+let _ = print (Array.get_exn arr_exn 1)
+(* Expected: 42 *)
+
+(* Test remove_in_place_exn *)
+let arr_exn2 = Array.of_list (Cons (10, Cons (20, Nil)))
+let removed = Array.remove_in_place_exn arr_exn2 0
+let _ = print removed
+(* Expected: 10 *)
+
 let _ = print "=== All tests passed ==="

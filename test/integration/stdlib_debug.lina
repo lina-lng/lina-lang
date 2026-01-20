@@ -1,0 +1,103 @@
+(* Integration tests for Debug module *)
+
+(* Test: traceback returns non-empty string *)
+let test_traceback () =
+  let trace = Debug.traceback () in
+  let has_content = String.length trace > 0 in
+  print (if has_content then "PASS: traceback" else "FAIL: traceback")
+
+(* Test: traceback_msg includes the message *)
+let test_traceback_msg () =
+  let trace = Debug.traceback_msg "CUSTOM_ERROR" in
+  let has_msg = String.find trace "CUSTOM_ERROR" in
+  print (if has_msg then "PASS: traceback_msg" else "FAIL: traceback_msg")
+
+(* Test: traceback_from starts at correct level *)
+let test_traceback_from () =
+  let trace = Debug.traceback_from 1 in
+  let has_content = String.length trace > 0 in
+  print (if has_content then "PASS: traceback_from" else "FAIL: traceback_from")
+
+(* Test: getinfo returns info for valid level *)
+let test_getinfo () =
+  match Debug.getinfo 1 with
+  | Some info ->
+      let what = Debug.info_what info in
+      let is_lua = what == "Lua" in
+      print (if is_lua then "PASS: getinfo" else "FAIL: getinfo (what=" ^ what ^ ")")
+  | None -> print "FAIL: getinfo (none)"
+
+(* Test: getinfo source field *)
+let test_getinfo_source () =
+  match Debug.getinfo 1 with
+  | Some info ->
+      let src = Debug.info_short_src info in
+      let has_content = String.length src > 0 in
+      print (if has_content then "PASS: getinfo_source" else "FAIL: getinfo_source")
+  | None -> print "FAIL: getinfo_source (none)"
+
+(* Test: getinfo returns None for invalid level *)
+let test_getinfo_invalid () =
+  match Debug.getinfo 100 with
+  | None -> print "PASS: getinfo_invalid"
+  | Some _ -> print "FAIL: getinfo_invalid (should be None)"
+
+(* Test: getlocal returns local variable *)
+let test_getlocal () =
+  let my_var = 42 in
+  let _ = my_var in
+  match Debug.getlocal 1 1 with
+  | Some local_info ->
+      let has_name = String.length local_info.name > 0 in
+      print (if has_name then "PASS: getlocal" else "FAIL: getlocal (no name)")
+  | None -> print "FAIL: getlocal (none)"
+
+(* Test: getlocal returns None for invalid index *)
+let test_getlocal_invalid () =
+  match Debug.getlocal 1 100 with
+  | None -> print "PASS: getlocal_invalid"
+  | Some _ -> print "FAIL: getlocal_invalid (should be None)"
+
+(* Test: getupvalue on closure *)
+let test_getupvalue () =
+  let captured = 100 in
+  let closure = fun () -> captured in
+  match Debug.getupvalue closure 1 with
+  | Some upvalue_info ->
+      let has_name = String.length upvalue_info.name > 0 in
+      print (if has_name then "PASS: getupvalue" else "FAIL: getupvalue (no name)")
+  | None -> print "FAIL: getupvalue (none)"
+
+(* Test: getupvalue returns None for invalid index *)
+let test_getupvalue_invalid () =
+  let closure = fun () -> 42 in
+  match Debug.getupvalue closure 100 with
+  | None -> print "PASS: getupvalue_invalid"
+  | Some _ -> print "FAIL: getupvalue_invalid (should be None)"
+
+(* Test: info accessor functions *)
+let test_info_accessors () =
+  match Debug.getinfo 1 with
+  | Some info ->
+      let _ = Debug.info_source info in
+      let _ = Debug.info_short_src info in
+      let _ = Debug.info_linedefined info in
+      let _ = Debug.info_lastlinedefined info in
+      let _ = Debug.info_what info in
+      let _ = Debug.info_currentline info in
+      let _ = Debug.info_nups info in
+      print "PASS: info_accessors"
+  | None -> print "FAIL: info_accessors (no info)"
+
+(* Run all tests *)
+let _ = test_traceback ()
+let _ = test_traceback_msg ()
+let _ = test_traceback_from ()
+let _ = test_getinfo ()
+let _ = test_getinfo_source ()
+let _ = test_getinfo_invalid ()
+let _ = test_getlocal ()
+let _ = test_getlocal_invalid ()
+let _ = test_getupvalue ()
+let _ = test_getupvalue_invalid ()
+let _ = test_info_accessors ()

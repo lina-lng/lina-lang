@@ -1,0 +1,166 @@
+(* Integration tests for Coroutine module *)
+
+(* Test: Basic coroutine creation and resume *)
+let test_basic_coroutine () =
+  let co = Coroutine.create (fun () -> 42) in
+  match Coroutine.resume co with
+  | Ok value -> print (if value == 42 then "PASS: basic" else "FAIL: basic")
+  | Error _ -> print "FAIL: basic (error)"
+
+(* Test: Coroutine yield *)
+let test_yield () =
+  let co = Coroutine.create (fun () ->
+    let _ = Coroutine.yield 1 in
+    let _ = Coroutine.yield 2 in
+    3
+  ) in
+  let r1 = Coroutine.resume co in
+  let r2 = Coroutine.resume co in
+  let r3 = Coroutine.resume co in
+  match (r1, r2, r3) with
+  | (Ok 1, Ok 2, Ok 3) -> print "PASS: yield"
+  | _ -> print "FAIL: yield"
+
+(* Test: Coroutine status *)
+let test_status () =
+  let co = Coroutine.create (fun () -> 42) in
+  let s1 = Coroutine.status co in
+  let _ = Coroutine.resume co in
+  let s2 = Coroutine.status co in
+  match (s1, s2) with
+  | (Coroutine.Suspended, Coroutine.Dead) -> print "PASS: status"
+  | _ -> print "FAIL: status"
+
+(* Test: Error handling *)
+let test_error () =
+  let co = Coroutine.create (fun () -> error "test error") in
+  match Coroutine.resume co with
+  | Error _ -> print "PASS: error"
+  | Ok _ -> print "FAIL: error"
+
+(* Test: Status after error *)
+let test_status_after_error () =
+  let co = Coroutine.create (fun () -> error "test error") in
+  let _ = Coroutine.resume co in
+  match Coroutine.status co with
+  | Coroutine.Dead -> print "PASS: status_after_error"
+  | _ -> print "FAIL: status_after_error"
+
+(* Test: wrap and next function *)
+let test_wrap () =
+  let gen = Coroutine.wrap (fun () ->
+    let _ = Coroutine.yield 1 in
+    2
+  ) in
+  let v1 = Coroutine.next gen in
+  let v2 = Coroutine.next gen in
+  if v1 == 1 && v2 == 2 then print "PASS: wrap"
+  else print "FAIL: wrap"
+
+(* Test: Yield for suspension with counter tracking *)
+let test_yield_suspension () =
+  let counter = ref 0 in
+  let co = Coroutine.create (fun () ->
+    counter := !counter + 1;
+    let _ = Coroutine.yield 100 in
+    counter := !counter + 1;
+    200
+  ) in
+  let _ = Coroutine.resume co in
+  let c1 = !counter in
+  let _ = Coroutine.resume co in
+  let c2 = !counter in
+  if c1 == 1 && c2 == 2 then print "PASS: yield_suspension"
+  else print "FAIL: yield_suspension"
+
+(* Test: Closure captures state *)
+let test_closure_state () =
+  let start = 10 in
+  let co = Coroutine.create (fun () ->
+    let _ = Coroutine.yield (start + 1) in
+    start + 2
+  ) in
+  match (Coroutine.resume co, Coroutine.resume co) with
+  | (Ok 11, Ok 12) -> print "PASS: closure_state"
+  | _ -> print "FAIL: closure_state"
+
+(* Test: running returns current coroutine *)
+let test_running () =
+  let co = Coroutine.create (fun () ->
+    match Coroutine.running () with
+    | Some _ -> 1
+    | None -> 0
+  ) in
+  match Coroutine.resume co with
+  | Ok 1 -> print "PASS: running"
+  | _ -> print "FAIL: running"
+
+(* Test: Generator pattern - Fibonacci sequence *)
+let test_fibonacci () =
+  (* Create a fibonacci generator that yields F(0) through F(7) *)
+  let fib = Coroutine.create (fun () ->
+    let a = ref 0 in
+    let b = ref 1 in
+    let _ = Coroutine.yield !a in  (* F(0) = 0 *)
+    let _ = Coroutine.yield !b in  (* F(1) = 1 *)
+    (* Generate F(2) through F(6) via loop, then return F(7) *)
+    for _i = 1 to 5 do
+      let next = !a + !b in
+      a := !b;
+      b := next;
+      let _ = Coroutine.yield next in
+      ()
+    done;
+    (* One more iteration for F(7) = 13 *)
+    let final = !a + !b in
+    final
+  ) in
+  (* Collect first 8 fibonacci numbers: 0, 1, 1, 2, 3, 5, 8, 13 *)
+  let sum = ref 0 in
+  for _i = 1 to 8 do
+    match Coroutine.resume fib with
+    | Ok n -> sum := !sum + n
+    | Error _e -> ()
+  done;
+  (* Sum of 0+1+1+2+3+5+8+13 = 33 *)
+  if !sum == 33 then print "PASS: fibonacci"
+  else print "FAIL: fibonacci"
+
+(* Test: List equality helper and proper list comparison *)
+let rec list_equal xs ys =
+  match (xs, ys) with
+  | ([], []) -> true
+  | (x :: xs_rest, y :: ys_rest) -> x == y && list_equal xs_rest ys_rest
+  | _ -> false
+
+(* Test: Generator collecting values into list *)
+let test_generator_collect () =
+  let gen = Coroutine.create (fun () ->
+    let _ = Coroutine.yield 10 in
+    let _ = Coroutine.yield 20 in
+    let _ = Coroutine.yield 30 in
+    40
+  ) in
+  let results = ref [] in
+  for _i = 1 to 4 do
+    match Coroutine.resume gen with
+    | Ok n -> results := n :: !results
+    | Error _e -> ()
+  done;
+  (* Results are in reverse order: [40; 30; 20; 10] *)
+  let expected = [40; 30; 20; 10] in
+  if list_equal !results expected then print "PASS: generator_collect"
+  else print "FAIL: generator_collect"
+
+(* Run all tests *)
+let _ = test_basic_coroutine ()
+let _ = test_yield ()
+let _ = test_status ()
+let _ = test_error ()
+let _ = test_status_after_error ()
+let _ = test_wrap ()
+let _ = test_yield_suspension ()
+let _ = test_closure_state ()
+let _ = test_running ()
+let _ = test_fibonacci ()
+let _ = test_generator_collect ()

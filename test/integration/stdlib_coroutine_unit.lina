@@ -1,0 +1,75 @@
+(* Integration tests for Coroutine module - Unit type scenarios
+
+   These tests are in a separate file to avoid type unification issues
+   with the main coroutine test file (which uses int coroutines). *)
+
+(* Test: Unit-returning coroutine *)
+let test_unit_return () =
+  let co = Coroutine.create (fun () ->
+    let _ = print "inside unit coroutine" in
+    ()
+  ) in
+  match Coroutine.resume co with
+  | Ok _ -> print "PASS: unit_return"
+  | Error _e -> print "FAIL: unit_return"
+
+(* Test: Yield with unit value *)
+let test_yield_unit () =
+  let counter = ref 0 in
+  let co = Coroutine.create (fun () ->
+    counter := !counter + 1;
+    let _ = Coroutine.yield () in
+    counter := !counter + 1;
+    ()
+  ) in
+  let _ = Coroutine.resume co in
+  let c1 = !counter in
+  let _ = Coroutine.resume co in
+  let c2 = !counter in
+  if c1 == 1 && c2 == 2 then print "PASS: yield_unit"
+  else print "FAIL: yield_unit"
+
+(* Test: Multiple unit yields *)
+let test_multiple_unit_yields () =
+  let steps = ref 0 in
+  let co = Coroutine.create (fun () ->
+    steps := 1;
+    let _ = Coroutine.yield () in
+    steps := 2;
+    let _ = Coroutine.yield () in
+    steps := 3;
+    ()
+  ) in
+  let check_ok r = match r with Ok _ -> true | Error _ -> false in
+  let r1 = Coroutine.resume co in
+  let s1 = !steps in
+  let r2 = Coroutine.resume co in
+  let s2 = !steps in
+  let r3 = Coroutine.resume co in
+  let s3 = !steps in
+  if check_ok r1 && check_ok r2 && check_ok r3 then
+    if s1 == 1 && s2 == 2 && s3 == 3 then print "PASS: multiple_unit_yields"
+    else print "FAIL: multiple_unit_yields (wrong steps)"
+  else print "FAIL: multiple_unit_yields (wrong results)"
+
+(* Test: Unit generator with wrap/next *)
+let test_unit_generator () =
+  let counter = ref 0 in
+  let gen = Coroutine.wrap (fun () ->
+    counter := !counter + 1;
+    let _ = Coroutine.yield () in
+    counter := !counter + 1;
+    ()
+  ) in
+  let _ = Coroutine.next gen in
+  let c1 = !counter in
+  let _ = Coroutine.next gen in
+  let c2 = !counter in
+  if c1 == 1 && c2 == 2 then print "PASS: unit_generator"
+  else print "FAIL: unit_generator"
+
+(* Run all tests *)
+let _ = test_unit_return ()
+let _ = test_yield_unit ()
+let _ = test_multiple_unit_yields ()
+let _ = test_unit_generator ()
