@@ -14,9 +14,10 @@ FAILED=0
 
 run_test() {
     local file="$1"
-    local name=$(basename "$file" .lina)
+    # Use full path (with slashes replaced) to avoid conflicts between same-named files
+    local name=$(echo "$file" | sed 's|^\./||; s|\.lina$||; s|/|_|g')
 
-    echo -n "Testing $name... "
+    echo -n "Testing $file... "
 
     # Compile (use relaxed mode for tests - strict mode is the default)
     if ! ../../_build/default/bin/main.exe compile "$file" -o "$name.lua" --relaxed 2>/dev/null; then
@@ -44,8 +45,8 @@ run_test() {
 echo "=== Lina Module System Integration Tests ==="
 echo ""
 
-# Run all .lina files in this directory
-for file in *.lina; do
+# Find all .lina files recursively, excluding multifile/
+for file in $(fd -e lina -E multifile . 2>/dev/null || find . -name "*.lina" -not -path "./multifile/*" | sort); do
     [ -e "$file" ] || continue
     run_test "$file"
 done
