@@ -1,0 +1,384 @@
+(** Mutable array utilities.
+
+    Arrays are 0-indexed, fixed-size, mutable sequences backed by Lua tables.
+    For immutable sequences, use the List module instead.
+
+    The array type is built-in: ['a array] *)
+
+(** {1 Construction} *)
+
+(** Create an array of [n] elements, all initialized to [value].
+    Returns empty array if [n <= 0]. *)
+let make n value =
+  if n <= 0 then array_make 0 value
+  else array_make n value
+
+(** Create an array of length [n] where element at index [i] is [f i].
+    Returns empty array if [n <= 0]. Note: [f 0] is always called. *)
+let init n f =
+  let first = f 0 in
+  if n <= 0 then array_make 0 first
+  else
+    let arr = array_make n first in
+    for i = 1 to n - 1 do
+      let _ = array_unsafe_set arr i (f i) in ()
+    done;
+    arr
+
+(** The empty array. Note: each call creates a fresh empty array. *)
+let empty () = array_make 0 ()
+
+(** {1 Basic Operations} *)
+
+(** Return the length of the array. O(1). *)
+let length arr = array_length arr
+
+(** Return [true] if the array is empty. *)
+let is_empty arr = array_length arr == 0
+
+(** Get element at index [i], or [None] if out of bounds. O(1). *)
+let get arr i =
+  if i < 0 || i >= array_length arr then None
+  else Some (array_unsafe_get arr i)
+
+(** Get element at index [i], raising on out of bounds. O(1). *)
+let get_exn arr i =
+  if i < 0 || i >= array_length arr then
+    error "Array.get_exn: index out of bounds"
+  else
+    array_unsafe_get arr i
+
+(** Set element at index [i] to [v]. Does nothing if out of bounds. O(1). *)
+let set arr i v =
+  if i >= 0 && i < array_length arr then
+    array_unsafe_set arr i v
+  else
+    ()
+
+(** Set element at index [i] to [v], raising on out of bounds. O(1). *)
+let set_exn arr i v =
+  if i < 0 || i >= array_length arr then
+    error "Array.set_exn: index out of bounds"
+  else
+    array_unsafe_set arr i v
+
+(** {1 Transformations} *)
+
+(** Create a new array by applying [f] to each element. *)
+let map f arr =
+  let len = array_length arr in
+  if len == 0 then array_empty ()
+  else
+    let result = array_make len (f (array_unsafe_get arr 0)) in
+    for i = 1 to len - 1 do
+      let _ = array_unsafe_set result i (f (array_unsafe_get arr i)) in ()
+    done;
+    result
+
+(** Create a new array by applying [f] to each element with its index. *)
+let mapi f arr =
+  let len = array_length arr in
+  if len == 0 then array_empty ()
+  else
+    let result = array_make len (f 0 (array_unsafe_get arr 0)) in
+    for i = 1 to len - 1 do
+      let _ = array_unsafe_set result i (f i (array_unsafe_get arr i)) in ()
+    done;
+    result
+
+(** Create a copy of the array. *)
+let copy arr = map (fun x -> x) arr
+
+(** {1 Folding} *)
+
+(** Left fold: [fold_left f init arr] applies [f] to each element from left to right. *)
+let fold_left f acc arr =
+  let len = array_length arr in
+  let result = ref acc in
+  for i = 0 to len - 1 do
+    result := f !result (array_unsafe_get arr i)
+  done;
+  !result
+
+(** Right fold: [fold_right f arr init] applies [f] to each element from right to left. *)
+let fold_right f arr acc =
+  let len = array_length arr in
+  let result = ref acc in
+  for i = 0 to len - 1 do
+    let idx = len - 1 - i in
+    result := f (array_unsafe_get arr idx) !result
+  done;
+  !result
+
+(** {1 Iteration} *)
+
+(** Apply [f] to each element for side effects. *)
+let iter f arr =
+  let len = array_length arr in
+  for i = 0 to len - 1 do
+    let _ = f (array_unsafe_get arr i) in ()
+  done
+
+(** Apply [f] to each element with its index for side effects. *)
+let iteri f arr =
+  let len = array_length arr in
+  for i = 0 to len - 1 do
+    let _ = f i (array_unsafe_get arr i) in ()
+  done
+
+(** {1 Searching} *)
+
+(** Return [true] if any element satisfies [predicate]. *)
+let exists predicate arr =
+  let len = array_length arr in
+  let found = ref false in
+  let i = ref 0 in
+  while !i < len && not !found do
+    if predicate (array_unsafe_get arr !i) then
+      found := true
+    else
+      i := !i + 1
+  done;
+  !found
+
+(** Return [true] if all elements satisfy [predicate]. *)
+let for_all predicate arr =
+  let len = array_length arr in
+  let ok = ref true in
+  let i = ref 0 in
+  while !i < len && !ok do
+    if not (predicate (array_unsafe_get arr !i)) then
+      ok := false
+    else
+      i := !i + 1
+  done;
+  !ok
+
+(** Find the first element satisfying [predicate], or [None]. *)
+let find predicate arr =
+  let len = array_length arr in
+  let result = ref None in
+  let i = ref 0 in
+  while !i < len && Option.is_none !result do
+    let elem = array_unsafe_get arr !i in
+    if predicate elem then
+      result := Some elem
+    else
+      i := !i + 1
+  done;
+  !result
+
+(** Find the index of the first element satisfying [predicate], or [None]. *)
+let find_index predicate arr =
+  let len = array_length arr in
+  let result = ref None in
+  let i = ref 0 in
+  while !i < len && Option.is_none !result do
+    if predicate (array_unsafe_get arr !i) then
+      result := Some !i
+    else
+      i := !i + 1
+  done;
+  !result
+
+(** Return [true] if [element] is in the array. Uses [==] for comparison. *)
+let mem element arr = exists (fun x -> x == element) arr
+
+(** {1 Conversion} *)
+
+(** Create an array from a list. *)
+let of_list lst =
+  match lst with
+  | Nil -> array_empty ()
+  | Cons (first, _) ->
+      let len = List.length lst in
+      let arr = array_make len first in
+      let _ = List.fold_left (fun i x ->
+        let _ = array_unsafe_set arr i x in
+        i + 1
+      ) 0 lst in
+      arr
+
+(** Convert an array to a list. *)
+let to_list arr =
+  fold_right (fun x acc -> Cons (x, acc)) arr Nil
+
+(** {1 Comparison} *)
+
+(** Compare two arrays element by element using [cmp].
+    Returns negative if [arr1 < arr2], 0 if equal, positive if [arr1 > arr2]. *)
+let compare cmp arr1 arr2 =
+  let len1 = array_length arr1 in
+  let len2 = array_length arr2 in
+  let min_len = if len1 < len2 then len1 else len2 in
+  let result = ref 0 in
+  let i = ref 0 in
+  while !i < min_len && !result == 0 do
+    result := cmp (array_unsafe_get arr1 !i) (array_unsafe_get arr2 !i);
+    i := !i + 1
+  done;
+  if !result != 0 then !result
+  else if len1 < len2 then 0 - 1
+  else if len1 > len2 then 1
+  else 0
+
+(** Test equality of two arrays using [eq] for elements. *)
+let equal eq arr1 arr2 =
+  let len1 = array_length arr1 in
+  let len2 = array_length arr2 in
+  if len1 != len2 then false
+  else
+    let ok = ref true in
+    let i = ref 0 in
+    while !i < len1 && !ok do
+      if not (eq (array_unsafe_get arr1 !i) (array_unsafe_get arr2 !i)) then
+        ok := false
+      else
+        i := !i + 1
+    done;
+    !ok
+
+(** {1 Filtering} *)
+
+(** [filter predicate arr] returns new array with elements satisfying [predicate]. *)
+let filter predicate arr =
+  let len = length arr in
+  if len == 0 then empty ()
+  else
+    let result = ref [] in
+    let _ = iteri (fun index elem ->
+      if predicate elem then result := elem :: !result
+      else ()
+    ) arr in
+    of_list (List.reverse !result)
+
+(** [filter_map f arr] applies [f] to each element, keeping [Some] results. *)
+let filter_map f arr =
+  let len = length arr in
+  if len == 0 then empty ()
+  else
+    let result = ref [] in
+    let _ = iteri (fun index elem ->
+      match f elem with
+      | Some y -> result := y :: !result
+      | None -> ()
+    ) arr in
+    of_list (List.reverse !result)
+
+(** {1 Stack Operations} *)
+
+(** [push arr elem] returns a new array with [elem] added at the end.
+    Does not mutate the original array. O(n). *)
+let push arr elem =
+  let len = length arr in
+  let new_arr = make (len + 1) elem in
+  let _ = iteri (fun index x -> set_exn new_arr index x) arr in
+  new_arr
+
+(** [pop arr] returns [Some (last_element, new_array)] where [new_array] has
+    the last element removed. Returns [None] if array is empty.
+    Does not mutate the original array. O(n). *)
+let pop arr =
+  let len = length arr in
+  if len == 0 then None
+  else
+    let last_elem = get_exn arr (len - 1) in
+    let new_arr = init (len - 1) (fun index -> get_exn arr index) in
+    Some (last_elem, new_arr)
+
+(** {1 In-Place Operations} *)
+
+(** [reverse_in_place arr] reverses array in place. Mutates [arr]. *)
+let reverse_in_place arr =
+  let len = length arr in
+  let half = len / 2 in
+  let rec swap i =
+    if i >= half then ()
+    else
+      let j = len - 1 - i in
+      let temp = get_exn arr i in
+      let _ = set_exn arr i (get_exn arr j) in
+      let _ = set_exn arr j temp in
+      swap (i + 1)
+  in
+  swap 0
+
+(** [sort_in_place cmp arr] sorts array in place using [cmp]. Mutates [arr].
+    [cmp a b] should return negative if [a < b], 0 if equal, positive if [a > b]. *)
+let sort_in_place cmp arr =
+  let swap i j =
+    let temp = get_exn arr i in
+    let _ = set_exn arr i (get_exn arr j) in
+    set_exn arr j temp
+  in
+
+  let rec partition low high =
+    let pivot = get_exn arr high in
+    let i = ref (low - 1) in
+    let rec loop j =
+      if j >= high then !i + 1
+      else
+        let _ = if cmp (get_exn arr j) pivot <= 0 then
+          let _ = i := !i + 1 in
+          swap !i j
+        else () in
+        loop (j + 1)
+    in
+    let pi = loop low in
+    let _ = swap pi high in
+    pi
+  in
+
+  let rec quicksort low high =
+    if low < high then
+      let pi = partition low high in
+      let _ = quicksort low (pi - 1) in
+      quicksort (pi + 1) high
+    else ()
+  in
+
+  let len = length arr in
+  if len > 1 then quicksort 0 (len - 1) else ()
+
+(* FFI bindings to Lua table functions - 1-indexed *)
+@val @scope("table")
+external table_insert_raw : 'a array -> int -> 'a -> unit = "insert"
+
+@val @scope("table") @return(nullable)
+external table_remove_raw : 'a array -> int -> 'a option = "remove"
+
+(** [insert_in_place arr index elem] inserts [elem] at position [index] (0-indexed),
+    shifting subsequent elements to the right. Mutates [arr] in place.
+    Valid indices: [0] to [length arr] (inclusive for append).
+    Does nothing if [index] is out of bounds. O(n) worst case. *)
+let insert_in_place arr index elem =
+  let len = length arr in
+  if index < 0 || index > len then ()
+  else table_insert_raw arr (index + 1) elem
+
+(** [insert_in_place_exn arr index elem] inserts [elem] at position [index].
+    Raises if [index] is outside [0, length arr]. *)
+let insert_in_place_exn arr index elem =
+  let len = length arr in
+  if index < 0 || index > len then
+    error "Array.insert_in_place_exn: index out of bounds"
+  else
+    table_insert_raw arr (index + 1) elem
+
+(** [remove_in_place arr index] removes and returns element at [index] (0-indexed).
+    Returns [None] if [index] is out of bounds. O(n) worst case. *)
+let remove_in_place arr index =
+  let len = length arr in
+  if index < 0 || index >= len then None
+  else table_remove_raw arr (index + 1)
+
+(** [remove_in_place_exn arr index] removes and returns element at [index].
+    Raises if [index] is out of bounds. *)
+let remove_in_place_exn arr index =
+  let len = length arr in
+  if index < 0 || index >= len then
+    error "Array.remove_in_place_exn: index out of bounds"
+  else
+    match table_remove_raw arr (index + 1) with
+    | Some v -> v
+    | None -> error "Array.remove_in_place_exn: unexpected nil from table.remove"

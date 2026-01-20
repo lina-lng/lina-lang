@@ -1054,6 +1054,33 @@ and infer_structure_tolerant ctx structure =
   let typed_ast = if errors <> [] then None else Some (List.rev typed_items) in
   (typed_ast, ctx, List.rev errors)
 
+type compile_binding_result = {
+  binding : Module_types.module_binding;
+  signature : Module_types.signature_item list;
+  typed_ast : typed_structure;
+}
+
+let compile_to_module_binding ~env ~module_name ~filename ~source () =
+  Types.reset_type_variable_id ();
+
+  let ast = Parsing.Parse.structure_from_string ~filename source in
+  let ctx = Typing_context.create env in
+  let typed_ast, _ctx = infer_structure ctx ast in
+  let _ = Compiler_error.get_warnings () in
+
+  let signature = signature_of_typed_structure typed_ast in
+  let module_type = Module_types.ModTypeSig signature in
+  let module_id = Identifier.create module_name in
+
+  let binding = Module_types.{
+    binding_name = module_name;
+    binding_id = module_id;
+    binding_type = module_type;
+    binding_alias = None;
+  } in
+
+  { binding; signature; typed_ast }
+
 (** Initialize the forward reference for module expression inference.
     This breaks the circular dependency between Expression_infer and Structure_infer. *)
 let () =

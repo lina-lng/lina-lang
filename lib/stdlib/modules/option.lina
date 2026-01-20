@@ -1,0 +1,152 @@
+(** Option utilities for optional values.
+
+    The option type is built-in: type 'a option = None | Some of 'a *)
+
+(** {1 Constructors} *)
+
+let none = None
+
+let some value = Some value
+
+(** {1 Predicates} *)
+
+let is_some opt = match opt with
+  | Some _ -> true
+  | None -> false
+
+let is_none opt = match opt with
+  | Some _ -> false
+  | None -> true
+
+let contains value opt = match opt with
+  | Some inner -> inner == value
+  | None -> false
+
+let for_all predicate opt = match opt with
+  | None -> true
+  | Some value -> predicate value
+
+let exists predicate opt = match opt with
+  | None -> false
+  | Some value -> predicate value
+
+(** {1 Extracting} *)
+
+let get_or opt default = match opt with
+  | Some value -> value
+  | None -> default
+
+let get_or_else opt compute_default = match opt with
+  | Some value -> value
+  | None -> compute_default ()
+
+let get_exn opt = match opt with
+  | Some value -> value
+  | None -> assert false
+
+let expect message opt = match opt with
+  | Some value -> value
+  | None ->
+      let _ = print message in
+      assert false
+
+(** {1 Transforming} *)
+
+let map f opt = match opt with
+  | None -> None
+  | Some value -> Some (f value)
+
+let flat_map f opt = match opt with
+  | None -> None
+  | Some value -> f value
+
+let bind opt f = match opt with
+  | None -> None
+  | Some value -> f value
+
+let filter predicate opt = match opt with
+  | None -> None
+  | Some value -> if predicate value then Some value else None
+
+let flatten opt = match opt with
+  | Some inner -> inner
+  | None -> None
+
+let join opt = flatten opt
+
+(** {1 Combining} *)
+
+let or_ opt1 opt2 = match opt1 with
+  | Some _ -> opt1
+  | None -> opt2
+
+let or_else opt compute_alternative = match opt with
+  | Some _ -> opt
+  | None -> compute_alternative ()
+
+let and_ opt1 opt2 = match opt1 with
+  | Some _ -> opt2
+  | None -> None
+
+let map2 f opt1 opt2 = match opt1 with
+  | None -> None
+  | Some value1 -> match opt2 with
+    | None -> None
+    | Some value2 -> Some (f value1 value2)
+
+let zip opt1 opt2 = match opt1 with
+  | None -> None
+  | Some value1 -> match opt2 with
+    | None -> None
+    | Some value2 -> Some (value1, value2)
+
+let product opt1 opt2 = zip opt1 opt2
+
+let blend merge_fn opt1 opt2 = match (opt1, opt2) with
+  | (None, None) -> None
+  | (Some value, None) -> Some value
+  | (None, Some value) -> Some value
+  | (Some value1, Some value2) -> Some (merge_fn value1 value2)
+
+(** {1 Folding and Iteration} *)
+
+let fold default_value some_fn opt = match opt with
+  | None -> default_value
+  | Some value -> some_fn value
+
+let iter f opt = match opt with
+  | Some value -> f value
+  | None -> ()
+
+(** {1 Comparison} *)
+
+let equal eq_fn opt1 opt2 = match (opt1, opt2) with
+  | (None, None) -> true
+  | (Some value1, Some value2) -> eq_fn value1 value2
+  | _ -> false
+
+let compare cmp_fn opt1 opt2 = match (opt1, opt2) with
+  | (None, None) -> 0
+  | (None, Some _) -> 0 - 1
+  | (Some _, None) -> 1
+  | (Some value1, Some value2) -> cmp_fn value1 value2
+
+(** {1 Conversion} *)
+
+let to_result error_value opt = match opt with
+  | Some value -> Ok value
+  | None -> Error error_value
+
+let of_result result = match result with
+  | Ok value -> Some value
+  | Error _ -> None
+
+(** {1 Binding Operators} *)
+
+let ( let* ) opt f = flat_map f opt
+
+let ( and* ) opt1 opt2 = product opt1 opt2
+
+let ( let+ ) opt f = map f opt
+
+let ( and+ ) = ( and* )

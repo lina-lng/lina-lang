@@ -1,4 +1,4 @@
-(** Project configuration implementation. *)
+(** Project configuration. *)
 
 type package = {
   name : string;
@@ -26,11 +26,18 @@ type warnings = {
   by_path : path_override list;
 }
 
+type luarocks_dependency = Package.Types.luarocks_dependency
+type lina_dependency = Package.Types.lina_dependency
+type dependencies = Package.Types.dependencies
+
 type t = {
   package : package;
   build : build;
   warnings : warnings;
+  dependencies : dependencies;
 }
+
+let ( let* ) = Result.bind
 
 let default_build = {
   target = "lua53";
@@ -44,13 +51,15 @@ let default_warnings = {
   by_path = [];
 }
 
+let default_dependencies = Package.Types.empty_dependencies
+
 let default_config name = {
   package = { name; version = "0.1.0"; edition = "2025" };
   build = default_build;
   warnings = default_warnings;
+  dependencies = default_dependencies;
 }
 
-(** Parse warning level from string. *)
 let parse_warning_level str =
   match String.lowercase_ascii str with
   | "allow" | "ignore" | "off" -> Some Common.Warning_config.Allow
@@ -59,48 +68,40 @@ let parse_warning_level str =
   | "forbid" | "fatal" -> Some Common.Warning_config.Forbid
   | _ -> None
 
-(** Get string value from TOML table. *)
 let get_string table key =
   match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string key) table with
   | Some (Toml.Types.TString s) -> Some s
   | _ -> None
 
-(** Get string value with default. *)
 let get_string_or table key default =
-  match get_string table key with
-  | Some s -> s
-  | None -> default
+  Option.value (get_string table key) ~default
 
-(** Parse [package] section. *)
 let parse_package table =
   match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "package") table with
   | Some (Toml.Types.TTable pkg_table) ->
-    let name = get_string_or pkg_table "name" "unnamed" in
-    let version = get_string_or pkg_table "version" "0.1.0" in
-    let edition = get_string_or pkg_table "edition" "2025" in
-    Ok { name; version; edition }
+      let name = get_string_or pkg_table "name" "unnamed" in
+      let version = get_string_or pkg_table "version" "0.1.0" in
+      let edition = get_string_or pkg_table "edition" "2025" in
+      Ok { name; version; edition }
   | Some _ -> Error "Invalid [package] section: expected table"
   | None -> Error "Missing [package] section"
 
-(** Parse [build] section. *)
 let parse_build table =
   match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "build") table with
   | Some (Toml.Types.TTable build_table) ->
-    let target = get_string_or build_table "target" "lua53" in
-    let source_dir = get_string_or build_table "source_dir" "src" in
-    let output_dir = get_string_or build_table "output_dir" "_build" in
-    Ok { target; source_dir; output_dir }
+      let target = get_string_or build_table "target" "lua53" in
+      let source_dir = get_string_or build_table "source_dir" "src" in
+      let output_dir = get_string_or build_table "output_dir" "_build" in
+      Ok { target; source_dir; output_dir }
   | Some _ -> Error "Invalid [build] section: expected table"
   | None -> Ok default_build
 
-(** Parse preset from string. Defaults to Strict. *)
 let parse_preset str =
   match String.lowercase_ascii str with
   | "strict" -> Strict
   | "relaxed" -> Relaxed
   | _ -> Strict
 
-(** Parse a single path override entry. *)
 let parse_path_override pattern override_table =
   let path_preset =
     match get_string override_table "preset" with
@@ -121,7 +122,6 @@ let parse_path_override pattern override_table =
   in
   { path_pattern = pattern; path_preset; path_overrides }
 
-(** Parse [warnings.by-path] section. *)
 let parse_by_path warn_table =
   match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "by-path") warn_table with
   | Some (Toml.Types.TTable by_path_table) ->
@@ -134,51 +134,121 @@ let parse_by_path warn_table =
     ) by_path_table []
   | _ -> []
 
-(** Parse [warnings] section. *)
 let parse_warnings table =
   match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "warnings") table with
   | Some (Toml.Types.TTable warn_table) ->
-    let preset =
-      match get_string warn_table "preset" with
-      | Some s -> parse_preset s
-      | None -> Strict
-    in
-    let overrides =
-      Toml.Types.Table.fold (fun key value acc ->
-        let key_str = Toml.Types.Table.Key.to_string key in
-        if key_str = "preset" || key_str = "by-path" then acc
-        else match value with
-          | Toml.Types.TString level_str ->
-            (match parse_warning_level level_str with
-             | Some level -> (key_str, level) :: acc
-             | None -> acc)
-          | _ -> acc
-      ) warn_table []
-    in
-    let by_path = parse_by_path warn_table in
-    Ok { preset; overrides; by_path }
+      let preset = match get_string warn_table "preset" with
+        | Some s -> parse_preset s
+        | None -> Strict
+      in
+      let overrides =
+        Toml.Types.Table.fold (fun key value acc ->
+          let key_str = Toml.Types.Table.Key.to_string key in
+          if key_str = "preset" || key_str = "by-path" then acc
+          else match value with
+            | Toml.Types.TString level_str ->
+                (match parse_warning_level level_str with
+                 | Some level -> (key_str, level) :: acc
+                 | None -> acc)
+            | _ -> acc
+        ) warn_table []
+      in
+      let by_path = parse_by_path warn_table in
+      Ok { preset; overrides; by_path }
   | Some _ -> Error "Invalid [warnings] section: expected table"
   | None -> Ok default_warnings
+
+let get_bool_or table key default =
+  match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string key) table with
+  | Some (Toml.Types.TBool b) -> b
+  | _ -> default
+
+(** Supports two forms: [package = "^1.0"] or [package = \{ version = "^1.0", optional = true \}] *)
+let parse_luarocks_dep pkg_name value : (Package.Types.luarocks_dependency, string) result =
+  match value with
+  | Toml.Types.TString version_str ->
+      Ok { Package.Types.name = pkg_name; version_constraint = version_str; optional = false }
+  | Toml.Types.TTable dep_table ->
+      let version = get_string_or dep_table "version" "*" in
+      let optional = get_bool_or dep_table "optional" false in
+      Ok { Package.Types.name = pkg_name; version_constraint = version; optional }
+  | _ ->
+      Error (Printf.sprintf "Invalid dependency %s: expected string or table" pkg_name)
+
+let parse_luarocks_deps deps_table =
+  Toml.Types.Table.fold (fun key value acc ->
+    match acc with
+    | Error _ -> acc
+    | Ok deps ->
+        let dep_name = Toml.Types.Table.Key.to_string key in
+        match parse_luarocks_dep dep_name value with
+        | Ok dep -> Ok (dep :: deps)
+        | Error err -> Error err
+  ) deps_table (Ok [])
+
+let parse_lina_dep dep_name value : (Package.Types.lina_dependency, string) result =
+  match value with
+  | Toml.Types.TTable dep_table ->
+      (match get_string dep_table "path" with
+       | Some path ->
+           let optional = get_bool_or dep_table "optional" false in
+           Ok { Package.Types.lina_name = dep_name; lina_path = path; lina_optional = optional }
+       | None -> Error (Printf.sprintf "Lina dependency %s missing 'path' field" dep_name))
+  | _ ->
+      Error (Printf.sprintf "Invalid Lina dependency %s: expected table with 'path'" dep_name)
+
+let parse_lina_deps section_table =
+  Toml.Types.Table.fold (fun key value acc ->
+    match acc with
+    | Error _ -> acc
+    | Ok deps ->
+      let name = Toml.Types.Table.Key.to_string key in
+      match value with
+      | Toml.Types.TTable dep_table when get_string dep_table "path" <> None ->
+        (match parse_lina_dep name value with
+         | Ok dep -> Ok (dep :: deps)
+         | Error err -> Error err)
+      | _ -> Ok deps
+  ) section_table (Ok [])
+
+let parse_dependencies table =
+  let parse_luarocks_section section_name =
+    match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string section_name) table with
+    | Some (Toml.Types.TTable section_table) ->
+        (match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string "luarocks") section_table with
+         | Some (Toml.Types.TTable luarocks_table) -> parse_luarocks_deps luarocks_table
+         | Some _ -> Error (Printf.sprintf "Invalid [%s.luarocks]: expected table" section_name)
+         | None -> Ok [])
+    | Some _ -> Error (Printf.sprintf "Invalid [%s] section: expected table" section_name)
+    | None -> Ok []
+  in
+
+  let parse_lina_section section_name =
+    match Toml.Types.Table.find_opt (Toml.Types.Table.Key.of_string section_name) table with
+    | Some (Toml.Types.TTable section_table) -> parse_lina_deps section_table
+    | Some _ -> Error (Printf.sprintf "Invalid [%s] section: expected table" section_name)
+    | None -> Ok []
+  in
+
+  let* luarocks = parse_luarocks_section "dependencies" in
+  let* dev_luarocks = parse_luarocks_section "dev-dependencies" in
+  let* lina = parse_lina_section "dependencies" in
+  let* dev_lina = parse_lina_section "dev-dependencies" in
+  Ok { Package.Types.luarocks; dev_luarocks; lina; dev_lina }
 
 let load_file path =
   try
     let content = In_channel.with_open_text path In_channel.input_all in
     match Toml.Parser.from_string content with
+    | `Error (msg, _loc) -> Error (Printf.sprintf "TOML parse error: %s" msg)
     | `Ok table ->
-      (match parse_package table with
-       | Error e -> Error e
-       | Ok package ->
-         match parse_build table with
-         | Error e -> Error e
-         | Ok build ->
-           match parse_warnings table with
-           | Error e -> Error e
-           | Ok warnings ->
-             Ok { package; build; warnings })
-    | `Error (msg, _loc) ->
-      Error (Printf.sprintf "TOML parse error: %s" msg)
-  with
-  | Sys_error msg -> Error (Printf.sprintf "Cannot read file: %s" msg)
+        let* package = parse_package table in
+        let* build = parse_build table in
+        let* warnings = parse_warnings table in
+        let* deps = parse_dependencies table in
+        Ok { package; build; warnings; dependencies = deps }
+  with Sys_error msg ->
+    Error (Printf.sprintf "Cannot read file: %s" msg)
 
 let load_project_config root =
   let config_path = Filename.concat root "lina.toml" in

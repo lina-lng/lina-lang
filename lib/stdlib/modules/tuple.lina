@@ -1,0 +1,73 @@
+(** Tuple utilities for pairs (2-tuples).
+
+    A pair [(a, b)] is a product type containing two values of potentially
+    different types. This module provides functions for accessing, transforming,
+    and comparing pairs without requiring pattern matching. *)
+
+(** {1 Construction} *)
+
+(** [make a b] creates a pair [(a, b)]. *)
+let make a b = (a, b)
+
+(** {1 Accessors} *)
+
+(** [fst pair] returns the first element of [pair]. *)
+let fst pair = match pair with (a, _) -> a
+
+(** [snd pair] returns the second element of [pair]. *)
+let snd pair = match pair with (_, b) -> b
+
+(** {1 Transforming} *)
+
+(** [swap pair] exchanges the elements: [(a, b)] becomes [(b, a)]. *)
+let swap pair = match pair with (a, b) -> (b, a)
+
+(** [map_fst f pair] applies [f] to the first element.
+    [map_fst f (a, b)] is [(f a, b)]. *)
+let map_fst f pair = match pair with (a, b) -> (f a, b)
+
+(** [map_snd f pair] applies [f] to the second element.
+    [map_snd f (a, b)] is [(a, f b)]. *)
+let map_snd f pair = match pair with (a, b) -> (a, f b)
+
+(** [map f g pair] applies [f] to the first element and [g] to the second.
+    [map f g (a, b)] is [(f a, g b)]. *)
+let map f g pair = match pair with (a, b) -> (f a, g b)
+
+(** {1 Folding} *)
+
+(** [fold f pair] combines both elements using [f].
+    [fold f (a, b)] is [f a b]. *)
+let fold f pair = match pair with (a, b) -> f a b
+
+(** {1 Iteration} *)
+
+(** [iter f pair] applies [f] to both elements for side effects.
+    Both elements must have the same type. *)
+let iter f pair = match pair with
+  (a, b) ->
+    let _ = f a in
+    let _ = f b in
+    ()
+
+(** {1 Comparison} *)
+
+(** [equal eq_fst eq_snd p1 p2] returns [true] if pairs are equal.
+    Uses [eq_fst] to compare first elements and [eq_snd] for second. *)
+let equal eq_fst eq_snd p1 p2 = match (p1, p2) with
+  ((a1, b1), (a2, b2)) -> eq_fst a1 a2 && eq_snd b1 b2
+
+(** [compare cmp_fst cmp_snd p1 p2] compares pairs lexicographically.
+    First compares first elements; if equal, compares second elements.
+    Returns negative if [p1 < p2], 0 if equal, positive if [p1 > p2]. *)
+let compare cmp_fst cmp_snd p1 p2 = match (p1, p2) with
+  ((a1, b1), (a2, b2)) ->
+    let c = cmp_fst a1 a2 in
+    if c != 0 then c
+    else cmp_snd b1 b2
+
+(** {1 Conversion} *)
+
+(** [to_list pair] converts a pair to a two-element list.
+    Both elements must have the same type. *)
+let to_list pair = match pair with (a, b) -> [a; b]

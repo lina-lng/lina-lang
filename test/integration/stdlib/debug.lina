@@ -89,6 +89,32 @@ let test_info_accessors () =
       print "PASS: info_accessors"
   | None -> print "FAIL: info_accessors (no info)"
 
+(* Test: getlocal finds variable in parent frame *)
+let test_getlocal_parent_frame () =
+  let inner () =
+    match Debug.getlocal 2 1 with
+    | Some info -> true
+    | None -> false
+  in
+  let outer_var = 123 in
+  let _ = outer_var in
+  let found = inner () in
+  print (if found then "PASS: getlocal_parent_frame" else "FAIL: getlocal_parent_frame")
+
+(* Test: getlocal stack offset correctness - verify we can access correct frame *)
+let test_stack_offset_correctness () =
+  let level3 () =
+    match Debug.getinfo 1 with
+    | Some info ->
+        let what = Debug.info_what info in
+        what == "Lua"
+    | None -> false
+  in
+  let level2 () = level3 () in
+  let level1 () = level2 () in
+  let result = level1 () in
+  print (if result then "PASS: stack_offset" else "FAIL: stack_offset")
+
 (* Run all tests *)
 let _ = test_traceback ()
 let _ = test_traceback_msg ()
@@ -101,3 +127,5 @@ let _ = test_getlocal_invalid ()
 let _ = test_getupvalue ()
 let _ = test_getupvalue_invalid ()
 let _ = test_info_accessors ()
+let _ = test_getlocal_parent_frame ()
+let _ = test_stack_offset_correctness ()

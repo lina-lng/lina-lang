@@ -327,3 +327,11 @@
  (modules test_dict)
  (inline_tests)
  (preprocess (pps ppx_expect)))
+
+; Package management tests
+(library
+ (name test_package)
+ (libraries package driver common)
+ (modules test_package)
+ (inline_tests)
+ (preprocess (pps ppx_expect)))

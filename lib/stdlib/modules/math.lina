@@ -1,0 +1,155 @@
+(** Mathematical functions and constants.
+
+    Provides bindings to Lua's math library plus additional utilities.
+    All trigonometric functions work in radians. *)
+
+(** {1 Rounding} *)
+
+@val @scope("math")
+external floor_raw : float -> float = "floor"
+
+@val @scope("math")
+external ceil_raw : float -> float = "ceil"
+
+(** {1 Arithmetic} *)
+
+@val @scope("math")
+external abs : float -> float = "abs"
+
+@val @scope("math")
+external fmod : float -> float -> float = "fmod"
+
+@val @scope("math")
+external min_raw : float -> float -> float = "min"
+
+@val @scope("math")
+external max_raw : float -> float -> float = "max"
+
+(** {1 Exponential & Logarithmic} *)
+
+@val @scope("math")
+external exp : float -> float = "exp"
+
+@val @scope("math")
+external log : float -> float = "log"
+
+@val @scope("math")
+external sqrt : float -> float = "sqrt"
+
+@val @scope("math")
+external pow : float -> float -> float = "pow"
+
+(** {1 Trigonometric} *)
+
+@val @scope("math")
+external sin : float -> float = "sin"
+
+@val @scope("math")
+external cos : float -> float = "cos"
+
+@val @scope("math")
+external tan : float -> float = "tan"
+
+@val @scope("math")
+external asin : float -> float = "asin"
+
+@val @scope("math")
+external acos : float -> float = "acos"
+
+@val @scope("math")
+external atan : float -> float = "atan"
+
+@val @scope("math")
+external atan2 : float -> float -> float = "atan2"
+
+(** {1 Angle Conversion} *)
+
+@val @scope("math")
+external rad : float -> float = "rad"
+
+@val @scope("math")
+external deg : float -> float = "deg"
+
+(** {1 Random} *)
+
+@val @scope("math")
+external random_unit : unit -> float = "random"
+
+@val @scope("math")
+external random_max : int -> int = "random"
+
+@val @scope("math")
+external random_range_raw : int -> int -> int = "random"
+
+@val @scope("math")
+external randomseed : int -> unit = "randomseed"
+
+(** {1 Constants} *)
+
+(** The mathematical constant pi. *)
+let pi = 3.141592653589793
+
+(** Positive infinity. *)
+let huge = 1.0 /. 0.0
+
+(** {1 Rounding Functions} *)
+
+(** Round down to nearest integer. *)
+let floor x = floor_raw x
+
+(** Round up to nearest integer. *)
+let ceil x = ceil_raw x
+
+(** Round to nearest integer (half away from zero). *)
+let round x =
+  if x >= 0.0 then floor_raw (x +. 0.5)
+  else ceil_raw (x -. 0.5)
+
+(** Truncate toward zero (drop fractional part). *)
+let trunc x =
+  if x >= 0.0 then floor_raw x
+  else ceil_raw x
+
+(** {1 Arithmetic Functions} *)
+
+(** Absolute value for integers. *)
+let abs_int n =
+  if n < 0 then 0 - n else n
+
+(** Minimum of two floats. *)
+let min a b = min_raw a b
+
+(** Maximum of two floats. *)
+let max a b = max_raw a b
+
+(** Minimum of two integers. *)
+let min_int a b =
+  if a < b then a else b
+
+(** Maximum of two integers. *)
+let max_int a b =
+  if a > b then a else b
+
+(** Split float into integer and fractional parts.
+    Returns [(int_part, frac_part)] where the fractional part
+    has the same sign as the input. *)
+let modf x =
+  let int_part = trunc x in
+  let frac_part = x -. int_part in
+  (int_part, frac_part)
+
+(** {1 Exponential & Logarithmic Functions} *)
+
+(** Base-10 logarithm. *)
+let log10 x = log x /. log 10.0
+
+(** {1 Random Numbers} *)
+
+(** Random float in [0, 1). *)
+let random () = random_unit ()
+
+(** Random integer in [1, n]. *)
+let random_int n = random_max n
+
+(** Random integer in [m, n] (inclusive). *)
+let random_range m n = random_range_raw m n

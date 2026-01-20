@@ -1,0 +1,5 @@
+(library
+ (name package)
+ (public_name lina.package)
+ (libraries common unix toml parsing typing)
+ (preprocess (pps ppx_deriving.show ppx_deriving.eq)))

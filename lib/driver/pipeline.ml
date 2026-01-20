@@ -288,3 +288,86 @@ let compile_file options filename =
     compile_string options filename source
   with
   | Sys_error msg -> Error msg
+
+(** Compile with a pre-configured environment (for project dependencies).
+    Returns just the user code Lua, caller is responsible for prelude. *)
+let compile_string_with_env options ~env ~lua_prelude filename source =
+  let sources = Diagnostic_render.create_source_cache () in
+  Diagnostic_render.add_source sources ~path:filename ~content:source;
+  let terminal = Diagnostic_render.detect_terminal Diagnostic_render.Auto in
+
+  let render_diagnostic diag =
+    Diagnostic_render.render_diagnostic
+      ~format:Diagnostic_render.Human ~terminal ~sources diag
+  in
+
+  try
+    let ast = Parsing.Parse.structure_from_string ~filename source in
+    if options.dump_ast then begin
+      Printf.eprintf "=== AST ===\n%s\n\n"
+        (Parsing.Syntax_tree.show_structure ast)
+    end;
+
+    Typing.Types.reset_type_variable_id ();
+    let ctx = Typing.Typing_context.create env in
+    let typed_ast, _ctx = Typing.Inference.infer_structure ctx ast in
+    if options.dump_typed then begin
+      Printf.eprintf "=== Typed AST ===\n%s\n\n" (dump_typed_structure typed_ast)
+    end;
+
+    let analysis_result = Analysis.Analysis_pipeline.run options.warning_config typed_ast in
+    let analysis_diagnostics = analysis_result.Analysis.Analysis_pipeline.diagnostics in
+
+    let lambda = Lambda.translate_structure typed_ast in
+    if options.dump_lambda then begin
+      Printf.eprintf "=== Lambda IR ===\n%s\n\n" (dump_lambda_ir lambda)
+    end;
+
+    let lua_ast = Lua.Codegen.generate lambda in
+    let user_code = Lua.Printer.print_chunk lua_ast in
+    let lua_code = Stdlib_loader.stdlib_prelude () ^ lua_prelude ^ user_code in
+
+    let type_warnings = Compiler_error.get_warnings () in
+    let has_error = ref false in
+
+    List.iter (fun warning_info ->
+      let code = Compiler_error.warning_code warning_info in
+      if Common.Warning_config.should_report options.warning_config code then begin
+        let is_error = Common.Warning_config.is_error options.warning_config code in
+        let diag = Compiler_error.diagnostic_of_warning warning_info in
+        let diag =
+          if is_error then { diag with Compiler_error.severity = Compiler_error.Error }
+          else diag
+        in
+        Printf.eprintf "%s" (render_diagnostic diag);
+        if is_error then has_error := true
+      end
+    ) type_warnings;
+
+    List.iter (fun diag ->
+      Printf.eprintf "%s" (render_diagnostic diag);
+      if diag.Compiler_error.severity = Compiler_error.Error then
+        has_error := true
+    ) analysis_diagnostics;
+
+    if !has_error then
+      Error "Compilation failed due to warnings treated as errors"
+    else
+      Ok lua_code
+  with
+  | Compiler_error.Error err ->
+    let diag = Compiler_error.diagnostic_of_error err in
+    Error (render_diagnostic diag)
+
+  | Typing.Unification.Unification_error { expected; actual; location; message; trace } ->
+    let diag = diagnostic_of_unification_error ~expected ~actual ~location ~message ~trace in
+    Error (render_diagnostic diag)
+
+let compile_file_with_env options ~env ~lua_prelude filename =
+  try
+    let ic = open_in filename in
+    let source = really_input_string ic (in_channel_length ic) in
+    close_in ic;
+    compile_string_with_env options ~env ~lua_prelude filename source
+  with
+  | Sys_error msg -> Error msg

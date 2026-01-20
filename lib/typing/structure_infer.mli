@@ -110,3 +110,40 @@ val infer_module_expression :
 val signature_of_typed_structure :
   Typed_tree.typed_structure ->
   Module_types.signature
+
+(** {1 Module Compilation} *)
+
+(** Result of compiling source code to a module binding. *)
+type compile_binding_result = {
+  binding : Module_types.module_binding;
+    (** The module binding for adding to an environment *)
+  signature : Module_types.signature_item list;
+    (** The extracted signature items *)
+  typed_ast : Typed_tree.typed_structure;
+    (** The typed AST for further processing (e.g., Lua codegen) *)
+}
+
+(** [compile_to_module_binding ~env ~module_name ~filename ~source ()]
+    compiles Lina source code into a typed module binding.
+
+    Performs type-only compilation:
+    1. Parse source into AST
+    2. Type inference with the given environment
+    3. Signature extraction
+    4. Module binding creation
+
+    This function is the foundation for module compilation, used by both
+    the driver (with Lua codegen) and the package loader (type-only).
+
+    @param env The typing environment with available modules and types
+    @param module_name Name for the resulting module
+    @param filename Display name for error messages (e.g., "<stdlib/List>")
+    @param source The Lina source code to compile
+    @raise Compiler_error.Error on parse or type errors *)
+val compile_to_module_binding :
+  env:Environment.t ->
+  module_name:string ->
+  filename:string ->
+  source:string ->
+  unit ->
+  compile_binding_result

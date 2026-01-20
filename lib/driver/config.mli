@@ -41,11 +41,26 @@ type warnings = {
       (** Path-specific overrides, e.g. relax warnings for test files. *)
 }
 
+(** {1 Dependencies} *)
+
+(** A LuaRocks dependency specification.
+    @see Package.Types.luarocks_dependency for field documentation. *)
+type luarocks_dependency = Package.Types.luarocks_dependency
+
+(** A Lina project dependency specification.
+    @see Package.Types.lina_dependency for field documentation. *)
+type lina_dependency = Package.Types.lina_dependency
+
+(** Dependencies section of the configuration.
+    @see Package.Types.dependencies for field documentation. *)
+type dependencies = Package.Types.dependencies
+
 (** Complete project configuration. *)
 type t = {
   package : package;
   build : build;
   warnings : warnings;
+  dependencies : dependencies;
 }
 
 (** {1 Loading Configuration} *)
@@ -68,6 +83,9 @@ val default_build : build
 
 (** [default_warnings] returns the default warning configuration. *)
 val default_warnings : warnings
+
+(** [default_dependencies] returns empty dependencies. *)
+val default_dependencies : dependencies
 
 (** {1 Warning Integration} *)
 

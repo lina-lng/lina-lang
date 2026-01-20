@@ -28,6 +28,7 @@
   (eio_main (>= 1.0))
   (yojson (>= 2.0))
   (toml (>= 7.0))
+  (ppx_blob (>= 0.7))
   (alcotest (and :with-test (>= 1.7)))
   (ppx_expect (and :with-test (>= 0.16)))
   (ppx_inline_test (and :with-test (>= 0.16)))

@@ -1,0 +1,141 @@
+(** File I/O operations.
+
+    Provides bindings to Lua's io library for file operations.
+    File handles are opaque types managed by the runtime. *)
+
+(** File handle (opaque type). *)
+type file
+
+(** {1 Standard Streams} *)
+
+@val @scope("io")
+external stdin : file = "stdin"
+
+@val @scope("io")
+external stdout : file = "stdout"
+
+@val @scope("io")
+external stderr : file = "stderr"
+
+(** {1 File Operations} *)
+
+@val @scope("io") @return(nullable)
+external open_raw : string -> string -> file option = "open"
+
+@send
+external close : file -> unit = "close"
+
+@send
+external flush : file -> unit = "flush"
+
+(** {1 Reading} *)
+
+@send @return(nullable)
+external read_line_raw : file -> string option = "read"
+
+@send
+external read_all_raw : file -> string -> string = "read"
+
+@send @return(nullable)
+external read_bytes_raw : file -> int -> string option = "read"
+
+(** {1 Writing} *)
+
+@send
+external write_raw : file -> string -> unit = "write"
+
+(** {1 Positioning} *)
+
+@send @return(nullable)
+external seek_raw : file -> string -> int -> int option = "seek"
+
+@send
+external seek_cur : file -> int = "seek"
+
+(** {1 Opening Files} *)
+
+(** Open a file with the given mode.
+    Modes: "r" (read), "w" (write), "a" (append), "r+", "w+", "a+"
+    Returns [None] if the file cannot be opened. *)
+let open_ path mode = open_raw path mode
+
+(** Open a file or raise an error if it cannot be opened. *)
+let open_exn path mode =
+  match open_raw path mode with
+  | Some handle -> handle
+  | None -> error ("Io.open_exn: cannot open file: " ^ path)
+
+(** {1 Reading Files} *)
+
+(** Read a single line from the file, or [None] if at end of file.
+    The newline character is not included. *)
+let read_line handle = read_line_raw handle
+
+(** Read the entire contents of the file as a string. *)
+let read_all handle = read_all_raw handle "*a"
+
+(** Read up to [count] bytes from the file.
+    Returns [None] if at end of file. *)
+let read_bytes handle count = read_bytes_raw handle count
+
+(** {1 Writing Files} *)
+
+(** Write a string to the file. *)
+let write handle content = write_raw handle content
+
+(** Write a string followed by a newline to the file. *)
+let write_line handle content =
+  let _ = write_raw handle content in
+  write_raw handle "\n"
+
+(** {1 File Positioning} *)
+
+(** Set the file position.
+    [whence] can be: "set" (from beginning), "cur" (from current), "end" (from end)
+    Returns the new position or [None] on error. *)
+let seek handle whence offset = seek_raw handle whence offset
+
+(** Return the current file position. *)
+let tell handle = seek_cur handle
+
+(** {1 Convenience Functions} *)
+
+(** Read the entire contents of a file by path.
+    Opens, reads, and closes the file automatically. *)
+let read_file path =
+  match open_raw path "r" with
+  | None -> Error ("Cannot open file: " ^ path)
+  | Some handle ->
+      let content = read_all_raw handle "*a" in
+      let _ = close handle in
+      Ok content
+
+(** Write a string to a file by path.
+    Creates the file if it doesn't exist, overwrites if it does. *)
+let write_file path content =
+  match open_raw path "w" with
+  | None -> Error ("Cannot open file for writing: " ^ path)
+  | Some handle ->
+      let _ = write_raw handle content in
+      let _ = close handle in
+      Ok ()
+
+(** Append a string to a file by path.
+    Creates the file if it doesn't exist. *)
+let append_file path content =
+  match open_raw path "a" with
+  | None -> Error ("Cannot open file for appending: " ^ path)
+  | Some handle ->
+      let _ = write_raw handle content in
+      let _ = close handle in
+      Ok ()
+
+(** Open a file, apply an action, and close it automatically.
+    Returns [Ok result] if successful, [Error msg] if the file couldn't be opened. *)
+let with_file path mode action =
+  match open_raw path mode with
+  | None -> Error ("Cannot open file: " ^ path)
+  | Some handle ->
+      let result = action handle in
+      let _ = close handle in
+      Ok result

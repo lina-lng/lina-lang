@@ -48,16 +48,18 @@ let sanitize_name name =
   ) name;
   let result = Buffer.contents buf in
   (* Ensure the name starts with a letter or underscore *)
-  if String.length result = 0 then "_anon"
-  else if result.[0] >= '0' && result.[0] <= '9' then "_" ^ result
-  else result
+  let result =
+    if String.length result = 0 then "_anon"
+    else if result.[0] >= '0' && result.[0] <= '9' then "_" ^ result
+    else result
+  in
+  (* Prefix with _ if it's a Lua keyword *)
+  if is_lua_keyword result then "_" ^ result else result
 
 (** Get the base name for an identifier (sanitized, with keyword handling, no stamp).
     Used by smart name generation to track name usage. *)
 let get_base_name (id : Identifier.t) : string =
-  let name = Identifier.name id in
-  let sanitized = sanitize_name name in
-  if is_lua_keyword sanitized then "_" ^ sanitized else sanitized
+  sanitize_name (Identifier.name id)
 
 let mangle_identifier (id : Identifier.t) : Lua_ast.identifier =
   let base_name = get_base_name id in

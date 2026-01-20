@@ -1,0 +1,143 @@
+(** Result utilities for error handling.
+
+    The result type is built-in: type ('a, 'e) result = Ok of 'a | Error of 'e *)
+
+(** {1 Constructors} *)
+
+let ok x = Ok x
+
+let error e = Error e
+
+(** {1 Predicates} *)
+
+let is_ok r = match r with
+  | Ok _ -> true
+  | Error _ -> false
+
+let is_error r = match r with
+  | Ok _ -> false
+  | Error _ -> true
+
+(** {1 Extracting} *)
+
+let get_or r default = match r with
+  | Ok x -> x
+  | Error _ -> default
+
+let get_or_else r f = match r with
+  | Ok x -> x
+  | Error e -> f e
+
+let get_error_or r default = match r with
+  | Ok _ -> default
+  | Error e -> e
+
+(** [get_exn r] returns the value if [r] is [Ok v], raises error if [Error].
+    Use only when you are certain the result is Ok. *)
+let get_exn r = match r with
+  | Ok x -> x
+  | Error _ -> error "Result.get_exn: called on Error"
+
+(** {1 Transforming} *)
+
+let map f r = match r with
+  | Ok x -> Ok (f x)
+  | Error e -> Error e
+
+let map_error f r = match r with
+  | Ok x -> Ok x
+  | Error e -> Error (f e)
+
+let flat_map f r = match r with
+  | Ok x -> f x
+  | Error e -> Error e
+
+let flatten r = match r with
+  | Ok inner -> inner
+  | Error e -> Error e
+
+(** {1 Combining} *)
+
+let or_ r1 r2 = match r1 with
+  | Ok _ -> r1
+  | Error _ -> r2
+
+let and_ r1 r2 = match r1 with
+  | Ok _ -> r2
+  | Error _ -> r1
+
+let map2 f r1 r2 = match r1 with
+  | Error e -> Error e
+  | Ok x -> match r2 with
+    | Error e -> Error e
+    | Ok y -> Ok (f x y)
+
+(** {1 Folding} *)
+
+let fold ok_fn error_fn r = match r with
+  | Ok x -> ok_fn x
+  | Error e -> error_fn e
+
+(** {1 Iteration} *)
+
+let iter f r = match r with
+  | Ok x -> f x
+  | Error _ -> ()
+
+let iter_error f r = match r with
+  | Ok _ -> ()
+  | Error e -> f e
+
+(** {1 Conversion} *)
+
+let to_option r = match r with
+  | Ok x -> Some x
+  | Error _ -> None
+
+let of_option opt error_value = match opt with
+  | Some x -> Ok x
+  | None -> Error error_value
+
+(** {1 Comparison} *)
+
+let equal ok_eq err_eq r1 r2 = match (r1, r2) with
+  | (Ok x1, Ok x2) -> ok_eq x1 x2
+  | (Error e1, Error e2) -> err_eq e1 e2
+  | _ -> false
+
+(** {1 Sequencing} *)
+
+(** [sequence results] converts a list of results into a result of list.
+    Returns [Ok] with all values if all are [Ok], or first [Error] encountered. *)
+let sequence results =
+  let rec go acc lst = match lst with
+    | [] -> Ok (List.reverse acc)
+    | r :: rest -> match r with
+      | Ok x -> go (x :: acc) rest
+      | Error e -> Error e
+  in
+  go [] results
+
+(** {1 Protected Calls} *)
+
+(** [try_with f] calls [f ()] wrapped in Lua's pcall.
+    Returns [Ok result] if the function succeeds,
+    [Error message] if it throws an exception.
+
+    Example:
+    {[
+      let safe_parse s = Result.try_with (fun () -> parse s)
+      (* Returns Ok parsed_value or Error "error message" *)
+    ]} *)
+@val @return(pcall)
+external try_with : (unit -> 'a) -> ('a, string) result = "pcall"
+
+(** {1 Binding Operators} *)
+
+let ( let* ) r f = flat_map f r
+
+let ( and* ) r1 r2 = map2 (fun a b -> (a, b)) r1 r2
+
+let ( let+ ) r f = map f r
+
+let ( and+ ) = ( and* )

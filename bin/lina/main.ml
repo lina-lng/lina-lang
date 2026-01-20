@@ -83,19 +83,46 @@ let find_project_root () =
   in
   search (Sys.getcwd ())
 
-let find_source_files dir =
-  let rec walk acc path =
-    if Sys.is_directory path then
-      let entries = Sys.readdir path |> Array.to_list in
-      List.fold_left (fun acc entry ->
-        walk acc (Filename.concat path entry)
-      ) acc entries
-    else if Filename.check_suffix path ".lina" then
-      path :: acc
-    else
-      acc
-  in
-  walk [] dir |> List.sort String.compare
+(** {1 Multi-file Project Support} *)
+
+(** Parse a file and extract module name and imports. *)
+let parse_file_info filename =
+  try
+    let source = In_channel.with_open_text filename In_channel.input_all in
+    let ast = Parsing.Parse.structure_from_string ~filename source in
+    let module_name = Driver.Multifile.module_name_of_filename filename in
+    let imports = Driver.Multifile.extract_imports ast in
+    Ok (module_name, imports, source, filename)
+  with
+  | Common.Compiler_error.Error err ->
+    Error (Common.Compiler_error.report_to_string err)
+  | exn ->
+    Error (Printf.sprintf "Error parsing %s: %s" filename (Printexc.to_string exn))
+
+(** Compile a single source file and return module binding. *)
+let compile_single_file env module_name source filename =
+  Typing.Types.reset_type_variable_id ();
+
+  let ast = Parsing.Parse.structure_from_string ~filename source in
+  let ctx = Typing.Typing_context.create env in
+  let typed_ast, _ctx = Typing.Inference.infer_structure ctx ast in
+
+  let signature = Typing.Structure_infer.signature_of_typed_structure typed_ast in
+  let module_type = Typing.Module_types.ModTypeSig signature in
+  let module_id = Common.Identifier.create module_name in
+  let binding = Typing.Module_types.{
+    binding_name = module_name;
+    binding_id = module_id;
+    binding_type = module_type;
+    binding_alias = None;
+  } in
+
+  let lambda = Lambda.translate_structure typed_ast in
+  let lua_ast = Lua.Codegen.generate lambda in
+  let lua_code = Lua.Printer.print_chunk lua_ast in
+
+  let exports = Driver.Compile_utils.exported_names_of_signature signature in
+  (binding, lua_code, exports)
 
 (** {1 Build Command} *)
 
@@ -153,7 +180,7 @@ let build_cmd_impl verbose error_fmt _color warning_specs warn_error_spec =
       Printf.eprintf "Error: No %s/ directory found in project.\n" config.build.source_dir;
       `Error (false, "No src directory")
     end else begin
-      let files = find_source_files src_dir in
+      let files = Driver.Compile_utils.find_lina_files src_dir in
       if files = [] then begin
         Printf.eprintf "Error: No .lina files found in %s/.\n" config.build.source_dir;
         `Error (false, "No source files")
@@ -166,56 +193,159 @@ let build_cmd_impl verbose error_fmt _color warning_specs warn_error_spec =
         if not (Sys.file_exists build_dir) then
           Sys.mkdir build_dir 0o755;
 
-        let options = Driver.Pipeline.{
+        (* Load stdlib and project dependencies *)
+        let base_env = Driver.Stdlib_loader.initial_with_stdlib () in
+        let env, dep_prelude =
+          if config.dependencies.lina = [] then
+            (base_env, "")
+          else begin
+            if verbose then
+              Printf.printf "Loading %d project dependenc%s...\n"
+                (List.length config.dependencies.lina)
+                (if List.length config.dependencies.lina = 1 then "y" else "ies");
+            match Driver.Project_loader.load_all_dependencies
+                    ~root ~deps:config.dependencies.lina ~env:base_env with
+            | Ok result -> (result.env, result.lua_prelude)
+            | Error msg ->
+              Printf.eprintf "Error loading project dependencies: %s\n" msg;
+              (base_env, "")
+          end
+        in
+
+        let _options = Driver.Pipeline.{
           dump_ast = false;
           dump_typed = false;
           dump_lambda = false;
           warning_config;
         } in
 
-        let has_error = ref false in
         let sources = Driver.Diagnostic_render.create_source_cache () in
 
-        List.iter (fun file ->
+        (* Parse all files and extract imports for multi-file support *)
+        let parse_results = List.map (fun file ->
           ignore (Driver.Diagnostic_render.load_source_file sources file);
-          match Driver.Pipeline.compile_file options file with
-          | Ok lua_code ->
-            (* Preserve directory structure: src/utils/math.lina -> _build/utils/math.lua *)
-            let rel_path = relative_path ~base:src_dir file in
-            let lua_rel_path = Filename.chop_suffix rel_path ".lina" ^ ".lua" in
-            let output_path = Filename.concat build_dir lua_rel_path in
-            ensure_directory_exists output_path;
-            let oc = open_out output_path in
-            output_string oc lua_code;
-            close_out oc;
-            if verbose then Printf.printf "  %s -> %s\n" file output_path
-          | Error msg ->
-            has_error := true;
-            let terminal = Driver.Diagnostic_render.detect_terminal
-              (match _color with Auto -> Driver.Diagnostic_render.Auto
-                              | Always -> Driver.Diagnostic_render.Always
-                              | Never -> Driver.Diagnostic_render.Never) in
-            let format = match error_fmt with
-              | Human -> Driver.Diagnostic_render.Human
-              | Short -> Driver.Diagnostic_render.Short
-              | Json -> Driver.Diagnostic_render.Json
-            in
-            let diag = Common.Compiler_error.(
-              error ~code:Common.Error_code.e_type_mismatch msg
-              |> with_primary_label ~span:Common.Location.none
-            ) in
-            let rendered = Driver.Diagnostic_render.render_diagnostic
-              ~format ~terminal ~sources diag
-            in
-            Printf.eprintf "%s\n" rendered
-        ) files;
+          parse_file_info file
+        ) files in
 
-        if !has_error then
-          `Error (false, "Build failed")
-        else begin
-          Printf.printf "Build complete: %d file(s) compiled to %s/\n"
-            (List.length files) build_dir;
-          `Ok ()
+        let errors, parsed_files = List.partition_map (function
+          | Error err -> Left err
+          | Ok info -> Right info
+        ) parse_results in
+
+        if errors <> [] then begin
+          List.iter (fun err -> Printf.eprintf "%s\n" err) errors;
+          `Error (false, "Parse failed")
+        end else begin
+          (* Topologically sort files by imports *)
+          let get_name (name, _, _, _) = name in
+          let get_deps (_, imports, _, _) = imports in
+
+          match Driver.Compile_utils.topological_sort parsed_files get_name get_deps with
+          | Error cycle_msg ->
+            Printf.eprintf "Error: %s\n" cycle_msg;
+            `Error (false, "Build failed due to cyclic dependency")
+          | Ok sorted_files ->
+            if verbose then
+              Printf.printf "Compilation order: %s\n"
+                (String.concat " -> " (List.map (fun (name, _, _, _) -> name) sorted_files));
+
+            (* Compile files in order, accumulating modules in environment *)
+            let rec compile_all current_env compiled_count = function
+              | [] ->
+                Printf.printf "Build complete: %d file(s) compiled to %s/\n"
+                  compiled_count build_dir;
+                `Ok ()
+              | (module_name, _imports, source, filename) :: rest ->
+                try
+                  let binding, lua_code, exports = compile_single_file current_env module_name source filename in
+
+                  (* Handle warnings *)
+                  let warnings = Common.Compiler_error.get_warnings () in
+                  if warnings <> [] then begin
+                    let terminal = Driver.Diagnostic_render.detect_terminal
+                      (match _color with Auto -> Driver.Diagnostic_render.Auto
+                                      | Always -> Driver.Diagnostic_render.Always
+                                      | Never -> Driver.Diagnostic_render.Never) in
+                    let format = match error_fmt with
+                      | Human -> Driver.Diagnostic_render.Human
+                      | Short -> Driver.Diagnostic_render.Short
+                      | Json -> Driver.Diagnostic_render.Json
+                    in
+
+                    let has_fatal_warning = ref false in
+                    List.iter (fun warning ->
+                      let code = Common.Compiler_error.warning_code warning in
+                      if Common.Warning_config.is_error warning_config code then
+                        has_fatal_warning := true;
+                      let diag = Common.Compiler_error.diagnostic_of_warning warning in
+                      let rendered = Driver.Diagnostic_render.render_diagnostic
+                        ~format ~terminal ~sources diag
+                      in
+                      Printf.eprintf "%s\n" rendered
+                    ) warnings;
+
+                    if !has_fatal_warning then begin
+                      Printf.eprintf "\nCompilation failed due to warnings treated as errors\n";
+                      `Error (false, "Build failed")
+                    end else begin
+                      (* Add module to environment for subsequent files *)
+                      let new_env = Typing.Environment.add_module module_name binding current_env in
+
+                      (* Write output file *)
+                      let rel_path = relative_path ~base:src_dir filename in
+                      let lua_rel_path = Filename.chop_suffix rel_path ".lina" ^ ".lua" in
+                      let output_path = Filename.concat build_dir lua_rel_path in
+                      ensure_directory_exists output_path;
+
+                      let full_lua = dep_prelude ^ Driver.Compile_utils.wrap_module_lua module_name lua_code exports in
+                      let oc = open_out output_path in
+                      output_string oc full_lua;
+                      close_out oc;
+                      if verbose then Printf.printf "  %s -> %s\n" filename output_path;
+
+                      compile_all new_env (compiled_count + 1) rest
+                    end
+                  end else begin
+                    (* No warnings - add module to environment and continue *)
+                    let new_env = Typing.Environment.add_module module_name binding current_env in
+
+                    (* Write output file *)
+                    let rel_path = relative_path ~base:src_dir filename in
+                    let lua_rel_path = Filename.chop_suffix rel_path ".lina" ^ ".lua" in
+                    let output_path = Filename.concat build_dir lua_rel_path in
+                    ensure_directory_exists output_path;
+
+                    let full_lua = dep_prelude ^ Driver.Compile_utils.wrap_module_lua module_name lua_code exports in
+                    let oc = open_out output_path in
+                    output_string oc full_lua;
+                    close_out oc;
+                    if verbose then Printf.printf "  %s -> %s\n" filename output_path;
+
+                    compile_all new_env (compiled_count + 1) rest
+                  end
+                with
+                | Common.Compiler_error.Error err ->
+                  let terminal = Driver.Diagnostic_render.detect_terminal
+                    (match _color with Auto -> Driver.Diagnostic_render.Auto
+                                    | Always -> Driver.Diagnostic_render.Always
+                                    | Never -> Driver.Diagnostic_render.Never) in
+                  let format = match error_fmt with
+                    | Human -> Driver.Diagnostic_render.Human
+                    | Short -> Driver.Diagnostic_render.Short
+                    | Json -> Driver.Diagnostic_render.Json
+                  in
+                  let diag = Common.Compiler_error.diagnostic_of_error err in
+                  let rendered = Driver.Diagnostic_render.render_diagnostic
+                    ~format ~terminal ~sources diag
+                  in
+                  Printf.eprintf "%s\n" rendered;
+                  `Error (false, "Build failed")
+                | exn ->
+                  Printf.eprintf "Error compiling %s: %s\n" filename (Printexc.to_string exn);
+                  `Error (false, "Build failed")
+            in
+
+            compile_all env 0 sorted_files
         end
       end
     end
@@ -259,7 +389,7 @@ let check_cmd_impl verbose error_fmt _color warning_specs warn_error_spec =
       Printf.eprintf "Error: No src/ directory found.\n";
       `Error (false, "No src directory")
     end else begin
-      let files = find_source_files src_dir in
+      let files = Driver.Compile_utils.find_lina_files src_dir in
       if verbose then
         Printf.printf "Type-checking %d file(s)...\n" (List.length files);
 
@@ -344,6 +474,10 @@ edition = "2025"
 target = "lua53"
 source_dir = "src"
 output_dir = "_build"
+
+[dependencies.luarocks]
+# Add LuaRocks dependencies here
+# Example: luasocket = "^3.1"
 
 [warnings]
 default = "warn"
@@ -450,7 +584,7 @@ let format_cmd_impl in_place check width =
     `Error (false, "No project found")
   | Some root ->
     let src_dir = Filename.concat root "src" in
-    let files = find_source_files src_dir in
+    let files = Driver.Compile_utils.find_lina_files src_dir in
     let config = Lina_format.Formatter.{
       line_width = width;
       indent_size = 2;
@@ -615,6 +749,110 @@ let repl_cmd =
   let info = Cmd.info "repl" ~doc ~man in
   Cmd.v info Term.(ret (const repl_cmd_impl $ const ()))
 
+(** {1 Deps Commands} *)
+
+let deps_install_impl verbose =
+  match find_project_root () with
+  | None ->
+    Printf.eprintf "Error: No lina.toml found.\n";
+    `Error (false, "No project found")
+  | Some root ->
+    let config = match Driver.Config.load_project_config root with
+      | Ok cfg -> cfg
+      | Error msg ->
+        Printf.eprintf "Error: %s\n" msg;
+        exit 1
+    in
+
+    if not (Package.Luarocks.is_available ()) then begin
+      Printf.eprintf "Error: luarocks is not installed or not in PATH.\n";
+      `Error (false, "luarocks not available")
+    end else begin
+      if verbose then
+        Printf.printf "Installing dependencies for %s...\n" config.package.name;
+
+      match Package.Installer.install_all ~root ~dependencies:config.dependencies () with
+      | Ok result ->
+        let bindings_dir = Package.Installer.bindings_dir root in
+        if not (Sys.file_exists bindings_dir) then
+          Unix.mkdir bindings_dir 0o755;
+
+        let _ = Package.Binding_generator.generate_all
+          ~lockfile:result.lockfile ~output_dir:bindings_dir () in
+
+        Printf.printf "Installed %d package(s), %d skipped.\n"
+          result.installed_count result.skipped_count;
+        `Ok ()
+      | Error (Package.Installer.LuarocksNotAvailable) ->
+        Printf.eprintf "Error: luarocks is not available.\n";
+        `Error (false, "luarocks not available")
+      | Error (Package.Installer.InstallFailed (name, msg)) ->
+        Printf.eprintf "Error installing %s: %s\n" name msg;
+        `Error (false, "Installation failed")
+      | Error (Package.Installer.DirectoryError msg) ->
+        Printf.eprintf "Error: %s\n" msg;
+        `Error (false, "Directory error")
+    end
+
+let deps_install_cmd =
+  let doc = "Install dependencies from lina.toml" in
+  let man = [
+    `S Manpage.s_description;
+    `P "Installs all LuaRocks dependencies specified in lina.toml. \
+        Creates a .lina directory with installed packages and generates \
+        type bindings for use in Lina code.";
+    `S Manpage.s_examples;
+    `Pre "  lina deps install";
+  ] in
+  let info = Cmd.info "install" ~doc ~man in
+  Cmd.v info Term.(ret (const deps_install_impl $ verbose_arg))
+
+let deps_list_impl () =
+  match find_project_root () with
+  | None ->
+    Printf.eprintf "Error: No lina.toml found.\n";
+    `Error (false, "No project found")
+  | Some root ->
+    let lock_path = Package.Installer.lockfile_path root in
+    if not (Sys.file_exists lock_path) then begin
+      Printf.printf "No dependencies installed yet. Run 'lina deps install' first.\n";
+      `Ok ()
+    end else
+      match Package.Lockfile.load lock_path with
+      | Error msg ->
+        Printf.eprintf "Error reading lockfile: %s\n" msg;
+        `Error (false, "Lockfile error")
+      | Ok lockfile ->
+        if lockfile.packages = [] then
+          Printf.printf "No packages installed.\n"
+        else begin
+          Printf.printf "Installed packages:\n";
+          List.iter (fun (pkg : Package.Lockfile.entry) ->
+            Printf.printf "  %s@%s\n" pkg.name pkg.version
+          ) lockfile.packages
+        end;
+        `Ok ()
+
+let deps_list_cmd =
+  let doc = "List installed dependencies" in
+  let info = Cmd.info "list" ~doc in
+  Cmd.v info Term.(ret (const deps_list_impl $ const ()))
+
+let deps_cmd =
+  let doc = "Manage project dependencies" in
+  let man = [
+    `S Manpage.s_description;
+    `P "Commands for managing LuaRocks dependencies.";
+    `S Manpage.s_commands;
+    `P "$(b,lina deps install) - Install all dependencies";
+    `P "$(b,lina deps list) - List installed packages";
+  ] in
+  let info = Cmd.info "deps" ~doc ~man in
+  Cmd.group info [
+    deps_install_cmd;
+    deps_list_cmd;
+  ]
+
 (** {1 Main Command Group} *)
 
 let default_cmd =
@@ -632,6 +870,7 @@ let default_cmd =
     `P "$(b,lina init) - Create a new project";
     `P "$(b,lina format) - Format source files";
     `P "$(b,lina clean) - Remove build artifacts";
+    `P "$(b,lina deps) - Manage dependencies";
     `S "PROJECT STRUCTURE";
     `P "A Lina project has the following structure:";
     `Pre "  myproject/\n  ├── lina.toml      # Project configuration\n  ├── src/           # Source files\n  │   └── main.lina\n  └── _build/        # Compiled output";
@@ -647,6 +886,7 @@ let default_cmd =
     init_cmd;
     format_cmd;
     clean_cmd;
+    deps_cmd;
   ]
 
 let () = exit (Cmd.eval default_cmd)

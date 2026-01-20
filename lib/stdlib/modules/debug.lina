@@ -1,0 +1,132 @@
+(** Debug utilities for introspection and error diagnosis.
+
+    Provides bindings to Lua's debug library for stack traces,
+    function introspection, and variable inspection.
+
+    {1 Limitations}
+
+    - Only read-only operations are exposed (no setlocal/setupvalue)
+    - Stack levels are 1-indexed from the caller's perspective
+    - Some fields may not be available for C functions
+
+    {1 Example}
+
+    {[
+      (* Get a stack trace *)
+      let trace = Debug.traceback () in
+      print trace
+
+      (* Inspect a function *)
+      match Debug.getinfo 1 with
+      | Some info ->
+          print ("Function type: " ^ Debug.info_what info)
+      | None -> ()
+    ]} *)
+
+(** {1 Types} *)
+
+(** Function information (opaque type).
+    Returned by getinfo, fields accessed via accessor functions. *)
+type info
+
+(** Local variable information. *)
+type 'a local_info = { name : string; value : 'a }
+
+(** Upvalue information. *)
+type 'a upvalue_info = { name : string; value : 'a }
+
+(** {1 Traceback} *)
+
+@val @scope("debug")
+external traceback_raw : unit -> string = "traceback"
+
+@val @scope("debug")
+external traceback_msg_raw : string -> int -> string = "traceback"
+
+(** {1 Function Info} *)
+
+@val @scope("debug") @return(nullable)
+external getinfo_raw : int -> string -> info option = "getinfo"
+
+(** {1 Info Accessors} *)
+
+(** Source that created the function.
+    Prefixed with '@' for files, '=' for C functions. *)
+@get
+external info_source : info -> string = "source"
+
+(** Short version of source (max 60 chars). *)
+@get
+external info_short_src : info -> string = "short_src"
+
+(** Line where function definition starts (0 for C functions). *)
+@get
+external info_linedefined : info -> int = "linedefined"
+
+(** Line where function definition ends. *)
+@get
+external info_lastlinedefined : info -> int = "lastlinedefined"
+
+(** Function type: "Lua", "C", "main", or "tail". *)
+@get
+external info_what : info -> string = "what"
+
+(** Current executing line (-1 if not available). *)
+@get
+external info_currentline : info -> int = "currentline"
+
+(** Number of upvalues. *)
+@get
+external info_nups : info -> int = "nups"
+
+(** Function name if available (returns empty string if not). *)
+@get
+external info_name : info -> string = "name"
+
+(** How name was found: "global", "local", "method", "field", or "". *)
+@get
+external info_namewhat : info -> string = "namewhat"
+
+(** {1 Local Variables and Upvalues} *)
+
+@val @return(nullable)
+external getlocal_raw : int -> int -> 'a local_info option = "_lina_debug_getlocal"
+
+@val @return(nullable)
+external getupvalue_raw : ('a -> 'b) -> int -> 'c upvalue_info option = "_lina_debug_getupvalue"
+
+(** {1 Stack Traceback} *)
+
+(** Get a stack traceback from the current position.
+    Returns a string with one line per stack frame. *)
+let traceback () = traceback_raw ()
+
+(** Get a stack traceback with a custom message prefix.
+    The message is prepended to the traceback output. *)
+let traceback_msg msg = traceback_msg_raw msg 1
+
+(** Get a stack traceback starting from a specific level.
+    Level 1 is the function calling traceback_from,
+    level 2 is its caller, etc. *)
+let traceback_from level = traceback_msg_raw "" level
+
+(** {1 Function Introspection} *)
+
+(** Get information about the function at stack level.
+    Level 1 is the function calling getinfo,
+    level 2 is its caller, etc.
+    Returns [None] if the level is invalid. *)
+let getinfo level = getinfo_raw level "Slnuf"
+
+(** {1 Variable Inspection} *)
+
+(** Get a local variable at stack level and index.
+    Level 1 is the function calling getlocal.
+    Index 1 is the first local variable (including parameters).
+    Returns [Some {name; value}] or [None] if invalid. *)
+let getlocal level index = getlocal_raw level index
+
+(** Get an upvalue from a function closure.
+    Index 1 is the first upvalue.
+    Returns [Some {name; value}] or [None] if invalid. *)
+let getupvalue func index = getupvalue_raw func index

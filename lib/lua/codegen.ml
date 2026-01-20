@@ -772,7 +772,11 @@ and translate_expression ctx (lambda : Lambda.lambda) : expression * context =
 
   | Lambda.LambdaModuleAccess (module_expr, field_name) ->
     let translated_module, ctx = translate_expression ctx module_expr in
-    (ExpressionField (translated_module, field_name), ctx)
+    (* Use bracket notation for Lua keywords to avoid syntax errors *)
+    if Identifier_mangle.is_lua_keyword field_name then
+      (ExpressionIndex (translated_module, ExpressionString field_name), ctx)
+    else
+      (ExpressionField (translated_module, field_name), ctx)
 
   | Lambda.LambdaFunctor (param_id, body) ->
     (* Functor as a function: functor (X : S) -> ME becomes function(X) return ME end *)

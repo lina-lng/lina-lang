@@ -1,0 +1,94 @@
+(** Ordering utilities for type-safe comparison.
+
+    Provides a three-valued ordering type as an alternative to integer
+    comparison conventions (-1, 0, 1). *)
+
+type ordering = Less | Equal | Greater
+
+(** {1 Constructors} *)
+
+let less = Less
+let equal_ordering = Equal
+let greater = Greater
+
+(** {1 Conversion} *)
+
+(** Convert an integer comparison result to ordering.
+    Negative -> Less, zero -> Equal, positive -> Greater. *)
+let of_int n =
+  if n < 0 then Less
+  else if n > 0 then Greater
+  else Equal
+
+(** Convert ordering to integer (-1, 0, 1). *)
+let to_int ord = match ord with
+  | Less -> 0 - 1
+  | Equal -> 0
+  | Greater -> 1
+
+(** {1 Predicates} *)
+
+let is_less ord = match ord with
+  | Less -> true
+  | _ -> false
+
+let is_equal ord = match ord with
+  | Equal -> true
+  | _ -> false
+
+let is_greater ord = match ord with
+  | Greater -> true
+  | _ -> false
+
+(** {1 Combinators} *)
+
+(** Reverse an ordering. *)
+let flip ord = match ord with
+  | Less -> Greater
+  | Equal -> Equal
+  | Greater -> Less
+
+(** Chain two orderings: if first is Equal, return second.
+    Useful for lexicographic comparison. *)
+let then_ first second = match first with
+  | Equal -> second
+  | other -> other
+
+(** {1 Comparison Helpers} *)
+
+(** Compare two integers. *)
+let int_compare a b =
+  if a < b then Less
+  else if a > b then Greater
+  else Equal
+
+(** Compare two booleans (false < true). *)
+let bool_compare a b = match (a, b) with
+  | (false, false) -> Equal
+  | (true, true) -> Equal
+  | (false, true) -> Less
+  | (true, false) -> Greater
+
+(** Compare two strings lexicographically. *)
+let string_compare a b =
+  if a < b then Less
+  else if a > b then Greater
+  else Equal
+
+(** {1 Self-Comparison} *)
+
+(** Compare two orderings (Less < Equal < Greater). *)
+let compare ord1 ord2 =
+  let rank ord = match ord with
+    | Less -> 0
+    | Equal -> 1
+    | Greater -> 2
+  in
+  int_compare (rank ord1) (rank ord2)
+
+(** Check equality of two orderings. *)
+let equal ord1 ord2 = match (ord1, ord2) with
+  | (Less, Less) -> true
+  | (Equal, Equal) -> true
+  | (Greater, Greater) -> true
+  | _ -> false

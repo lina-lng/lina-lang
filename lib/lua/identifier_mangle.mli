@@ -19,6 +19,30 @@
 (** [is_lua_keyword name] returns [true] if [name] is a Lua reserved keyword. *)
 val is_lua_keyword : string -> bool
 
+(** [sanitize_name name] converts a Lina name to a valid Lua identifier.
+
+    Replaces special characters with descriptive suffixes:
+    - Parentheses: [(] -> [_lp_], [)] -> [_rp_]
+    - Operators: [*] -> [_star_], [+] -> [_plus_], etc.
+    - Empty result becomes [_anon]
+    - Numeric prefix gets underscore: [123abc] -> [_123abc]
+
+    {2 Examples}
+
+    {[
+      sanitize_name "x"           (* "x" *)
+      sanitize_name "my_function" (* "my_function" *)
+      sanitize_name ">>"          (* "_gt__gt_" *)
+      sanitize_name "|>"          (* "_bar__gt_" *)
+      sanitize_name "(+)"         (* "_lp__plus__rp_" *)
+      sanitize_name ""            (* "_anon" *)
+      sanitize_name "42abc"       (* "_42abc" *)
+    ]}
+
+    @param name The raw Lina name (may contain special characters)
+    @return A valid Lua identifier string *)
+val sanitize_name : string -> string
+
 (** [get_base_name id] returns the sanitized base name for an identifier.
 
     This is the name without any stamp suffix, used for tracking name usage

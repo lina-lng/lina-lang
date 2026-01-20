@@ -1,4 +1,4 @@
 (executable
  (name main)
  (public_name lina)
- (libraries driver lina_format cmdliner unix))
+ (libraries driver lina_format package cmdliner unix))

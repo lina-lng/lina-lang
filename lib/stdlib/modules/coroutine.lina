@@ -1,0 +1,102 @@
+(** Coroutines for cooperative multitasking.
+
+    Lua coroutines provide cooperative multitasking where execution can be
+    suspended with yield and resumed later. Each coroutine has its own stack.
+
+    {1 Simplified Type Model}
+
+    This module uses a simplified type model where ['a thread] represents
+    a coroutine that yields and returns values of type ['a]. The full Lua
+    coroutine model supports bidirectional communication (passing values
+    through resume/yield), which is not exposed in this simplified API.
+
+    {1 Limitations}
+
+    - Coroutine bodies take [unit], not arguments (use closures to capture state)
+    - Values cannot be passed through [resume] to the coroutine
+    - [wrap] raises on error instead of returning Result
+    - [is_yieldable] is not available (Lua 5.3+ only)
+
+    {1 Example}
+
+    {[
+      (* Generator pattern *)
+      let numbers = Coroutine.create (fun () ->
+        let _ = Coroutine.yield 1 in
+        let _ = Coroutine.yield 2 in
+        3
+      ) in
+      (* Coroutine.resume numbers returns Ok 1, then Ok 2, then Ok 3 *)
+    ]} *)
+
+(** Coroutine handle (opaque type).
+    The type parameter ['a] is the type of values yielded and returned. *)
+type 'a thread
+
+(** Wrapped coroutine as a callable (opaque type). *)
+type 'a generator
+
+(** Coroutine status. *)
+type status = Suspended | Running | Normal | Dead
+
+(** {1 FFI Declarations} *)
+
+@val @scope("coroutine")
+external create : (unit -> 'a) -> 'a thread = "create"
+
+@val @scope("coroutine")
+external status_raw : 'a thread -> string = "status"
+
+(** [yield value] suspends the coroutine and returns [value] to the caller.
+    When the coroutine is resumed, [yield] returns (the same type is used
+    for both the yielded value and the return value due to type simplification). *)
+@val @scope("coroutine")
+external yield : 'a -> 'a = "yield"
+
+@val @scope("coroutine") @return(nullable)
+external running_raw : unit -> 'a thread option = "running"
+
+@val @scope("coroutine")
+external wrap_raw : (unit -> 'a) -> 'a generator = "wrap"
+
+@val
+external call_generator : 'a generator -> 'a = "_lina_call_generator"
+
+@val
+external resume_raw : 'a thread -> ('a, string) result = "_lina_coroutine_resume"
+
+(** {1 Public API} *)
+
+(** Resume a suspended coroutine.
+    Returns [Ok value] with the yielded or returned value,
+    or [Error message] if the coroutine raised an error.
+
+    Note: For unit-returning coroutines, [Ok ()] is returned on completion. *)
+let resume co = resume_raw co
+
+(** Get the status of a coroutine.
+    - [Suspended]: Not yet started or yielded
+    - [Running]: Currently executing
+    - [Normal]: Resumed another coroutine (rare)
+    - [Dead]: Finished execution or errored *)
+let status co =
+  match status_raw co with
+  | "suspended" -> Suspended
+  | "running" -> Running
+  | "normal" -> Normal
+  | _ -> Dead
+
+(** Get the currently running coroutine, or [None] if in main thread. *)
+let running () = running_raw ()
+
+(** Create a generator from a coroutine body.
+    The generator can be called repeatedly using [next] to get yielded values.
+
+    Warning: Unlike [resume], generators raise errors. Use [resume] for
+    error handling. *)
+let wrap f = wrap_raw f
+
+(** Get the next value from a generator.
+    Each call resumes the underlying coroutine until the next yield or return.
+    Raises an error if the generator is exhausted or encounters an error. *)
+let next gen = call_generator gen
